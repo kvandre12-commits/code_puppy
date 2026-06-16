@@ -1,0 +1,1 @@
+"""ChatGPT Robinhood delegation plugin."""

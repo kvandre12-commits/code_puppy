@@ -370,7 +370,12 @@ def set_config_value(key: str, value: str):
     config.read(CONFIG_FILE)
     if DEFAULT_SECTION not in config:
         config[DEFAULT_SECTION] = {}
-    config[DEFAULT_SECTION][key] = value
+
+    # ConfigParser mapping assignment only accepts strings. In normal app flow
+    # callers already provide strings, but tests and integrations may hand us
+    # mocked or non-string values. Coerce defensively instead of exploding.
+    normalized_value = "" if value is None else str(value)
+    config[DEFAULT_SECTION][key] = normalized_value
     with open(CONFIG_FILE, "w", encoding="utf-8") as f:
         config.write(f)
 

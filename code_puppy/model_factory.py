@@ -6,7 +6,7 @@ from typing import Any, Dict
 
 import httpx
 from anthropic import AsyncAnthropic
-from openai import AsyncAzureOpenAI
+#from openai import AsyncAzureOpenAI
 from pydantic_ai.models.anthropic import AnthropicModel, AnthropicModelSettings
 from pydantic_ai.models.openai import (
     OpenAIChatModel,

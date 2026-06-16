@@ -1016,11 +1016,13 @@ class AddModelMenu:
                     )
                     continue
 
+                normalized_value = str(value)
+
                 # Save to config
-                set_config_value(env_var, value)
+                set_config_value(env_var, normalized_value)
                 # Also set in current environment so it's immediately available
-                os.environ[env_var] = value
-                emit_info(f"✅ Saved {env_var} to config")
+                os.environ[env_var] = normalized_value
+                emit_info(f"Saved {env_var} to config")
 
             except (KeyboardInterrupt, EOFError):
                 emit_info("")  # Clean newline

@@ -22,8 +22,6 @@ dependencies = [
     "pyfiglet>=0.8.post1",
     "rapidfuzz>=3.13.0",
     "openai>=1.99.1",
-    "ripgrep==14.1.0",
-    "playwright>=1.40.0",
     "termflow-md>=0.1.11",
     "Pillow>=10.0.0",
     "azure-identity>=1.15.0",
@@ -34,7 +32,6 @@ dev-dependencies = [
     "pytest>=8.3.4",
     "pytest-cov>=6.1.1",
     "pytest-asyncio>=0.23.1",
-    "ruff>=0.11.11",
     "pexpect>=4.9.0",
 ]
 authors = [
@@ -93,13 +90,12 @@ asyncio_mode = "auto"
 omit = ["code_puppy/main.py"]
 
 [tool.uv]
-python-preference = "only-managed"
+python-preference = "system"
 
 [dependency-groups]
 dev = [
     "pytest>=8.3.4",
     "pytest-cov>=6.1.1",
     "pytest-asyncio>=0.23.1",
-    "ruff>=0.11.11",
     "pexpect>=4.9.0",
 ]

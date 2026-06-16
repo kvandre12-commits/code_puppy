@@ -7,10 +7,54 @@ import asyncio
 import atexit
 import contextvars
 import os
+import sys
+import types
 from pathlib import Path
-from typing import Callable, Dict, Optional
+from typing import TYPE_CHECKING, Any, Callable, Dict, Optional
 
-from playwright.async_api import Browser, BrowserContext, Page
+if TYPE_CHECKING:
+    from playwright.async_api import Browser, BrowserContext, Page
+else:
+    Browser = BrowserContext = Page = Any
+
+
+def _missing_playwright(*_args, **_kwargs):
+    """Raise a friendly error when Playwright is unavailable."""
+    raise RuntimeError(
+        "Playwright is not installed in this environment. "
+        "Browser tools require the optional 'playwright' dependency and a "
+        "supported platform."
+    )
+
+
+def _install_playwright_stub() -> None:
+    """Install a tiny runtime stub so browser modules remain importable.
+
+    This keeps optional browser support from crashing the whole app on
+    unsupported environments like Termux/Android where Playwright wheels are
+    unavailable.
+    """
+    playwright_module = sys.modules.get("playwright")
+    if playwright_module is None:
+        playwright_module = types.ModuleType("playwright")
+        sys.modules["playwright"] = playwright_module
+
+    async_api_module = sys.modules.get("playwright.async_api")
+    if async_api_module is None:
+        async_api_module = types.ModuleType("playwright.async_api")
+        async_api_module.Browser = Browser
+        async_api_module.BrowserContext = BrowserContext
+        async_api_module.Page = Page
+        async_api_module.async_playwright = _missing_playwright
+        sys.modules["playwright.async_api"] = async_api_module
+
+    setattr(playwright_module, "async_api", async_api_module)
+
+
+try:
+    import playwright.async_api as _playwright_async_api  # noqa: F401
+except ImportError:
+    _install_playwright_stub()
 
 from code_puppy import config
 from code_puppy.messaging import emit_info, emit_success, emit_warning
