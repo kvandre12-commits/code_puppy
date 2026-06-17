@@ -447,19 +447,20 @@ def _create_claude_code_model(model_name: str, model_config: Dict, config: Dict)
         base_url=url,
         http_client=client,
         auth_token=api_key,
+        api_key=None,  # Ensure api_key is not set
     )
 
     def _update_runtime_token(access_token: str) -> None:
         anthropic_client.auth_token = access_token
+        anthropic_client.api_key = None  # Safety: always clear api_key
         custom_endpoint = model_config.get("custom_endpoint")
         if isinstance(custom_endpoint, dict):
             custom_endpoint["api_key"] = access_token
 
     client.set_token_update_callback(_update_runtime_token)
     patch_anthropic_client_messages(anthropic_client)
-    # Fast mode wrapper sits outside cache-control injector and re-reads
-    # the setting on every call so /claude-code-fast takes effect live.
     patch_anthropic_client_fast_mode(anthropic_client, model_name)
+    # Set only auth_token, ensure api_key stays None
     anthropic_client.api_key = None
     anthropic_client.auth_token = api_key
     provider = make_anthropic_provider(
