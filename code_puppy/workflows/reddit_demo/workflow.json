@@ -1,0 +1,26 @@
+{
+  "name": "reddit_demo",
+  "description": "Demo end‑to‑end orchestration: launch Reddit, dump UI hierarchy, take a screenshot, and send a notification.",
+  "steps": [
+    {
+      "tool": "android_launch_app",
+      "args": { "package_name": "com.reddit.frontpage" }
+    },
+    {
+      "tool": "android_ui_dump_hierarchy",
+      "args": { "include_xml": false, "max_nodes": 200 }
+    },
+    {
+      "tool": "android_capture_screenshot",
+      "args": { "artifact_name": "reddit_demo_screenshot", "dry_run": false }
+    },
+    {
+      "tool": "android_notification_send",
+      "args": {
+        "title": "Reddit demo completed",
+        "text": "Screenshot saved as reddit_demo_screenshot.png",
+        "dry_run": false
+      }
+    }
+  ]
+}

@@ -187,7 +187,8 @@ def _autostart_bound_servers(manager: Any, agent_name: str) -> None:
     targets = list(_iter_autostart_targets(manager, agent_name))
     if not targets:
         return
-    on_pre_mcp_autostart_sync(agent_name, [name for name, _ in targets])
+    #temp debug
+    # on_pre_mcp_autostart_sync(agent_name, [name for name, _ in targets])
     for server_name, config in targets:
         try:
             manager.start_server_sync(config.id)

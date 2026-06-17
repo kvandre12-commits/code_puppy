@@ -1,2 +1,65 @@
 {
+  "gemini-2.5-flash-preview-05-20": {
+    "type": "gemini",
+    "name": "gemini-2.5-flash-preview-05-20",
+    "max_requests_per_minute": 10,
+    "max_retries": 3,
+    "retry_base_delay": 10
+  },
+  "gemini-2.0-flash": {
+    "type": "gemini",
+    "name": "gemini-2.0-flash",
+    "max_requests_per_minute": 100,
+    "max_retries": 3,
+    "retry_base_delay": 10
+  },
+  "gpt-4o": {
+    "type": "openai",
+    "name": "gpt-4o",
+    "max_requests_per_minute": 100,
+    "max_retries": 3,
+    "retry_base_delay": 10
+  },
+  "gpt-4o-mini": {
+    "type": "openai",
+    "name": "gpt-4o-mini",
+    "max_requests_per_minute": 100,
+    "max_retries": 3,
+    "retry_base_delay": 10
+  },
+  "gpt-4.1": {
+    "type": "openai",
+    "name": "gpt-4.1",
+    "max_requests_per_minute": 100,
+    "max_retries": 3,
+    "retry_base_delay": 10
+  },
+  "gpt-4.1-mini": {
+    "type": "openai",
+    "name": "gpt-4.1-mini",
+    "max_requests_per_minute": 100,
+    "max_retries": 3,
+    "retry_base_delay": 10
+  },
+  "ollama-llama3.3": {
+    "type": "custom_openai",
+    "name": "llama3.3",
+    "max_requests_per_minute": 100,
+    "max_retries": 3,
+    "retry_base_delay": 5,
+    "custom_endpoint": {
+      "url": "http://localhost:11434/v1"
+    }
+  },
+  "meta-llama/Llama-3.3-70B-Instruct-Turbo": {
+    "type": "custom_openai",
+    "name": "meta-llama/Llama-3.3-70B-Instruct-Turbo",
+    "max_requests_per_minute": 100,
+    "max_retries": 3,
+    "retry_base_delay": 5,
+    "custom_endpoint": {
+      "url": "https://api.together.xyz/v1",
+      "api_key": "$TOGETHER_API_KEY"
+    }
+  }
 }
