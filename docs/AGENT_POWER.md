@@ -47,19 +47,18 @@ normal tool registration path: bridge/tool plugins should either expose tools vi
 `register_agent_tools(agent_name)` after a grant, or check `has_scope(agent_name,
 "scope.name")` before advertising sensitive tools.
 
-## Context economy
+## Decision memory and context economy
 
-A kennel is not AI memory. It is a local context object/cache that prevents the
-agent OS from repeatedly paying to reconstruct the same context through massive
-API calls.
+A kennel is not AI memory, chat history, embeddings, or app state. It is the
+agent OS decision memory layer: durable truths distilled from work.
 
 ```text
-Token history -> Kennel
+Token history -> Distilled decisions -> Kennel
 Kennels -> Working context
 Working context -> Model
 ```
 
 As agent systems mature, context reconstruction becomes more expensive than raw
-computation. The OS should treat context as an asset: cache it locally, pack it
-intentionally, route it into working context only when useful, and avoid paying
-the model to rediscover what the system already knows.
+computation. The OS should treat context as an asset: cache durable decisions
+locally, pack them intentionally, route them into working context only when
+useful, and avoid paying the model to rediscover what the system already knows.

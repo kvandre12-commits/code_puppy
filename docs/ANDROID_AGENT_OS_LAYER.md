@@ -12,6 +12,17 @@ Human
   -> Linux kernel
 ```
 
+A sharper responsibility split:
+
+```text
+Linux -> manages hardware/resources
+Android -> manages device state and user experiences
+Code Puppy -> manages project/work state
+Kennel -> preserves decision memory
+```
+
+Do not fight lower layers. Use them.
+
 ## Layer 1: Linux kernel
 
 A Samsung phone is running Linux underneath Android.
@@ -108,6 +119,49 @@ Agent
 
 Code Puppy should mirror this pattern for agents. Android permissions protect
 device resources. Code Puppy grants protect agent capabilities.
+
+## Do not rebuild Android
+
+Android should own device capabilities:
+
+```text
+camera
+notifications
+contacts
+calendar
+location
+Bluetooth
+network
+runtime permissions
+```
+
+Code Puppy should use these through controlled bridges. It should not rebuild
+them.
+
+Code Puppy should own project/work capabilities:
+
+```text
+projects
+agents
+decisions
+artifacts
+workflows
+provider grants
+audit history
+repo state
+```
+
+Android has no native concept of:
+
+```text
+SharpEdge
+DroidPuppy
+Robinhood Bridge
+Agent Org Chart
+Trade Gate research
+```
+
+Those are project objects. That is Code Puppy territory.
 
 ## Layer 4: Android local intelligence
 
@@ -251,7 +305,15 @@ operator approvals
 context economy
 ```
 
-Android remembers apps. Code Puppy remembers work.
+Linux remembers resources. Android remembers device state. Code Puppy remembers
+project state. The kennel remembers durable decisions.
+
+```text
+Linux -> CPU, memory, storage, network
+Android -> apps, notifications, locations, Bluetooth, permissions
+Code Puppy -> projects, agents, artifacts, workflows, repo state
+Kennel -> policies, architecture decisions, approval rules, durable truths
+```
 
 Examples of durable project context:
 
@@ -273,7 +335,8 @@ This is closer to a knowledge operating system than a mobile operating system.
 ```text
 Human operator
   -> Code Puppy Agent OS
-      -> kennel context cache
+      -> project/work state
+      -> kennel decision memory
       -> agent org chart
       -> bridge grants
       -> workflow monitor
@@ -308,19 +371,31 @@ scope can be revoked
 state can be replayed
 ```
 
-### 2. Treat kennel as an OS cache
+### 2. Treat kennel as decision memory
 
-The kennel is not AI memory. It is an anti-token-burn cache for durable working
-context.
+The kennel is not AI memory, chat history, embeddings, or app state. Its
+highest-value role is the decision memory layer: distilled truths that survive
+after the conversation ends.
+
+```text
+195k tokens of conversation
+  -> 1 policy
+  -> 2 architecture decisions
+  -> 1 artifact
+  -> 1 commit
+```
+
+That is worth carrying forward. Raw transcript bulk usually is not.
 
 ```text
 token history
+  -> distilled decisions
   -> kennel
   -> working context
   -> model
 ```
 
-It should store durable project context, not every transcript crumb.
+It should store durable project/decision context, not every transcript crumb.
 
 ### 3. Separate Android observation from agent reasoning
 
