@@ -2,8 +2,9 @@
 
 Code Puppy is an agent OS layer. If it is going to replicate the work of large
 teams, it needs a hierarchy: departments, duties, authorities, handoffs, and
-inspection points. The goal is not one giant genius agent. The goal is a managed
-agent organization that turns intent into safe local execution.
+inspection points. The Android layer model is described in
+`docs/ANDROID_AGENT_OS_LAYER.md`. The goal is not one giant genius agent. The
+goal is a managed agent organization that turns intent into safe local execution.
 
 ```text
 Operator intent
