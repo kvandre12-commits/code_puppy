@@ -4,10 +4,12 @@ Three priority classes, fed from the kennel, sized to fit a configurable
 token budget without ever calling an LLM or shipping a tokenizer:
 
 * **P0 - user preferences**: every drawer in ``user:default``. Short,
-  durable, pervasive ("Mike hates emojis"). Capped at ~30% of budget.
-* **P1 - sticky repo notes**: drawers in ``repo:<cwd>`` with ``role='note'``,
-  i.e. content written via the ``kennel_remember`` tool. Highest signal-to-
-  token ratio in the kennel. Capped at ~30% of budget.
+  durable, pervasive operator preferences. Capped at ~30% of budget.
+* **P1 - durable project notes**: drawers in ``repo:<cwd>`` with
+  ``role='note'``, i.e. content written via the ``kennel_remember`` tool.
+  Facts, decisions, artifacts, relationships, and history live here until typed
+  drawers are modeled explicitly. Highest signal-to-token ratio in the kennel.
+  Capped at ~30% of budget.
 * **P2 - recent assistant responses**: drawers in ``repo:<cwd>`` with
   ``role='assistant'``. Fills whatever budget remains after P0 + P1.
 

@@ -11,7 +11,7 @@ coding as a first-class workflow. The Android layer model is defined in
 Linux -> manages hardware/resources
 Android -> manages device state and user experiences
 Code Puppy -> manages project/work state
-Kennel -> preserves decision memory
+Kennel -> preserves durable project memory
 ```
 
 ```text

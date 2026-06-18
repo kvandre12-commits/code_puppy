@@ -18,7 +18,7 @@ A sharper responsibility split:
 Linux -> manages hardware/resources
 Android -> manages device state and user experiences
 Code Puppy -> manages project/work state
-Kennel -> preserves decision memory
+Kennel -> preserves durable project memory
 ```
 
 Do not fight lower layers. Use them.
@@ -306,13 +306,13 @@ context economy
 ```
 
 Linux remembers resources. Android remembers device state. Code Puppy remembers
-project state. The kennel remembers durable decisions.
+project state. The kennel preserves durable project memory.
 
 ```text
 Linux -> CPU, memory, storage, network
 Android -> apps, notifications, locations, Bluetooth, permissions
 Code Puppy -> projects, agents, artifacts, workflows, repo state
-Kennel -> policies, architecture decisions, approval rules, durable truths
+Kennel -> facts, decisions, artifacts, relationships, history
 ```
 
 Examples of durable project context:
@@ -336,7 +336,7 @@ This is closer to a knowledge operating system than a mobile operating system.
 Human operator
   -> Code Puppy Agent OS
       -> project/work state
-      -> kennel decision memory
+      -> kennel durable project memory
       -> agent org chart
       -> bridge grants
       -> workflow monitor
@@ -371,31 +371,54 @@ scope can be revoked
 state can be replayed
 ```
 
-### 2. Treat kennel as decision memory
+### 2. Treat kennel as typed durable project memory
 
-The kennel is not AI memory, chat history, embeddings, or app state. Its
-highest-value role is the decision memory layer: distilled truths that survive
-after the conversation ends.
+The kennel is not AI memory, chat history, embeddings, or app state. Its role is
+the durable project memory layer: distilled project knowledge that survives after
+the conversation ends. Decisions are the highest-value drawer type, but they are
+not the only type.
 
 ```text
-195k tokens of conversation
-  -> 1 policy
-  -> 2 architecture decisions
-  -> 1 artifact
-  -> 1 commit
+Kennel
+  -> Facts
+  -> Decisions
+  -> Artifacts
+  -> Relationships
+  -> History
+```
+
+Examples:
+
+```text
+Fact: Android owns runtime permissions.
+Decision: No god-agent.
+Artifact: docs/ANDROID_AGENT_OS_LAYER.md
+Relationship: DroidPuppy depends on Android.
+History: Commit e27359c clarified the memory layer model.
+```
+
+The important question is not whether 195k tokens were saved. The important
+question is whether those tokens produced durable project knowledge:
+
+```text
+discoveries
+designs
+commits
+tests
+policies
+relationships
 ```
 
 That is worth carrying forward. Raw transcript bulk usually is not.
 
 ```text
-token history
-  -> distilled decisions
-  -> kennel
-  -> working context
-  -> model
+conversation
+  -> distillation
+  -> durable project memory
+  -> future work
 ```
 
-It should store durable project/decision context, not every transcript crumb.
+It should store durable project knowledge, not every transcript crumb.
 
 ### 3. Separate Android observation from agent reasoning
 
