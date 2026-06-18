@@ -185,6 +185,10 @@ class TestAutoSaveSessionFunctionality:
         assert kwargs["session_name"] == "auto_session_20240101_010101"
         mock_cleanup.assert_called_once()
         mock_emit_info.assert_called_once()
+        autosave_line = mock_emit_info.call_args.args[0]
+        assert "Auto-saved session" in autosave_line
+        assert "raw transcript tokens" in autosave_line
+        assert "not durable kennel memory" in autosave_line
 
     @patch("code_puppy.messaging.emit_error")
     @patch("code_puppy.config.get_auto_save_session")

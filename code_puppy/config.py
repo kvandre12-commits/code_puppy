@@ -1826,7 +1826,8 @@ def auto_save_session_if_enabled() -> bool:
 
         emit_info(
             f"🐾 Auto-saved session: {metadata.message_count} messages "
-            f"({metadata.total_tokens} tokens){stats_suffix}"
+            f"({metadata.total_tokens} raw transcript tokens; "
+            f"resume only, not durable kennel memory){stats_suffix}"
         )
 
         return True
