@@ -7,6 +7,7 @@ import sys
 import tempfile
 import threading
 import time
+from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Callable, Optional, Tuple
 
@@ -15,7 +16,10 @@ from prompt_toolkit.formatted_text import FormattedText
 from prompt_toolkit.key_binding import KeyBindings
 from prompt_toolkit.layout import Layout, Window
 from prompt_toolkit.layout.controls import FormattedTextControl
-from rapidfuzz.distance import JaroWinkler
+try:
+    from rapidfuzz.distance import JaroWinkler
+except ModuleNotFoundError:
+    JaroWinkler = None
 from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Prompt
@@ -1650,6 +1654,13 @@ def write_project_file(
     atomic_write_text(file_path, content, encoding=encoding)
 
 
+def _normalized_similarity(left: str, right: str) -> float:
+    """Return a fuzzy similarity score without requiring optional speedups."""
+    if JaroWinkler is not None:
+        return JaroWinkler.normalized_similarity(left, right)
+    return SequenceMatcher(None, left, right).ratio()
+
+
 def _find_best_window(
     haystack_lines: list[str],
     needle: str,
@@ -1667,7 +1678,7 @@ def _find_best_window(
     # Pre-join the needle once; join windows on the fly
     for i in range(len(haystack_lines) - win_size + 1):
         window = "\n".join(haystack_lines[i : i + win_size])
-        score = JaroWinkler.normalized_similarity(window, needle)
+        score = _normalized_similarity(window, needle)
         if score > best_score:
             best_score = score
             best_span = (i, i + win_size)
