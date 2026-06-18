@@ -8,9 +8,12 @@ import atexit
 import contextvars
 import os
 from pathlib import Path
-from typing import Callable, Dict, Optional
+from typing import TYPE_CHECKING, Any, Callable, Dict, Optional
 
-from playwright.async_api import Browser, BrowserContext, Page
+if TYPE_CHECKING:
+    from playwright.async_api import Browser, BrowserContext, Page
+else:
+    Browser = BrowserContext = Page = Any
 
 from code_puppy import config
 from code_puppy.messaging import emit_info, emit_success, emit_warning
@@ -18,6 +21,10 @@ from code_puppy.messaging import emit_info, emit_success, emit_warning
 # Registry for custom browser types from plugins (e.g., Camoufox for stealth browsing)
 _CUSTOM_BROWSER_TYPES: Dict[str, Callable] = {}
 _BROWSER_TYPES_LOADED: bool = False
+PLAYWRIGHT_EXTRA_MESSAGE = (
+    "Browser automation requires the optional Playwright extra. "
+    "Install it with: pip install 'code-puppy[browser]'"
+)
 
 
 def _load_plugin_browser_types() -> None:
@@ -179,7 +186,10 @@ class BrowserManager:
             return
 
         # Default: use Playwright Chromium
-        from playwright.async_api import async_playwright
+        try:
+            from playwright.async_api import async_playwright
+        except ModuleNotFoundError as exc:
+            raise RuntimeError(PLAYWRIGHT_EXTRA_MESSAGE) from exc
 
         emit_info(f"Using persistent profile: {self.profile_dir}")
 
