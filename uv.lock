@@ -303,16 +303,11 @@ name = "code-puppy"
 version = "0.0.568"
 source = { editable = "." }
 dependencies = [
-    { name = "anthropic" },
-    { name = "azure-identity" },
-    { name = "boto3" },
     { name = "httpx", extra = ["http2"] },
     { name = "json-repair" },
-    { name = "mcp" },
-    { name = "openai" },
     { name = "prompt-toolkit" },
     { name = "pydantic" },
-    { name = "pydantic-ai-slim", extra = ["anthropic", "mcp", "openai"] },
+    { name = "pydantic-ai-slim" },
     { name = "pyfiglet" },
     { name = "python-dotenv" },
     { name = "requests" },
@@ -322,8 +317,34 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
-bedrock = [
+all-bridges = [
+    { name = "anthropic" },
+    { name = "azure-identity" },
     { name = "boto3" },
+    { name = "mcp" },
+    { name = "openai" },
+    { name = "pydantic-ai-slim", extra = ["anthropic", "mcp", "openai"] },
+]
+all-models = [
+    { name = "anthropic" },
+    { name = "azure-identity" },
+    { name = "boto3" },
+    { name = "openai" },
+    { name = "pydantic-ai-slim", extra = ["anthropic", "openai"] },
+]
+anthropic = [
+    { name = "anthropic" },
+    { name = "pydantic-ai-slim", extra = ["anthropic"] },
+]
+azure = [
+    { name = "azure-identity" },
+    { name = "openai" },
+    { name = "pydantic-ai-slim", extra = ["anthropic", "openai"] },
+]
+bedrock = [
+    { name = "anthropic" },
+    { name = "boto3" },
+    { name = "pydantic-ai-slim", extra = ["anthropic"] },
 ]
 browser = [
     { name = "playwright" },
@@ -336,6 +357,14 @@ fuzzy = [
 ]
 images = [
     { name = "pillow" },
+]
+mcp = [
+    { name = "mcp" },
+    { name = "pydantic-ai-slim", extra = ["mcp"] },
+]
+openai = [
+    { name = "openai" },
+    { name = "pydantic-ai-slim", extra = ["openai"] },
 ]
 search = [
     { name = "ripgrep" },
@@ -352,20 +381,37 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "anthropic", specifier = "==0.79.0" },
-    { name = "azure-identity", specifier = ">=1.15.0" },
-    { name = "boto3", specifier = ">=1.43.9" },
-    { name = "boto3", marker = "extra == 'bedrock'", specifier = ">=1.35.0" },
+    { name = "anthropic", marker = "extra == 'all-bridges'", specifier = "==0.79.0" },
+    { name = "anthropic", marker = "extra == 'all-models'", specifier = "==0.79.0" },
+    { name = "anthropic", marker = "extra == 'anthropic'", specifier = "==0.79.0" },
+    { name = "anthropic", marker = "extra == 'bedrock'", specifier = "==0.79.0" },
+    { name = "azure-identity", marker = "extra == 'all-bridges'", specifier = ">=1.15.0" },
+    { name = "azure-identity", marker = "extra == 'all-models'", specifier = ">=1.15.0" },
+    { name = "azure-identity", marker = "extra == 'azure'", specifier = ">=1.15.0" },
+    { name = "boto3", marker = "extra == 'all-bridges'", specifier = ">=1.43.9" },
+    { name = "boto3", marker = "extra == 'all-models'", specifier = ">=1.43.9" },
+    { name = "boto3", marker = "extra == 'bedrock'", specifier = ">=1.43.9" },
     { name = "dbos", marker = "extra == 'durable'", specifier = ">=2.11.0" },
     { name = "httpx", extras = ["http2"], specifier = ">=0.24.1" },
     { name = "json-repair", specifier = ">=0.46.2" },
-    { name = "mcp", specifier = ">=1.9.4" },
-    { name = "openai", specifier = ">=1.99.1" },
+    { name = "mcp", marker = "extra == 'all-bridges'", specifier = ">=1.9.4" },
+    { name = "mcp", marker = "extra == 'mcp'", specifier = ">=1.9.4" },
+    { name = "openai", marker = "extra == 'all-bridges'", specifier = ">=1.99.1" },
+    { name = "openai", marker = "extra == 'all-models'", specifier = ">=1.99.1" },
+    { name = "openai", marker = "extra == 'azure'", specifier = ">=1.99.1" },
+    { name = "openai", marker = "extra == 'openai'", specifier = ">=1.99.1" },
     { name = "pillow", marker = "extra == 'images'", specifier = ">=10.0.0" },
     { name = "playwright", marker = "extra == 'browser'", specifier = ">=1.40.0" },
     { name = "prompt-toolkit", specifier = ">=3.0.52" },
     { name = "pydantic", specifier = ">=2.4.0" },
-    { name = "pydantic-ai-slim", extras = ["openai", "anthropic", "mcp"], specifier = "==1.56.0" },
+    { name = "pydantic-ai-slim", specifier = "==1.56.0" },
+    { name = "pydantic-ai-slim", extras = ["anthropic"], marker = "extra == 'anthropic'", specifier = "==1.56.0" },
+    { name = "pydantic-ai-slim", extras = ["anthropic"], marker = "extra == 'bedrock'", specifier = "==1.56.0" },
+    { name = "pydantic-ai-slim", extras = ["anthropic", "mcp", "openai"], marker = "extra == 'all-bridges'", specifier = "==1.56.0" },
+    { name = "pydantic-ai-slim", extras = ["anthropic", "openai"], marker = "extra == 'all-models'", specifier = "==1.56.0" },
+    { name = "pydantic-ai-slim", extras = ["anthropic", "openai"], marker = "extra == 'azure'", specifier = "==1.56.0" },
+    { name = "pydantic-ai-slim", extras = ["mcp"], marker = "extra == 'mcp'", specifier = "==1.56.0" },
+    { name = "pydantic-ai-slim", extras = ["openai"], marker = "extra == 'openai'", specifier = "==1.56.0" },
     { name = "pyfiglet", specifier = ">=0.8.post1" },
     { name = "python-dotenv", specifier = ">=1.0.0" },
     { name = "rapidfuzz", marker = "extra == 'fuzzy'", specifier = ">=3.13.0" },
@@ -375,7 +421,7 @@ requires-dist = [
     { name = "termflow-md", specifier = ">=0.1.11" },
     { name = "typer", specifier = ">=0.12.0" },
 ]
-provides-extras = ["bedrock", "browser", "durable", "fuzzy", "images", "search"]
+provides-extras = ["anthropic", "azure", "bedrock", "browser", "durable", "fuzzy", "images", "mcp", "openai", "search", "all-models", "all-bridges"]
 
 [package.metadata.requires-dev]
 dev = [
