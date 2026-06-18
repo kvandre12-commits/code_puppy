@@ -17,12 +17,12 @@ import requests
 from .config import (
     COPILOT_AUTH_CONFIG,
     COPILOT_MODEL_CONTEXT_LENGTHS,
-    DEFAULT_COPILOT_MODELS,
     DEVICE_FLOW_CONFIG,
     get_copilot_models_path,
     get_device_token_storage_path,
     get_session_cache_path,
 )
+from .model_catalog import fetch_supported_copilot_models
 
 logger = logging.getLogger(__name__)
 
@@ -451,43 +451,15 @@ def remove_copilot_models() -> int:
 
 
 def fetch_copilot_models(session_token: str, host: str = "github.com") -> List[str]:
-    """Try to fetch the model catalogue from the Copilot API.
+    """Fetch Copilot models and drop IDs rejected by chat completions.
 
-    Falls back to ``DEFAULT_COPILOT_MODELS`` if the endpoint is unavailable.
-    Uses the host-specific API endpoint discovered during token exchange.
+    GitHub's catalogue can contain models that exist but are not usable for the
+    current token/endpoint. Registration should mirror what the chat endpoint
+    accepts, otherwise users get a shiny picker followed by
+    ``model_not_supported``. Very professional. Very annoying.
     """
     api_base = get_api_endpoint_for_host(host)
-    url = f"{api_base}/models"
-    headers = {
-        "Authorization": f"Bearer {session_token}",
-        "Accept": "application/json",
-        "Editor-Version": COPILOT_AUTH_CONFIG["editor_version"],
-        "Editor-Plugin-Version": COPILOT_AUTH_CONFIG["editor_plugin_version"],
-        "Copilot-Integration-Id": COPILOT_AUTH_CONFIG["copilot_integration_id"],
-        "Openai-Intent": COPILOT_AUTH_CONFIG["openai_intent"],
-    }
-    try:
-        resp = requests.get(url, headers=headers, timeout=15)
-        if resp.status_code == 200:
-            data = resp.json()
-            model_list = data.get("data") or data.get("models") or []
-            if isinstance(model_list, list):
-                ids = []
-                for m in model_list:
-                    if isinstance(m, dict):
-                        mid = m.get("id") or m.get("name")
-                        if mid:
-                            ids.append(mid)
-                    elif isinstance(m, str):
-                        ids.append(m)
-                if ids:
-                    logger.info("Fetched %d models from Copilot API", len(ids))
-                    return ids
-    except Exception as exc:
-        logger.debug("Could not fetch Copilot model list: %s", exc)
-
-    logger.info("Using default Copilot model list")
-    return DEFAULT_COPILOT_MODELS
+    return fetch_supported_copilot_models(session_token, host, api_base)
 
 
 def _is_claude_model(model_name: str) -> bool:
@@ -558,6 +530,15 @@ def add_models_to_config(
         copilot_models = load_copilot_models()
         added = 0
         prefix = COPILOT_AUTH_CONFIG["prefix"]
+        wanted_names = {f"{prefix}{model_name}" for model_name in models}
+        for existing_name, existing_cfg in list(copilot_models.items()):
+            if (
+                existing_cfg.get("oauth_source") == "copilot-auth-plugin"
+                and existing_cfg.get("copilot_host", "github.com") == host
+                and existing_name not in wanted_names
+            ):
+                copilot_models.pop(existing_name, None)
+
         # Use the API endpoint from session-token exchange (critical for GHE).
         api_url = get_api_endpoint_for_host(host)
         for model_name in models:

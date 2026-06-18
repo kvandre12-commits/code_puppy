@@ -144,6 +144,30 @@ class TestCopilotAuth:
 
 
 # ---------------------------------------------------------------------------
+# /copilot-login command tests
+# ---------------------------------------------------------------------------
+
+
+def test_copilot_login_without_host_uses_github_default():
+    """No-arg login should not prompt inside the running app event loop."""
+    from code_puppy.plugins.copilot_auth.register_callbacks import (
+        _handle_copilot_login,
+    )
+
+    with (
+        patch("code_puppy.plugins.copilot_auth.register_callbacks.emit_info"),
+        patch("code_puppy.plugins.copilot_auth.register_callbacks.emit_error"),
+        patch(
+            "code_puppy.plugins.copilot_auth.register_callbacks.start_device_flow"
+        ) as mock_start,
+    ):
+        mock_start.return_value = None
+        _handle_copilot_login("/copilot-login")
+
+    mock_start.assert_called_once_with("github.com")
+
+
+# ---------------------------------------------------------------------------
 # _create_copilot_model integration tests
 # ---------------------------------------------------------------------------
 

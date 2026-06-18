@@ -195,7 +195,8 @@ def _handle_copilot_login(command: str) -> None:
     GitHub Enterprise by passing the hostname:
     ``/copilot-login ghes.example.com``
 
-    When no hostname is given the user is prompted (default: github.com).
+    When no hostname is given, github.com is used. Pass a hostname explicitly
+    for GitHub Enterprise.
     """
     # Parse optional GHE hostname from command arguments
     parts = command.strip().split()
@@ -203,23 +204,16 @@ def _handle_copilot_login(command: str) -> None:
     if len(parts) > 1:
         host = parts[1].strip()
 
-    # If no host was provided as an argument, prompt the user
+    # Avoid prompt_toolkit.prompt() here: custom_command callbacks can run while
+    # Code Puppy's event loop is already active, and prompt_toolkit's sync prompt
+    # calls asyncio.run(). That explodes with "asyncio.run() cannot be called from
+    # a running event loop". Use the safe default; GHE users can pass the host.
     if not host:
+        host = "github.com"
         emit_info(
-            "🌐 Enter your GitHub hostname — just the domain, no https:// or path.\n"
-            "   Examples: github.com, ghe.mycompany.com\n"
-            "   Press Enter to use github.com."
+            "No GitHub host supplied; using github.com.\n"
+            "   For GitHub Enterprise, run: /copilot-login ghe.mycompany.com"
         )
-        try:
-            from prompt_toolkit import prompt as pt_prompt
-
-            raw = pt_prompt("GitHub host: ", default="github.com").strip()
-            host = raw if raw else "github.com"
-        except ImportError:
-            host = "github.com"
-        except (EOFError, KeyboardInterrupt):
-            emit_warning("Copilot login cancelled.")
-            return
 
     # Validate the hostname before interpolating it into any URLs
     host = _normalize_github_host(host)
