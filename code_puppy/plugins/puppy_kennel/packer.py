@@ -9,9 +9,11 @@ token budget without ever calling an LLM or shipping a tokenizer:
   ``role='note'``, i.e. content written via the ``kennel_remember`` tool.
   Facts, decisions, artifacts, relationships, and history live here until typed
   drawers are modeled explicitly. Highest signal-to-token ratio in the kennel.
-  Capped at ~30% of budget.
-* **P2 - recent assistant responses**: drawers in ``repo:<cwd>`` with
-  ``role='assistant'``. Fills whatever budget remains after P0 + P1.
+  Uses the remaining budget after P0.
+
+Passive transcript quarantine is intentionally not packed by default. Raw
+conversation material must be distilled into typed durable drawers before it
+becomes future working context.
 
 Token budget is enforced via the well-known 1-token approximate-4-chars
 heuristic. Cheap, zero-dep, accurate to plus-or-minus 20% which is fine
@@ -28,7 +30,6 @@ from .config import (
     MIN_DRAWER_CHARS,
     PROMPT_BUDGET_CHARS,
     PROMPT_BUDGET_TOKENS,
-    STICKY_QUOTA,
     USER_PREFS_QUOTA,
 )
 from .kennel import Drawer
@@ -114,7 +115,7 @@ def pack(cwd_override: str | None = None) -> str | None:
 
     total_budget = max(0, PROMPT_BUDGET_CHARS - _HEADER_SLACK_CHARS)
     p0_budget = int(total_budget * USER_PREFS_QUOTA)
-    p1_budget = int(total_budget * STICKY_QUOTA)
+    p1_budget = max(0, total_budget - p0_budget)
 
     # P0 - user preferences. We pull every role; user-wing drawers tend to
     # be ``role='note'`` (explicit) but allow assistant too just in case.
@@ -122,18 +123,13 @@ def pack(cwd_override: str | None = None) -> str | None:
     p0 = _pack_class(user_drawers, p0_budget)
     p0.title = "User Preferences"
 
-    # P1 - sticky notes for this repo (role='note' only).
-    sticky = kennel.recent_drawers(repo_w, limit=_FETCH_LIMIT, role="note")
-    p1 = _pack_class(sticky, p1_budget)
-    p1.title = "Project Decisions"
+    # P1 - durable project notes for this repo (role='note' only). Raw
+    # transcript quarantine is searchable/auditable, but not prompt-packed.
+    project_notes = kennel.recent_drawers(repo_w, limit=_FETCH_LIMIT, role="note")
+    p1 = _pack_class(project_notes, p1_budget)
+    p1.title = "Durable Project Memory"
 
-    # P2 - recent assistant responses fill whatever budget remains.
-    p2_budget = total_budget - p0.used_chars - p1.used_chars
-    assistant = kennel.recent_drawers(repo_w, limit=_FETCH_LIMIT, role="assistant")
-    p2 = _pack_class(assistant, max(0, p2_budget))
-    p2.title = "Recent Context"
-
-    sections = [s for s in (p0, p1, p2) if s.lines]
+    sections = [s for s in (p0, p1) if s.lines]
     if not sections:
         return None
 
@@ -143,7 +139,7 @@ def pack(cwd_override: str | None = None) -> str | None:
 def _render(sections: list[PackSection], repo_w: str) -> str:
     """Render the packed sections into the final markdown block."""
     out: list[str] = [
-        "## Puppy Kennel - Context Cache",
+        "## Puppy Kennel - Durable Project Memory",
         (
             f"_Repo wing: `{repo_w}` | token budget: "
             f"{PROMPT_BUDGET_TOKENS} (~{PROMPT_BUDGET_CHARS} chars)_"

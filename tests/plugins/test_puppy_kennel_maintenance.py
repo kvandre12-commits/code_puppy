@@ -29,7 +29,7 @@ def test_build_audit_counts_wings_roles_and_duplicates(kennel_root: Path) -> Non
         wing_name="repo:/tmp/b",
         room_name="notes",
         content="duplicate   context\n drawer",
-        role="assistant",
+        role="quarantine",
     )
     _raw_drawer(
         wing_name="user:default",
@@ -56,13 +56,13 @@ def test_render_audit_includes_operator_summary(kennel_root: Path) -> None:
         wing_name="repo:/tmp/a",
         room_name="notes",
         content="response",
-        role="assistant",
+        role="quarantine",
     )
     _raw_drawer(
         wing_name="repo:/tmp/a",
         room_name="notes",
         content="response",
-        role="assistant",
+        role="quarantine",
     )
 
     lines = maintenance.render_audit(maintenance.build_audit())

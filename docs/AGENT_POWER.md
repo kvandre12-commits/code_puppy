@@ -54,12 +54,21 @@ agent OS durable project memory layer: distilled project knowledge that survives
 after a conversation ends.
 
 ```text
-Conversation -> Distillation -> Durable Project Memory -> Future Work
+Conversation -> Quarantine -> Typed Durable Memory -> Future Work
 Kennels -> Working context
 Working context -> Model
 ```
 
-Conceptually, kennel drawers should separate durable knowledge types:
+Raw transcript can enter the kennel only as temporary quarantine:
+
+```text
+quarantine transcript
+  -> distill typed drawers
+  -> promote durable drawers
+  -> prune transcript crumbs
+```
+
+Conceptually, durable kennel drawers should separate knowledge types:
 
 ```text
 Facts

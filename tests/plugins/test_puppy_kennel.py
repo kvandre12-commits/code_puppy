@@ -2,7 +2,7 @@
 
 Covers:
 * schema initialization is idempotent
-* recorder writes a single drawer to the repo wing only (no dual-write)
+* recorder writes a single quarantine drawer to the repo wing only (no dual-write)
 * FTS5 search finds drawers, optionally scoped to a wing
 * passive recall block builds a sensible system-prompt fragment
 * empty/garbage inputs are no-ops, not crashes
@@ -75,9 +75,9 @@ def test_initialize_is_idempotent(kennel_root: Path) -> None:
     kennel.initialize()  # second call must not raise
 
 
-def test_recorder_writes_only_to_repo_wing(kennel_root: Path) -> None:
-    """Phase 5: autosave goes to the repo wing only, not the agent diary."""
-    from code_puppy.plugins.puppy_kennel import kennel, recorder
+def test_recorder_writes_only_quarantine_to_repo_wing(kennel_root: Path) -> None:
+    """Autosave goes to repo quarantine only, not durable notes or agent diary."""
+    from code_puppy.plugins.puppy_kennel import kennel, recorder, wings
 
     recorder.record_run_end(
         agent_name="code-puppy",
@@ -86,14 +86,20 @@ def test_recorder_writes_only_to_repo_wing(kennel_root: Path) -> None:
         success=True,
         response_text=(
             "Hello from the kennel with enough project context to deserve autosave: "
-            "this run verifies repo-wing storage without recreating the old agent diary dual-write."
+            "this run verifies repo-wing quarantine without recreating the old agent diary dual-write."
         ),
     )
     # Single write — no more dual-write.
     assert kennel.count_drawers() == 1
-    wings = kennel.list_wings()
-    assert any(w.startswith("repo:") for w in wings)
-    assert "agent:code-puppy" not in wings
+    wing_names = kennel.list_wings()
+    assert any(w.startswith("repo:") for w in wing_names)
+    assert "agent:code-puppy" not in wing_names
+
+    drawers = kennel.recent_drawers(wings.repo_wing(), limit=1)
+    assert drawers[0].role == "quarantine"
+    assert drawers[0].metadata is not None
+    assert drawers[0].metadata["memory_type"] == "transcript_quarantine"
+    assert drawers[0].metadata["durable"] is False
 
 
 def test_recorder_skips_blank_or_failed_runs(kennel_root: Path) -> None:
@@ -165,24 +171,27 @@ def test_passive_recall_block_returns_none_when_empty(kennel_root: Path) -> None
     assert retriever.build_recall_block() is None
 
 
-def test_passive_recall_block_renders_when_drawers_exist(kennel_root: Path) -> None:
-    from code_puppy.plugins.puppy_kennel import recorder, retriever
+def test_passive_recall_block_renders_when_durable_notes_exist(
+    kennel_root: Path,
+) -> None:
+    from code_puppy.plugins.puppy_kennel import kennel, retriever, wings
 
     # Has to exceed MIN_DRAWER_CHARS (80) or the packer correctly drops it.
-    recorder.record_run_end(
-        agent_name="code-puppy",
-        model_name="m",
-        session_id="s1",
-        success=True,
-        response_text=(
-            "A small but mighty drawer that nonetheless contains enough "
+    kennel.write_note(
+        wing_name=wings.repo_wing(),
+        room_name="facts",
+        content=(
+            "A small but mighty durable fact that nonetheless contains enough "
             "verbatim content to clear the noise threshold and earn its "
             "place in the recall block."
         ),
+        role="note",
+        metadata={"agent": "code-puppy", "memory_type": "fact"},
     )
     block = retriever.build_recall_block()
     assert block is not None
     assert "Puppy Kennel" in block
+    assert "Durable Project Memory" in block
     assert "code-puppy" in block
 
 

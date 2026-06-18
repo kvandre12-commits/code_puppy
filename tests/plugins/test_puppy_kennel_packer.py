@@ -3,8 +3,8 @@
 Covers:
 * empty kennel -> None
 * P0 user prefs make it into the block
-* P1 sticky notes (role='note') from this repo wing make it in
-* P2 recent assistant responses fill remaining budget
+* P1 durable project notes (role='note') from this repo wing make it in
+* transcript quarantine does not enter the default recall block
 * drawers shorter than MIN_DRAWER_CHARS are skipped (noise filter)
 * token budget actually constrains output length
 * a very long drawer is truncated with an ellipsis instead of dropped
@@ -78,7 +78,7 @@ def test_short_drawers_are_skipped_as_noise(kennel_root: Path) -> None:
     assert packer.pack() is None
 
 
-def test_pack_renders_with_one_long_assistant_drawer(kennel_root: Path) -> None:
+def test_pack_ignores_one_long_quarantine_drawer(kennel_root: Path) -> None:
     from code_puppy.plugins.puppy_kennel import packer, recorder
 
     recorder.record_run_end(
@@ -87,11 +87,7 @@ def test_pack_renders_with_one_long_assistant_drawer(kennel_root: Path) -> None:
         success=True,
         response_text=_long("We picked SQLite over Chroma because ", 250),
     )
-    block = packer.pack()
-    assert block is not None
-    assert "Puppy Kennel - Context Cache" in block
-    assert "Recent Context" in block
-    assert "SQLite over Chroma" in block
+    assert packer.pack() is None
 
 
 # --------------------------------------------------------------------------- #
@@ -114,7 +110,7 @@ def test_user_prefs_land_in_p0(kennel_root: Path) -> None:
     assert "vim keybindings" in block
 
 
-def test_sticky_repo_notes_land_in_p1(kennel_root: Path) -> None:
+def test_durable_repo_notes_land_in_p1(kennel_root: Path) -> None:
     from code_puppy.plugins.puppy_kennel import packer, kennel
     from code_puppy.plugins.puppy_kennel.wings import repo_wing
 
@@ -128,26 +124,26 @@ def test_sticky_repo_notes_land_in_p1(kennel_root: Path) -> None:
     )
     block = packer.pack()
     assert block is not None
-    assert "Project Decisions" in block
+    assert "Durable Project Memory" in block
     assert "FTS5" in block
 
 
-def test_assistant_responses_land_in_p2(kennel_root: Path) -> None:
+def test_quarantine_responses_do_not_land_in_prompt(kennel_root: Path) -> None:
     from code_puppy.plugins.puppy_kennel import packer, recorder
 
     recorder.record_run_end(
         agent_name="code-puppy",
         model_name="m",
         success=True,
-        response_text=_long("Just an autosaved assistant response here ", 200),
+        response_text=_long("Just an autosaved quarantine response here ", 200),
     )
     block = packer.pack()
-    assert block is not None
-    assert "Recent Context" in block
-    assert "Just an autosaved" in block
+    assert block is None
 
 
-def test_all_three_tiers_render_in_order(kennel_root: Path) -> None:
+def test_durable_tiers_render_in_order_and_quarantine_is_excluded(
+    kennel_root: Path,
+) -> None:
     from code_puppy.plugins.puppy_kennel import packer, kennel, recorder
     from code_puppy.plugins.puppy_kennel.wings import repo_wing
 
@@ -171,13 +167,13 @@ def test_all_three_tiers_render_in_order(kennel_root: Path) -> None:
     )
     block = packer.pack()
     assert block is not None
-    pos_user = block.find("User Preferences")
-    pos_sticky = block.find("Project Decisions")
-    pos_recent = block.find("Recent Context")
-    assert 0 <= pos_user < pos_sticky < pos_recent, block
+    pos_user = block.find("### User Preferences")
+    pos_sticky = block.find("### Durable Project Memory")
+    assert 0 <= pos_user < pos_sticky, block
     assert "USER_PREFERENCE_MARKER" in block
     assert "STICKY_NOTE_MARKER" in block
-    assert "ASSISTANT_RESPONSE_MARKER" in block
+    assert "ASSISTANT_RESPONSE_MARKER" not in block
+    assert "Recent Context" not in block
 
 
 # --------------------------------------------------------------------------- #
@@ -187,16 +183,17 @@ def test_all_three_tiers_render_in_order(kennel_root: Path) -> None:
 
 def test_budget_constrains_output_size(kennel_root: Path) -> None:
     """Many big drawers should still produce a block under the budget."""
-    from code_puppy.plugins.puppy_kennel import packer, recorder
+    from code_puppy.plugins.puppy_kennel import packer, kennel
     from code_puppy.plugins.puppy_kennel.config import PROMPT_BUDGET_CHARS
+    from code_puppy.plugins.puppy_kennel.wings import repo_wing
 
     for i in range(30):
-        recorder.record_run_end(
-            agent_name="code-puppy",
-            model_name="m",
-            session_id=f"s{i:02d}",
-            success=True,
-            response_text=_long(f"Response number {i} ", 1500),
+        kennel.write_note(
+            wing_name=repo_wing(),
+            room_name="facts",
+            content=_long(f"Durable note number {i} ", 1500),
+            role="note",
+            metadata={"agent": "code-puppy", "memory_type": "fact"},
         )
     block = packer.pack()
     assert block is not None
@@ -205,17 +202,18 @@ def test_budget_constrains_output_size(kennel_root: Path) -> None:
 
 
 def test_single_huge_drawer_gets_truncated_not_dropped(kennel_root: Path) -> None:
-    from code_puppy.plugins.puppy_kennel import packer, recorder
+    from code_puppy.plugins.puppy_kennel import packer, kennel
+    from code_puppy.plugins.puppy_kennel.wings import repo_wing
 
-    # Has to clear both the packer's per-class budget (~1700 chars) AND ideally
-    # the recorder's MAX_DRAWER_CHARS cap (32000) to exercise both truncation
-    # paths. 50k chars does both.
+    # Has to clear both the packer's per-class budget and ideally the storage
+    # MAX_DRAWER_CHARS cap (32000) to exercise both truncation paths.
     huge = _long("UNIQUE_MARKER ", 50_000)
-    recorder.record_run_end(
-        agent_name="code-puppy",
-        model_name="m",
-        success=True,
-        response_text=huge,
+    kennel.write_note(
+        wing_name=repo_wing(),
+        room_name="artifacts",
+        content=huge,
+        role="note",
+        metadata={"agent": "code-puppy", "memory_type": "artifact"},
     )
     block = packer.pack()
     assert block is not None
@@ -245,7 +243,7 @@ def test_p0_does_not_starve_p1(kennel_root: Path) -> None:
     )
     block = packer.pack()
     assert block is not None
-    assert "Project Decisions" in block
+    assert "Durable Project Memory" in block
     assert "STICKY_SURVIVES" in block
 
 
@@ -255,13 +253,15 @@ def test_p0_does_not_starve_p1(kennel_root: Path) -> None:
 
 
 def test_drawer_renders_with_agent_label_and_timestamp(kennel_root: Path) -> None:
-    from code_puppy.plugins.puppy_kennel import packer, recorder
+    from code_puppy.plugins.puppy_kennel import packer, kennel
+    from code_puppy.plugins.puppy_kennel.wings import repo_wing
 
-    recorder.record_run_end(
-        agent_name="bloodhound",
-        model_name="m",
-        success=True,
-        response_text=_long("Sniffed out a clue today ", 200),
+    kennel.write_note(
+        wing_name=repo_wing(),
+        room_name="facts",
+        content=_long("Sniffed out a clue today ", 200),
+        role="note",
+        metadata={"agent": "bloodhound", "memory_type": "fact"},
     )
     block = packer.pack()
     assert block is not None
@@ -271,18 +271,20 @@ def test_drawer_renders_with_agent_label_and_timestamp(kennel_root: Path) -> Non
 
 
 def test_drawer_with_embedded_newlines_renders_one_line(kennel_root: Path) -> None:
-    from code_puppy.plugins.puppy_kennel import packer, recorder
+    from code_puppy.plugins.puppy_kennel import packer, kennel
+    from code_puppy.plugins.puppy_kennel.wings import repo_wing
 
-    recorder.record_run_end(
-        agent_name="code-puppy",
-        model_name="m",
-        success=True,
-        response_text=(
-            "Line one of a memorable response that needs to be sufficiently "
+    kennel.write_note(
+        wing_name=repo_wing(),
+        room_name="facts",
+        content=(
+            "Line one of a memorable fact that needs to be sufficiently "
             "long to clear the minimum threshold of the packer\n"
-            "Line two continues with more verbatim content for posterity\n"
+            "Line two continues with more durable content for posterity\n"
             "Line three closes out the multi-line drawer with a flourish"
         ),
+        role="note",
+        metadata={"agent": "code-puppy", "memory_type": "fact"},
     )
     block = packer.pack()
     assert block is not None
