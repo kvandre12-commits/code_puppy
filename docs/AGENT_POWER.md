@@ -47,18 +47,29 @@ normal tool registration path: bridge/tool plugins should either expose tools vi
 `register_agent_tools(agent_name)` after a grant, or check `has_scope(agent_name,
 "scope.name")` before advertising sensitive tools.
 
-## Decision memory and context economy
+## Durable project memory and context economy
 
 A kennel is not AI memory, chat history, embeddings, or app state. It is the
-agent OS decision memory layer: durable truths distilled from work.
+agent OS durable project memory layer: distilled project knowledge that survives
+after a conversation ends.
 
 ```text
-Token history -> Distilled decisions -> Kennel
+Conversation -> Distillation -> Durable Project Memory -> Future Work
 Kennels -> Working context
 Working context -> Model
 ```
 
+Conceptually, kennel drawers should separate durable knowledge types:
+
+```text
+Facts
+Decisions
+Artifacts
+Relationships
+History
+```
+
 As agent systems mature, context reconstruction becomes more expensive than raw
-computation. The OS should treat context as an asset: cache durable decisions
-locally, pack them intentionally, route them into working context only when
+computation. The OS should treat context as an asset: cache durable project
+knowledge locally, pack it intentionally, route it into working context only when
 useful, and avoid paying the model to rediscover what the system already knows.

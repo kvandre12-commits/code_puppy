@@ -1,24 +1,47 @@
 # Puppy Kennel
 
-Local-first decision memory for Code Puppy. A kennel is not "AI memory," chat
-history, embeddings, or app state. It is the layer that preserves durable truths
-from ongoing work: policies, architecture decisions, approval rules, project
-facts, artifacts, and commit-relevant context.
+Local-first durable project memory for Code Puppy. A kennel is not "AI memory,"
+chat history, embeddings, or app state. It is the layer that preserves distilled
+project knowledge from ongoing work.
 
 ```text
-Token history -> Distilled decisions -> Kennel
+Conversation -> Distillation -> Durable Project Memory -> Future Work
 Kennels -> Working context
 Working context -> Model
+```
+
+The kennel is typed in concept even before every type has a dedicated storage
+column:
+
+```text
+Kennel
+  -> Facts
+  -> Decisions
+  -> Artifacts
+  -> Relationships
+  -> History
+```
+
+Examples:
+
+```text
+Fact: Android owns runtime permissions.
+Decision: No god-agent.
+Artifact: docs/ANDROID_AGENT_OS_LAYER.md
+Relationship: DroidPuppy depends on Android.
+History: Commit e27359c clarified the memory layer model.
 ```
 
 The important question is not whether 195k tokens were saved. The important
 question is whether those tokens produced durable output:
 
 ```text
-1 new policy
-2 new architecture decisions
-1 new artifact
-1 new commit
+discoveries
+designs
+commits
+tests
+policies
+relationships
 ```
 
 Inspired by [MemKennel](https://github.com/MemKennel/memkennel)'s wings -> rooms
@@ -89,8 +112,8 @@ second wing.
 ## Context hygiene
 
 The kennel should reduce repeated context-reconstruction cost and preserve
-decision memory, not archive every low-signal crumb forever. Passive autosave now
-applies ingestion hygiene before writing:
+durable project memory, not archive every low-signal crumb forever. Passive
+autosave now applies ingestion hygiene before writing:
 
 - blank responses are skipped;
 - placeholder responses like `response` / `reused response` are skipped;
@@ -112,8 +135,8 @@ budget. Three priority classes, no LLM, no embeddings:
 
 | Tier | Source | Quota (default) | Why |
 |---|---|---|---|
-| **P0** User Preferences | `user:default` wing, any role | ~30% | Short, durable, pervasive ('Mike hates emojis') |
-| **P1** Project Decisions | `repo:<cwd>` wing, `role='note'` | ~30% | Sticky writes from `kennel_remember` — highest signal-to-token ratio |
+| **P0** User Preferences | `user:default` wing, any role | ~30% | Short, durable, pervasive operator preferences |
+| **P1** Durable Project Notes | `repo:<cwd>` wing, `role='note'` | ~30% | Explicit facts/decisions/artifacts/relationships/history — highest signal-to-token ratio |
 | **P2** Recent Context | `repo:<cwd>` wing, `role='assistant'` | remainder | Orientation, freshness |
 
 Drawers below `PUPPY_KENNEL_MIN_DRAWER_CHARS` (default 80) are skipped
