@@ -46,3 +46,6 @@ code_puppy/bundled_skills/
 
 .json
 outputs/
+
+# Local sibling/product checkout; owned by https://github.com/kvandre12-commits/DroidPuppy
+/DroidPuppy/
