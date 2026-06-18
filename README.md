@@ -115,7 +115,8 @@ granted power.** Scoped grants can be audited and replayed:
 ```
 
 This keeps the core install tiny and avoids handing every agent every Droid,
-browser, MCP, or broker-adjacent tool by default. See `docs/AGENT_POWER.md`.
+browser, MCP, or broker-adjacent tool by default. See `docs/AGENT_POWER.md` and
+`docs/AGENT_ORG_CHART.md`.
 Very polite. Very sharp.
 
 Android/Termux users can launch the first local Droid dashboard from inside Code

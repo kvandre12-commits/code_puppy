@@ -3,7 +3,8 @@
 Code Puppy Droid is not just a mobile code editor or a chatbot wrapper. It is the
 Android-facing distribution path for Code Puppy as a local **agent OS layer**:
 agent intent, scoped power, local execution, observation, audit, replay, and
-coding as a first-class workflow.
+coding as a first-class workflow. The operating department model is defined in
+`docs/AGENT_ORG_CHART.md`.
 
 ```text
 Intent -> Contract -> Code Puppy -> Droid action -> Observation -> Audit/replay
