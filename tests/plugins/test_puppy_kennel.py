@@ -36,7 +36,9 @@ def kennel_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     import importlib
 
     from code_puppy.plugins.puppy_kennel import config as kennel_config
+    from code_puppy.plugins.puppy_kennel import hygiene as hygiene_mod
     from code_puppy.plugins.puppy_kennel import kennel as kennel_mod
+    from code_puppy.plugins.puppy_kennel import maintenance as maintenance_mod
     from code_puppy.plugins.puppy_kennel import packer as packer_mod
     from code_puppy.plugins.puppy_kennel import recorder as recorder_mod
     from code_puppy.plugins.puppy_kennel import retriever as retriever_mod
@@ -49,7 +51,9 @@ def kennel_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
         schema_mod,  # SQL constants
         state_mod,  # is_enabled() reads kennel_enabled from puppy.cfg
         wings_mod,  # cwd/repo helpers
+        hygiene_mod,  # MIN_DRAWER_CHARS <- config
         kennel_mod,  # DB_PATH <- config
+        maintenance_mod,  # DB_PATH <- config
         packer_mod,  # <- kennel, config, wings
         recorder_mod,  # <- kennel, state, wings
         retriever_mod,  # <- packer, state
@@ -80,7 +84,10 @@ def test_recorder_writes_only_to_repo_wing(kennel_root: Path) -> None:
         model_name="test-model",
         session_id="sess-abc",
         success=True,
-        response_text="Hello from the kennel.",
+        response_text=(
+            "Hello from the kennel with enough project context to deserve autosave: "
+            "this run verifies repo-wing storage without recreating the old agent diary dual-write."
+        ),
     )
     # Single write — no more dual-write.
     assert kennel.count_drawers() == 1
@@ -112,7 +119,10 @@ def test_fts5_search_finds_drawers(kennel_root: Path) -> None:
         model_name="m",
         session_id="s1",
         success=True,
-        response_text="We picked SQLite FTS5 because Chroma corrupts on concurrent writes.",
+        response_text=(
+            "We picked SQLite FTS5 because Chroma corrupts on concurrent writes, "
+            "and that design choice matters for future kennel maintenance and search behavior."
+        ),
     )
     hits = kennel.search_drawers("chroma corrupts", limit=5)
     assert len(hits) >= 1
@@ -127,7 +137,10 @@ def test_fts5_search_scoped_to_wing(kennel_root: Path) -> None:
         model_name="m",
         session_id="s1",
         success=True,
-        response_text="The fox jumps over the lazy puppy.",
+        response_text=(
+            "The fox jumps over the lazy puppy while documenting enough scoped search "
+            "context to pass the autosave hygiene threshold for this repo wing test."
+        ),
     )
     repo_w = wings.repo_wing()
     agent_w = wings.agent_wing("code-puppy")
@@ -204,12 +217,14 @@ def _concurrent_worker(worker_id: int, kennel_root: str, n: int = 25) -> int:
     import importlib
 
     from code_puppy.plugins.puppy_kennel import config as kennel_config
+    from code_puppy.plugins.puppy_kennel import hygiene as hygiene_mod
     from code_puppy.plugins.puppy_kennel import kennel as kennel_mod
     from code_puppy.plugins.puppy_kennel import recorder as recorder_mod
     from code_puppy.plugins.puppy_kennel import state as state_mod
 
     importlib.reload(kennel_config)
     importlib.reload(state_mod)
+    importlib.reload(hygiene_mod)
     importlib.reload(kennel_mod)
     importlib.reload(recorder_mod)
     kennel_mod.initialize()
@@ -219,7 +234,11 @@ def _concurrent_worker(worker_id: int, kennel_root: str, n: int = 25) -> int:
             model_name="m",
             session_id=f"sess-{worker_id:02d}-{i:03d}",
             success=True,
-            response_text=f"Worker {worker_id} drawer {i}: lorem ipsum dolor sit amet.",
+            response_text=(
+                f"Worker {worker_id} drawer {i}: concurrent kennel write with enough "
+                "context to pass autosave hygiene while still being unique per process, "
+                "session, and drawer for WAL stress coverage."
+            ),
         )
     return worker_id
 
@@ -250,5 +269,5 @@ def test_concurrent_multiprocess_writes_do_not_corrupt(kennel_root: Path) -> Non
     # All workers land in the single shared repo wing (cwd is the same).
     assert len(kennel.list_wings()) == 1
 
-    hits = kennel.search_drawers("lorem ipsum", limit=50)
+    hits = kennel.search_drawers("WAL stress coverage", limit=50)
     assert len(hits) == 50  # FTS5 still works after the storm

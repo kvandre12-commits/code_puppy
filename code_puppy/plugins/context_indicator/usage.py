@@ -195,9 +195,9 @@ class OverheadBreakdown:
 
     The buckets form an additive partition of ``total``: ``kennel_memory``
     is *carved out* of the resolved system prompt (since that's where the
-    memory block actually lives at runtime), so summing all five fields
-    still equals the true overhead — just with the memory chunk surfaced
-    as its own line so users can see what the kennel is eating.
+    kennel context block actually lives at runtime), so summing all five fields
+    still equals the true overhead — just with the kennel context chunk surfaced
+    as its own line so users can see what the kennel is packing.
     """
 
     system_prompt_tokens: int
@@ -252,11 +252,16 @@ def _live_mcp_servers_for(agent):
     """
     try:
         from code_puppy.config import get_value
-        from code_puppy.mcp_ import get_mcp_manager
+        from code_puppy.mcp_.optional import is_mcp_available
 
         mcp_disabled = get_value("disable_mcp_servers")
         if mcp_disabled and str(mcp_disabled).lower() in ("1", "true", "yes", "on"):
             return None
+
+        if not is_mcp_available():
+            return None
+
+        from code_puppy.mcp_ import get_mcp_manager
 
         agent_name = getattr(agent, "name", None)
         manager = get_mcp_manager()
@@ -322,7 +327,7 @@ def compute_overhead_breakdown(agent) -> OverheadBreakdown:
 
     # System prompt (resolved for the active model). NB: this already
     # includes any ``load_prompt`` plugin fragments — most notably the
-    # kennel memory block — so we'll carve those out below to avoid
+    # kennel context block — so we'll carve those out below to avoid
     # double-counting.
     try:
         resolved = _resolved_system_prompt(agent)
@@ -330,7 +335,7 @@ def compute_overhead_breakdown(agent) -> OverheadBreakdown:
     except Exception:
         system_tokens = 0
 
-    # Kennel memory block — carved out of the system prompt so it gets
+    # Kennel context block — carved out of the system prompt so it gets
     # its own line in /context. Clamp the subtraction to zero in the
     # paranoid case where the resolved prompt somehow doesn't contain the
     # block (e.g. agent overrode get_system_prompt without calling

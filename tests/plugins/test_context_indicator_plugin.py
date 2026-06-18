@@ -377,7 +377,7 @@ def test_format_usage_report_breaks_out_mcp_and_agents_md():
     report = module._format_usage_report(usage)
     assert "System prompt" in report
     assert "AGENTS.md" in report
-    assert "Kennel memory" in report
+    assert "Kennel ctx" in report
     assert "Pydantic tools" in report
     assert "MCP toolsets" in report
     # Numbers show up with thousands separators.
@@ -405,7 +405,7 @@ def test_format_usage_report_hides_empty_breakdown_buckets():
     assert "└─ System prompt" in report
     assert "└─ AGENTS.md" not in report
     assert "└─ MCP toolsets" not in report
-    assert "└─ Kennel memory" not in report
+    assert "└─ Kennel ctx" not in report
 
 
 def test_format_usage_report_omits_breakdown_block_when_all_zero():
@@ -420,10 +420,10 @@ def test_format_usage_report_omits_breakdown_block_when_all_zero():
 
 
 # ---------------------------------------------------------------------------
-# Kennel memory carve-out
+# Kennel context carve-out
 # ---------------------------------------------------------------------------
 def test_overhead_breakdown_carves_kennel_memory_out_of_system_prompt():
-    """Kennel memory tokens are subtracted from the system prompt bucket.
+    """Kennel context tokens are subtracted from the system prompt bucket.
 
     The resolved system prompt already contains the kennel recall block
     (because ``load_prompt`` callbacks are folded into it at assembly

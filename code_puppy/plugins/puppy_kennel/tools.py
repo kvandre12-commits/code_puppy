@@ -114,7 +114,7 @@ def _resolve_wing(value: str, agent_name: str, cwd: Any) -> str:
 
     Shortcuts:
         ``"repo"``   -> current repo wing (the default for writes)
-        ``"agent"``  -> this agent's diary wing
+        ``"agent"``  -> this agent's context journal wing
         ``"user"``   -> the global user-prefs wing
         ``""``       -> defaults to ``repo`` (most writes are project-scoped)
         anything else is treated as an explicit wing name.
@@ -160,12 +160,12 @@ def register_kennel_recall(agent: Any) -> None:
         top_k: int = 5,
         scope: str = "default",
     ) -> KennelRecallOutput:
-        """Search the Puppy Kennel for relevant past drawers (verbatim memories).
+        """Search the Puppy Kennel for relevant cached context drawers.
 
-        The kennel stores prior agent responses scoped by wing:
-        * ``repo:<path>``  — project memory shared across agents in that repo
-        * ``agent:<name>`` — this agent's private diary
-        * ``user:default`` — cross-cutting user preferences
+        The kennel stores local context objects scoped by wing:
+        * ``repo:<path>``  — project context shared across agents in that repo
+        * ``agent:<name>`` — this agent's private context journal
+        * ``user:default`` — cross-cutting operator preferences/context
 
         Args:
             query:  Free-form text. FTS5 BM25 ranks results.
@@ -175,7 +175,7 @@ def register_kennel_recall(agent: Any) -> None:
             scope:  When ``wing`` is empty, choose the wing set:
                     * ``"default"`` — repo + this agent + user (sensible default)
                     * ``"repo"``    — only the current repo wing
-                    * ``"agent"``   — only this agent's diary
+                    * ``"agent"``   — only this agent's context journal
                     * ``"all"``     — every wing (use sparingly)
 
         Returns drawers ordered by BM25 relevance, deduplicated by content.
@@ -235,13 +235,13 @@ def register_kennel_remember(agent: Any) -> None:
         wing: str = "repo",
         room: str = "notes",
     ) -> KennelRememberOutput:
-        """Save a verbatim note to the Puppy Kennel.
+        """Save a verbatim context note to the Puppy Kennel.
 
         Use this when the user says "remember that..." or when you learn
-        something durable that future sessions should know about. Writes
+        durable context that would be expensive to reconstruct later. Writes
         are best-effort; failures return an error string rather than raising.
 
-        **Pick the wing deliberately — it determines who sees this memory:**
+        **Pick the wing deliberately — it determines who receives this context:**
 
         * ``"repo"`` (default) — facts about THIS project: architectural
           decisions, gotchas, conventions, why-we-chose-X. Anyone working
@@ -250,13 +250,13 @@ def register_kennel_remember(agent: Any) -> None:
         * ``"user"`` — facts about the user (Mike): preferences, style,
           biographical detail. Pervasive across every repo and every
           agent. Use sparingly — only for cross-cutting truths.
-        * ``"agent"`` — cross-project learnings about your own behavior
+        * ``"agent"`` — cross-project context about your own behavior
           or limitations. Rare. Most "agent" notes are actually project
-          notes wearing a costume — prefer ``"repo"`` unless the lesson
+          notes wearing a costume — prefer ``"repo"`` unless the context
           genuinely transcends projects.
 
         Args:
-            content: The verbatim text to remember. Required.
+            content: The verbatim context text to store. Required.
             wing:    ``"repo"`` (default) / ``"user"`` / ``"agent"`` /
                      or an explicit wing name like ``"team:platform"``.
             room:    Room name within the wing. Defaults to ``"notes"``.
@@ -365,7 +365,7 @@ def register_kennel_list_wings(agent: Any) -> None:
     async def kennel_list_wings(context: RunContext) -> KennelWingsOutput:
         """List every wing in the kennel with its drawer count.
 
-        Use this to discover what memory partitions exist before scoping a
+        Use this to discover what context partitions exist before scoping a
         ``kennel_recall`` or ``kennel_recent`` call.
         """
         if not is_enabled():

@@ -19,12 +19,13 @@ from pathlib import Path
 from typing import Any, Iterator
 
 from .config import DB_PATH, MAX_DRAWER_CHARS, KENNEL_ROOT
+from .hygiene import normalize_content
 from .schema import PRAGMAS, SCHEMA_SQL
 
 
 @dataclass(slots=True, frozen=True)
 class Drawer:
-    """A verbatim chunk of remembered content."""
+    """A verbatim chunk of cached context."""
 
     id: int
     room_id: int
@@ -111,8 +112,48 @@ def ensure_room(wing_id: int, name: str, metadata: dict[str, Any] | None = None)
 
 
 # --------------------------------------------------------------------------- #
-# Drawers — the actual remembered content
+# Drawers — the actual cached context content
 # --------------------------------------------------------------------------- #
+
+
+def find_duplicate_drawer_id(
+    content: str,
+    wing_name: str | None = None,
+    role: str | None = None,
+) -> int:
+    """Return an existing drawer id with the same normalized content.
+
+    This is intentionally scoped by wing/role at call sites so project notes do
+    not accidentally suppress unrelated context in another repo. It scans the
+    candidate rows in Python rather than adding a schema migration for a content
+    fingerprint column. Cheap today; easy to optimize later if the kennel grows
+    teeth.
+    """
+    normalized = normalize_content(content)
+    if not normalized:
+        return 0
+
+    sql_parts = [
+        "SELECT d.id, d.content FROM drawers d",
+        "JOIN rooms r ON r.id = d.room_id",
+        "JOIN wings w ON w.id = r.wing_id",
+        "WHERE 1 = 1",
+    ]
+    params: list[Any] = []
+    if wing_name is not None:
+        sql_parts.append("AND w.name = ?")
+        params.append(wing_name)
+    if role is not None:
+        sql_parts.append("AND d.role = ?")
+        params.append(role)
+    sql_parts.append("ORDER BY d.id DESC")
+
+    with _connect() as conn:
+        rows = conn.execute(" ".join(sql_parts), params).fetchall()
+    for row in rows:
+        if normalize_content(row["content"]) == normalized:
+            return int(row["id"])
+    return 0
 
 
 def add_drawer(
@@ -225,8 +266,12 @@ def write_note(
 ) -> int:
     """High-level helper: ensure (wing, room) exist, then add a drawer.
 
-    Returns the new drawer id, or 0 if the content was blank.
+    Returns the new drawer id, an existing duplicate id, or 0 if the content was
+    blank.
     """
+    duplicate_id = find_duplicate_drawer_id(content, wing_name=wing_name, role=role)
+    if duplicate_id:
+        return duplicate_id
     wing_id = ensure_wing(wing_name)
     room_id = ensure_room(wing_id, room_name)
     return add_drawer(

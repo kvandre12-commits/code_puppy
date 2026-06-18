@@ -1,8 +1,18 @@
 # Puppy Kennel
 
-Local-first memory for Code Puppy. Inspired by [MemKennel](https://github.com/MemKennel/memkennel)'s
-wings → rooms → drawers model, but backed by **SQLite + FTS5** instead of
-ChromaDB. No daemon, no API key, no cloud, multi-process safe via WAL mode.
+Local-first context cache for Code Puppy. A kennel is not "AI memory"; it is a
+local context object that prevents repeatedly paying to reconstruct the same
+working context through large API calls.
+
+```text
+Token history -> Kennel
+Kennels -> Working context
+Working context -> Model
+```
+
+Inspired by [MemKennel](https://github.com/MemKennel/memkennel)'s wings -> rooms
+-> drawers model, but backed by **SQLite + FTS5** instead of ChromaDB. No daemon,
+no API key, no cloud, multi-process safe via WAL mode.
 
 ## Why not just use MemKennel / Mem0 / Chroma?
 
@@ -29,9 +39,9 @@ Three wing namespaces, all in one shared kennel:
 
 | Wing | Example | Purpose |
 |---|---|---|
-| `repo:<path>` | `repo:/Users/mike/code/foo` | Project memory, shared across agents |
-| `agent:<name>` | `agent:code-puppy` | Per-agent diary, private by convention |
-| `user:default` | `user:default` | Cross-cutting user preferences |
+| `repo:<path>` | `repo:/Users/mike/code/foo` | Project context cache, shared across agents |
+| `agent:<name>` | `agent:code-puppy` | Per-agent context journal, private by convention |
+| `user:default` | `user:default` | Cross-cutting operator preferences/context |
 
 Privacy is by convention, not encryption. If you need cryptographic
 isolation for a sensitive-data agent, run that agent with
@@ -39,15 +49,15 @@ isolation for a sensitive-data agent, run that agent with
 
 ## What it does today
 
-**Phase 1 — passive memory:**
+**Phase 1 — passive context packing:**
 - **`load_prompt`** — injects a tiered, budget-aware recall block (see
-  [the packer](#the-packer) below) into the system prompt.
+  [the packer](#the-packer) below) into the working context sent to the model.
 - **`agent_run_end`** — writes the agent's response to a single drawer
   in the current ``repo:<cwd>`` wing.
 
 ## Wing semantics (Phase 5)
 
-The three wings model **who the memory is for**, not who wrote it:
+The three wings model **who the cached context is for**, not who wrote it:
 
 | Wing | Active when... | Filled by... |
 |---|---|---|
@@ -64,6 +74,25 @@ This kills the previous dual-write design (where each response wrote
 twice, once per wing). Search-time dedup is still in place for any
 legacy duplicates and for content the agent explicitly mirrors into a
 second wing.
+
+## Context hygiene
+
+The kennel should reduce repeated context-reconstruction cost, not preserve every
+low-signal crumb forever. Passive autosave now applies ingestion hygiene before
+writing:
+
+- blank responses are skipped;
+- placeholder responses like `response` / `reused response` are skipped;
+- assistant responses shorter than `PUPPY_KENNEL_MIN_DRAWER_CHARS` are skipped;
+- normalized duplicate assistant responses in the same repo wing are skipped.
+
+Explicit `kennel_remember` notes are trusted more than passive transcripts, but
+still use normalized duplicate protection in the target wing/role. If the same
+durable note is written twice, the existing drawer id is returned instead of
+creating another clone.
+
+Existing legacy junk is not deleted automatically. Use `/kennel audit` to review
+duplicate/noise pressure before any approval-gated prune.
 
 ## The packer
 
@@ -96,14 +125,14 @@ Five agent-callable tools registered via ``register_tools``:
 | Tool | Purpose |
 |---|---|
 | `kennel_recall(query, wing?, top_k=5, scope=?)` | BM25 search across wings, deduplicated. |
-| `kennel_remember(content, wing="repo", room="notes")` | Explicit verbatim write to a chosen wing. |
+| `kennel_remember(content, wing="repo", room="notes")` | Explicit verbatim context write to a chosen wing. |
 | `kennel_recent(wing?, top_k=5, scope=?)` | Time-ordered drawer browsing (no query needed). |
 | `kennel_list_wings()` | Discover all wings + drawer counts. |
 | `kennel_stats()` | Kennel-wide totals + on-disk size. |
 
 Wing shortcuts accepted by every tool: ``"repo"`` (current project,
-default for writes), ``"agent"`` (this agent's diary), ``"user"``
-(cross-cutting preferences), or an explicit wing name like
+default for writes), ``"agent"`` (this agent's context journal), ``"user"``
+(cross-cutting preferences/context), or an explicit wing name like
 ``"team:platform"``.
 
 Scope shortcuts for multi-wing reads: ``"default"`` (repo+agent+user),
@@ -117,17 +146,17 @@ Plus a **`/kennel`** slash command suite for humans:
 | `/kennel search <q>` | BM25 search across default scope |
 | `/kennel wings` | list wings + drawer counts |
 | `/kennel stats` | DB size, totals, current enabled state |
-| `/kennel status` | is memory currently on or off? |
-| `/kennel enable` (or `on`) | turn memory on at runtime |
-| `/kennel disable` (or `off`) | turn memory off at runtime (drawers preserved) |
+| `/kennel status` | is kennel context currently on or off? |
+| `/kennel enable` (or `on`) | turn context packing on at runtime |
+| `/kennel disable` (or `off`) | turn context packing off at runtime (drawers preserved) |
 | `/kennel help` | usage hint |
 
 ## Enable / disable
 
 The plugin is **enabled by default**. Flip it with the slash commands:
 
-- ``/kennel disable`` (or ``/kennel off``) — turn memory off
-- ``/kennel enable`` (or ``/kennel on``) — turn memory back on
+- ``/kennel disable`` (or ``/kennel off``) — turn context packing off
+- ``/kennel enable`` (or ``/kennel on``) — turn context packing back on
 
 State is persisted to ``puppy.cfg`` under ``kennel_enabled`` and read on
 every callback, so the toggle is live — no restart needed, and the
@@ -135,9 +164,9 @@ front end can read or write the same value.
 
 **When disabled:**
 
-- ``load_prompt`` returns ``None`` (no recall block in system prompt)
+- ``load_prompt`` returns ``None`` (no recall block in working context)
 - ``agent_run_end`` is a no-op (nothing recorded)
-- Agent-facing tools return a friendly ``error`` field explaining memory is off
+- Agent-facing tools return a friendly ``error`` field explaining kennel context is off
 - **The ``/kennel`` slash suite stays available** — ``/kennel stats``,
   ``/kennel wings``, ``/kennel search`` all still work so the operator
   can see what's stored, and ``/kennel enable`` is always reachable to
@@ -180,8 +209,8 @@ added alongside this plugin specifically to avoid that pattern.
 ``register_tools`` defines tools and drops them into ``TOOL_REGISTRY``;
 ``register_agent_tools`` says *which* tools to advertise to *which* agent.
 The puppy_kennel plugin always returns all five tool names regardless of
-agent — memory is universally useful. Other plugins can scope per-agent by
-branching on the ``agent_name`` argument.
+agent — cached working context is universally useful. Other plugins can scope
+per-agent by branching on the ``agent_name`` argument.
 
 ## Files
 

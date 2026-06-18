@@ -24,7 +24,6 @@ from prompt_toolkit.layout import Dimension, Layout, VSplit, Window
 from prompt_toolkit.layout.controls import FormattedTextControl
 from prompt_toolkit.widgets import Frame
 
-from code_puppy.mcp_ import get_mcp_manager
 from code_puppy.mcp_.agent_bindings import (
     get_bound_servers,
     is_bound,
@@ -38,7 +37,11 @@ from code_puppy.tools.command_runner import set_awaiting_user_input
 
 def _list_servers() -> List[Tuple[str, str, str]]:
     """Return ``[(name, type, state)]`` for every registered MCP server."""
-    manager = get_mcp_manager()
+    from code_puppy.mcp_.optional import optional_mcp_manager
+
+    manager = optional_mcp_manager()
+    if manager is None:
+        return []
     rows: List[Tuple[str, str, str]] = []
     try:
         infos = manager.list_servers()

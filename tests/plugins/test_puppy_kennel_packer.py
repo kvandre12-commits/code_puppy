@@ -89,7 +89,7 @@ def test_pack_renders_with_one_long_assistant_drawer(kennel_root: Path) -> None:
     )
     block = packer.pack()
     assert block is not None
-    assert "Puppy Kennel - Memory" in block
+    assert "Puppy Kennel - Context Cache" in block
     assert "Recent Context" in block
     assert "SQLite over Chroma" in block
 

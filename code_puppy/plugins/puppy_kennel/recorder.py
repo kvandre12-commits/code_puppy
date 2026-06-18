@@ -21,6 +21,7 @@ from typing import Any
 from code_puppy.messaging.bus import emit_debug
 
 from . import kennel
+from .hygiene import autosave_decision
 from .state import is_enabled
 from .wings import detect_cwd, repo_wing
 
@@ -44,17 +45,19 @@ def record_run_end(
 ) -> None:
     """Persist the agent's final response into the kennel.
 
-    Writes a single drawer to the repo wing (shared project memory).
+    Writes a single drawer to the repo wing (shared project context).
     Failures here must never crash the host app — the kennel is best-
-    effort memory, not a transactional system of record.
+    effort context capture, not a transactional system of record.
     """
-    if not response_text or not response_text.strip():
+    decision = autosave_decision(response_text or "")
+    if not decision.should_store:
+        emit_debug(f"[puppy_kennel] recorder skipped {decision.reason} response")
         return
     if not success:
         # Don't memorialize broken runs. The error log is the right place.
         return
     if not is_enabled():
-        # Memory is toggled off — silently skip. Slash commands surface state.
+        # Kennel context is toggled off — silently skip. Slash commands surface state.
         return
 
     try:
@@ -68,8 +71,13 @@ def record_run_end(
         if metadata:
             drawer_meta["run_metadata"] = metadata
 
-        # Shared project memory — the only autosave destination.
+        # Shared project context — the only autosave destination.
         repo_w = repo_wing(cwd)
+        if kennel.find_duplicate_drawer_id(
+            response_text, wing_name=repo_w, role="assistant"
+        ):
+            emit_debug("[puppy_kennel] recorder skipped duplicate response")
+            return
         repo_wing_id = kennel.ensure_wing(repo_w)
         repo_room_id = kennel.ensure_room(repo_wing_id, room)
         kennel.add_drawer(
@@ -79,5 +87,5 @@ def record_run_end(
             session_id=session_id,
             metadata=drawer_meta,
         )
-    except Exception as exc:  # noqa: BLE001 — best-effort memory.
+    except Exception as exc:  # noqa: BLE001 — best-effort context capture.
         emit_debug(f"[puppy_kennel] recorder skipped: {exc!r}")

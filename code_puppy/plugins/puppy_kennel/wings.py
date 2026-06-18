@@ -1,10 +1,10 @@
-"""Wing namespacing — the convention that compartmentalizes memory.
+"""Wing namespacing — the convention that compartmentalizes cached context.
 
 Three namespaces, all stored in the same shared kennel:
 
-* ``repo:<path>``   — project memory, shared between agents in that repo
-* ``agent:<name>``  — per-agent diary, private by convention
-* ``user:default``  — cross-cutting user preferences
+* ``repo:<path>``   — project context cache, shared between agents in that repo
+* ``agent:<name>``  — per-agent context journal, private by convention
+* ``user:default``  — cross-cutting operator preferences/context
 
 Keep this module dependency-free; both recorder and retriever import it.
 """

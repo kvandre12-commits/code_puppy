@@ -17,6 +17,9 @@ wheels/
 # Pytest cache
 .pytest_cache/
 
+# Local agent/kennel audit artifacts
+outputs/
+
 dummy_path
 
 .idea/

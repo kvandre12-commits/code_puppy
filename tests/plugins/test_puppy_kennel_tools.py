@@ -177,7 +177,10 @@ def test_kennel_recent_returns_newest_first(kennel_root: Path) -> None:
         model_name="m",
         session_id="s1",
         success=True,
-        response_text="First memory.",
+        response_text=(
+            "First recent context entry with enough detail to pass autosave hygiene "
+            "and test chronological drawer ordering."
+        ),
     )
     time.sleep(1.01)  # Distinct timestamps (we store seconds-precision).
     recorder.record_run_end(
@@ -185,7 +188,10 @@ def test_kennel_recent_returns_newest_first(kennel_root: Path) -> None:
         model_name="m",
         session_id="s2",
         success=True,
-        response_text="Second memory.",
+        response_text=(
+            "Second recent context entry with enough detail to pass autosave hygiene "
+            "and test chronological drawer ordering."
+        ),
     )
 
     agent = _FakeAgent()
@@ -194,8 +200,8 @@ def test_kennel_recent_returns_newest_first(kennel_root: Path) -> None:
 
     out = asyncio.run(recent(_ctx(), top_k=5))
     assert out.total == 2
-    assert out.drawers[0].content == "Second memory."
-    assert out.drawers[1].content == "First memory."
+    assert out.drawers[0].content.startswith("Second recent context entry")
+    assert out.drawers[1].content.startswith("First recent context entry")
 
 
 def test_kennel_recent_scope_user(kennel_root: Path) -> None:
@@ -266,7 +272,10 @@ def test_list_wings_with_counts(kennel_root: Path) -> None:
         model_name="m",
         session_id="s1",
         success=True,
-        response_text="hello",
+        response_text=(
+            "Hello from a list-wings fixture with enough context to create one "
+            "repo wing drawer under autosave hygiene."
+        ),
     )
     agent = _FakeAgent()
     tools.register_kennel_list_wings(agent)
@@ -294,7 +303,10 @@ def test_kennel_stats_basic(kennel_root: Path) -> None:
         agent_name="code-puppy",
         model_name="m",
         success=True,
-        response_text="x",
+        response_text=(
+            "Stats fixture context long enough to create exactly one autosaved "
+            "drawer and one repo wing for the kennel stats tool."
+        ),
     )
     agent = _FakeAgent()
     tools.register_kennel_stats(agent)

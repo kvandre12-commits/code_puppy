@@ -6,6 +6,7 @@ Sub-commands under ``/kennel``:
 * ``/kennel search <query>``  — FTS5 search the current recall scope
 * ``/kennel wings``           — List all wings and drawer counts
 * ``/kennel stats``           — Storage stats and totals
+* ``/kennel audit``           — Read-only duplicate/noise report
 * ``/kennel help``            — Usage hint
 
 All commands return ``True`` to mark them handled (per callback contract)
@@ -28,7 +29,7 @@ from .wings import default_recall_scope, detect_cwd
 def _reload_current_agent() -> None:
     """Rebuild the active agent so its tool list reflects the new kennel state.
 
-    Toggling memory on/off changes what ``register_agent_tools`` advertises,
+    Toggling kennel context on/off changes what ``register_agent_tools`` advertises,
     but the live agent has already baked its tools in at construction time.
     Without a reload, ``/kennel disable`` would leave the kennel tools
     dangling on the agent (and ``/kennel enable`` wouldn't add them back)
@@ -45,7 +46,7 @@ def _reload_current_agent() -> None:
 
 _COMMAND = "kennel"
 _HELP_LINES: tuple[tuple[str, str], ...] = (
-    ("kennel", "Puppy Kennel — local memory: search, stats, wings"),
+    ("kennel", "Puppy Kennel — local context cache: search, stats, wings"),
 )
 
 
@@ -83,17 +84,17 @@ def _cmd_stats() -> bool:
 
 def _cmd_status() -> bool:
     if is_enabled():
-        emit_success("Puppy Kennel memory is ENABLED.")
+        emit_success("Puppy Kennel context cache is ENABLED.")
     else:
         emit_warning(
-            "Puppy Kennel memory is DISABLED. Run /kennel enable to turn it on."
+            "Puppy Kennel context cache is DISABLED. Run /kennel enable to turn it on."
         )
     return True
 
 
 def _cmd_enable() -> bool:
     if is_enabled():
-        emit_info("Puppy Kennel memory is already enabled.")
+        emit_info("Puppy Kennel context cache is already enabled.")
         return True
     try:
         set_enabled(True)
@@ -101,13 +102,15 @@ def _cmd_enable() -> bool:
         emit_warning(f"Could not persist enabled state: {exc!r}")
         return True
     _reload_current_agent()
-    emit_success("Puppy Kennel memory ENABLED. New runs will be recorded and recalled.")
+    emit_success(
+        "Puppy Kennel context cache ENABLED. New runs will be recorded and packed into working context."
+    )
     return True
 
 
 def _cmd_disable() -> bool:
     if not is_enabled():
-        emit_info("Puppy Kennel memory is already disabled.")
+        emit_info("Puppy Kennel context cache is already disabled.")
         return True
     try:
         set_enabled(False)
@@ -116,8 +119,8 @@ def _cmd_disable() -> bool:
         return True
     _reload_current_agent()
     emit_success(
-        "Puppy Kennel memory DISABLED. Existing drawers remain on disk; "
-        "recording and recall are paused. Run /kennel enable to resume."
+        "Puppy Kennel context cache DISABLED. Existing drawers remain on disk; "
+        "recording and context packing are paused. Run /kennel enable to resume."
     )
     return True
 
@@ -151,15 +154,25 @@ def _cmd_search(query: str) -> bool:
     return True
 
 
+def _cmd_audit() -> bool:
+    """Run a read-only kennel quality audit."""
+    from .maintenance import build_audit, render_audit
+
+    for line in render_audit(build_audit()):
+        emit_info(line)
+    return True
+
+
 def _cmd_help() -> bool:
     emit_info("Puppy Kennel commands:")
     emit_info("  /kennel                 - stats + recent activity")
     emit_info("  /kennel search <query>  - FTS5 search across default scope")
     emit_info("  /kennel wings           - list wings with drawer counts")
     emit_info("  /kennel stats           - storage stats + enabled state")
-    emit_info("  /kennel status          - is memory enabled?")
-    emit_info("  /kennel enable          - turn memory on")
-    emit_info("  /kennel disable         - turn memory off (drawers preserved)")
+    emit_info("  /kennel audit           - read-only duplicate/noise report")
+    emit_info("  /kennel status          - is context cache enabled?")
+    emit_info("  /kennel enable          - turn context cache on")
+    emit_info("  /kennel disable         - turn context cache off (drawers preserved)")
     emit_info("  /kennel help            - this message")
     return True
 
@@ -189,6 +202,8 @@ def handle(command: str, name: str) -> Any:
         return _cmd_wings()
     if sub == "stats":
         return _cmd_stats()
+    if sub == "audit":
+        return _cmd_audit()
     if sub == "status":
         return _cmd_status()
     if sub in ("enable", "on"):

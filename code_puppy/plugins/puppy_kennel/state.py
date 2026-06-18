@@ -9,7 +9,7 @@ Default is **enabled** -- a missing key, blank value, or garbage value
 all leave the kennel on. Only the explicit-falsy tokens
 ``{"false", "0", "no", "off"}`` (case-insensitive) turn it off. That
 asymmetry is on purpose: on a default-on system, a typo like
-``kennel_enabled = noep`` must not silently kill memory. In the face of
+``kennel_enabled = noep`` must not silently kill context packing. In the face of
 ambiguity, refuse to guess.
 
 Reads and writes go through ``code_puppy.config.get_value`` /
@@ -25,7 +25,7 @@ _CFG_KEY = "kennel_enabled"
 _FALSY = frozenset({"false", "0", "no", "off"})
 
 DISABLED_TOOL_ERROR = (
-    "Puppy Kennel memory is currently disabled. "
+    "Puppy Kennel context cache is currently disabled. "
     "Ask the user to run `/kennel enable` to turn it back on."
 )
 

@@ -46,7 +46,10 @@ def test_search_drawers_multi_dedupes_same_content(kennel_root: Path) -> None:
         model_name="m",
         session_id="s1",
         success=True,
-        response_text="Distinctive verbatim text about porcupines.",
+        response_text=(
+            "Distinctive verbatim text about porcupines that is long enough to "
+            "survive autosave hygiene and prove multi-wing search deduplication."
+        ),
     )
     repo_w = wings.repo_wing()
     agent_w = wings.agent_wing("code-puppy")
@@ -56,7 +59,10 @@ def test_search_drawers_multi_dedupes_same_content(kennel_root: Path) -> None:
     agent_room_id = kennel.ensure_room(agent_wing_id, "notes")
     kennel.add_drawer(
         agent_room_id,
-        content="Distinctive verbatim text about porcupines.",
+        content=(
+            "Distinctive verbatim text about porcupines that is long enough to "
+            "survive autosave hygiene and prove multi-wing search deduplication."
+        ),
         role="note",
         session_id="s1",
         metadata={"agent": "code-puppy"},
@@ -80,7 +86,10 @@ def test_search_drawers_multi_all_wings_when_none(kennel_root: Path) -> None:
         agent_name="agent-a",
         model_name="m",
         success=True,
-        response_text="Whales communicate via ultrasound.",
+        response_text=(
+            "Whales communicate via ultrasound in this long enough context drawer "
+            "so all-wing search can verify retrieval without storing tiny junk."
+        ),
     )
     hits = kennel.search_drawers_multi("whales", wing_names=None, limit=5)
     assert len(hits) == 1
@@ -121,7 +130,10 @@ def test_kennel_recall_returns_hits(kennel_root: Path) -> None:
         model_name="m",
         session_id="s1",
         success=True,
-        response_text="The dingo ate my SQL homework yesterday.",
+        response_text=(
+            "The dingo ate my SQL homework yesterday, which is ridiculous but long "
+            "enough to test kennel recall without tripping autosave hygiene."
+        ),
     )
     agent = _FakeAgent()
     tools.register_kennel_recall(agent)
@@ -154,7 +166,10 @@ def test_kennel_recall_scope_repo_only(kennel_root: Path) -> None:
         model_name="m",
         session_id="s1",
         success=True,
-        response_text="Aardvarks are nocturnal.",
+        response_text=(
+            "Aardvarks are nocturnal and this repo-scoped recall fixture is long "
+            "enough to be stored by passive autosave hygiene."
+        ),
     )
     agent = _FakeAgent()
     tools.register_kennel_recall(agent)

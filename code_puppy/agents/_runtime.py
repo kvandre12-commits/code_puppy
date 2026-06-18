@@ -25,7 +25,6 @@ from typing import Any, Callable, List, Optional, Sequence, Type, Union
 
 import httpcore
 import httpx
-import mcp
 from pydantic_ai import (
     BinaryContent,
     DocumentUrl,
@@ -44,6 +43,8 @@ try:  # pragma: no cover - optional dependency
     from openai import APIError as OpenAIAPIError
 except ImportError:
     OpenAIAPIError = None  # type: ignore[assignment]
+
+from code_puppy.mcp_.optional import get_mcp_error_type
 
 # Python 3.11+ builtin; graceful fallback for 3.10
 try:
@@ -85,6 +86,14 @@ from code_puppy.config import (
 from code_puppy.keymap import cancel_agent_uses_signal
 from code_puppy.messaging import emit_error, emit_info, emit_warning
 from code_puppy.tools.command_runner import is_awaiting_user_input
+
+
+class _MCPErrorUnavailable(Exception):
+    """Marker used when optional MCP dependencies are not installed."""
+
+
+MCPError = get_mcp_error_type() or _MCPErrorUnavailable
+
 
 # ---- Streaming retry helpers ------------------------------------------------
 
@@ -479,7 +488,7 @@ async def run_with_mcp(
                 "by saying 'please continue' or similar.",
                 group_id=group_id,
             )
-        except* mcp.shared.exceptions.McpError as mcp_error:
+        except* MCPError as mcp_error:
             # Already announced once by blocking_startup.py with a /mcp logs
             # hint. Don't re-vomit the exception text — just give the user
             # a single short, actionable nudge.
@@ -558,6 +567,11 @@ async def run_with_mcp(
     # ownership and unwind crashes with a cross-task cancel-scope error.
     # Mirrors the fix already applied to sub-agent invocation.
     try:
+        from code_puppy.mcp_.optional import is_mcp_available
+
+        if not is_mcp_available():
+            raise RuntimeError("MCP optional dependencies are not installed")
+
         from code_puppy.mcp_ import manager as _mcp_manager_module
 
         # Peek at the singleton instead of get_mcp_manager() — if no manager

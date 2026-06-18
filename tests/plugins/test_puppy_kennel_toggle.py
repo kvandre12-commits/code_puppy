@@ -124,7 +124,10 @@ def test_recorder_resumes_after_re_enable(kennel_root: Path) -> None:
         agent_name="code-puppy",
         model_name="m",
         success=True,
-        response_text="Saved.",
+        response_text=(
+            "Saved after re-enable with enough context to pass autosave hygiene "
+            "and verify the recorder resumes writing to the repo wing."
+        ),
     )
     # Phase 5: single-write to repo wing only.
     assert kennel.count_drawers() == 1

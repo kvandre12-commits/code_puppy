@@ -2,7 +2,7 @@
 
 ![Code Puppy Logo](code_puppy.png)
 
-**🐶✨The sassy AI code agent that makes IDEs look outdated** ✨🐶
+**The open-source agent OS layer for coding, Android, and local automation** 
 
 [![Version](https://img.shields.io/pypi/v/code-puppy?style=for-the-badge&logo=python&label=Version&color=purple)](https://pypi.org/project/code-puppy/)
 [![Downloads](https://img.shields.io/badge/Downloads-170k%2B-brightgreen?style=for-the-badge&logo=download)](https://pypi.org/project/code-puppy/)
@@ -42,7 +42,19 @@
     - If you pick the ox, better slam that back button in your browser.
 
 
-Code Puppy is an AI-powered code generation agent, designed to understand programming tasks, generate high-quality code, and explain its reasoning similar to tools like Windsurf and Cursor.
+Code Puppy is becoming an **open-source agent OS layer**: a local runtime for
+specialized agents, scoped tool power, Android/Droid workflows, durable context,
+and serious coding work. Coding is still core. It is just no longer the ceiling.
+
+The product thesis:
+
+```text
+Agent intent -> scoped capability grants -> local execution -> observation -> audit/replay
+```
+
+On Android, Code Puppy is the Termux-native control layer that can code, inspect,
+launch, hand off to browsers/apps, and grow into a local Droid cockpit without
+handing every agent every dangerous tool by default.
 
 
 ## Quick start
@@ -74,6 +86,47 @@ powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | ie
 
 uvx code-puppy
 ```
+
+#### Optional: model-provider SDKs
+
+Core installs avoid heavyweight provider SDKs by default. Install only the model
+families you use:
+
+```bash
+pip install "code-puppy[openai]"      # OpenAI, OpenRouter, Cerebras, Ollama-compatible
+pip install "code-puppy[anthropic]"   # Anthropic / Claude Code OAuth
+pip install "code-puppy[azure]"       # Azure OpenAI / Azure AI Foundry
+pip install "code-puppy[bedrock]"     # AWS Bedrock Claude
+pip install "code-puppy[mcp]"         # MCP server bridge/tools
+pip install "code-puppy[all-models]"  # all model-provider SDKs
+pip install "code-puppy[all-bridges]" # all model-provider SDKs + MCP
+```
+
+Bridge capabilities follow the Agent Power Rule: **No direct power. Only
+granted power.** Scoped grants can be audited and replayed:
+
+```text
+/bridge list
+/bridge grant browser-agent browser.read
+/bridge tools browser-agent
+/bridge audit browser-agent
+/bridge replay browser-agent
+/bridge revoke browser-agent browser.read
+```
+
+This keeps the core install tiny and avoids handing every agent every Droid,
+browser, MCP, or broker-adjacent tool by default. See `docs/AGENT_POWER.md`.
+Very polite. Very sharp.
+
+Android/Termux users can launch the first local Droid dashboard from inside Code
+Puppy. It is workflow-first: current stage, live golden-loop trail, and system
+status up front; bridge permissions are tucked under an advanced drawer:
+
+```text
+/droid open
+```
+
+See `docs/ANDROID_DISTRIBUTION.md` for the beta Android path.
 
 #### Optional: DBOS durable execution
 

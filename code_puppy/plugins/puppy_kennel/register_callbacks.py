@@ -1,7 +1,7 @@
 """Register puppy_kennel with Code Puppy's callback system.
 
 Hooks wired:
-* ``load_prompt``         -> passive recall block in the system prompt
+* ``load_prompt``         -> passive context block in the working prompt
 * ``agent_run_end``       -> record the agent's response as a verbatim drawer
 * ``register_tools``      -> defines kennel tools in ``TOOL_REGISTRY``
 * ``register_agent_tools``-> advertises kennel tools to every agent's tool list
@@ -72,12 +72,13 @@ _KENNEL_TOOL_NAMES = (
 def _advertise_tools_to_agent(agent_name: str | None = None) -> list[str]:
     """``register_agent_tools`` callback — advertise kennel tools to every agent.
 
-    Agnostic to ``agent_name`` for now: memory is universally useful, no
-    agent currently has a reason to opt out. If that changes, branch here.
+    Agnostic to ``agent_name`` for now: cached working context is universally
+    useful, no agent currently has a reason to opt out. If that changes,
+    branch here.
 
     When the kennel is toggled off via ``/kennel disable``, we advertise
     NO tools — the agent shouldn't see (and definitely shouldn't try to
-    call) memory tools that will just bounce with ``DISABLED_TOOL_ERROR``.
+    call) context tools that will just bounce with ``DISABLED_TOOL_ERROR``.
     The slash command pairs this with an agent reload so the tool list
     actually shrinks/grows live.
     """

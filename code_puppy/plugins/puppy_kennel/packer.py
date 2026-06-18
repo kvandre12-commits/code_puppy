@@ -1,4 +1,4 @@
-"""Tiered budget-aware packing for the system-prompt recall block.
+"""Tiered budget-aware packing for the working-context recall block.
 
 Three priority classes, fed from the kennel, sized to fit a configurable
 token budget without ever calling an LLM or shipping a tokenizer:
@@ -101,7 +101,7 @@ def _pack_class(
 
 
 def pack(cwd_override: str | None = None) -> str | None:
-    """Build the system-prompt recall block under the configured budget.
+    """Build the working-context recall block under the configured budget.
 
     Returns ``None`` when there is nothing useful to surface (empty kennel,
     every drawer too short, etc.) - the ``load_prompt`` callback contract
@@ -141,7 +141,7 @@ def pack(cwd_override: str | None = None) -> str | None:
 def _render(sections: list[PackSection], repo_w: str) -> str:
     """Render the packed sections into the final markdown block."""
     out: list[str] = [
-        "## Puppy Kennel - Memory",
+        "## Puppy Kennel - Context Cache",
         (
             f"_Repo wing: `{repo_w}` | token budget: "
             f"{PROMPT_BUDGET_TOKENS} (~{PROMPT_BUDGET_CHARS} chars)_"
