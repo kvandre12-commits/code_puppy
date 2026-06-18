@@ -413,9 +413,18 @@ That is worth carrying forward. Raw transcript bulk usually is not.
 
 ```text
 conversation
-  -> distillation
-  -> durable project memory
+  -> quarantine
+  -> typed durable memory
   -> future work
+```
+
+Raw transcript can enter the kennel only as temporary quarantine:
+
+```text
+quarantine transcript
+  -> distill typed drawers
+  -> promote durable drawers
+  -> prune transcript crumbs
 ```
 
 It should store durable project knowledge, not every transcript crumb.

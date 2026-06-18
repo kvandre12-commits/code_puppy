@@ -337,11 +337,10 @@ def search_drawers_multi(
 ) -> list[Drawer]:
     """Search multiple wings and dedupe by content.
 
-    Because the recorder currently dual-writes every response to the repo
-    wing AND the agent wing, naive multi-wing search returns the same text
-    twice. We over-fetch, then dedupe by content keeping the best-scoring
-    drawer per unique text. This is a pragmatic workaround for the schema
-    duplication noted in the README; remove once the schema is normalised.
+    Some content can intentionally appear in more than one wing, for example
+    raw transcript quarantine in a repo wing later distilled into an explicit
+    note in an agent or user wing. We over-fetch, then dedupe by content keeping
+    the best-scoring drawer per unique text.
     """
     if not query or not query.strip():
         return []

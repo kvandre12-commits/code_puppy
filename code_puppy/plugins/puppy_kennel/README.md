@@ -5,7 +5,7 @@ chat history, embeddings, or app state. It is the layer that preserves distilled
 project knowledge from ongoing work.
 
 ```text
-Conversation -> Distillation -> Durable Project Memory -> Future Work
+Conversation -> Quarantine -> Typed Durable Memory -> Future Work
 Kennels -> Working context
 Working context -> Model
 ```
@@ -86,8 +86,17 @@ isolation for a sensitive-data agent, run that agent with
 **Phase 1 — passive context packing:**
 - **`load_prompt`** — injects a tiered, budget-aware recall block (see
   [the packer](#the-packer) below) into the working context sent to the model.
-- **`agent_run_end`** — writes the agent's response to a single drawer
+- **`agent_run_end`** — writes the agent's raw response to transcript quarantine
   in the current ``repo:<cwd>`` wing.
+
+Raw transcript can enter the kennel only as temporary quarantine:
+
+```text
+quarantine transcript
+  -> distill typed drawers
+  -> promote durable drawers
+  -> prune transcript crumbs
+```
 
 ## Wing semantics (Phase 5)
 
@@ -99,9 +108,9 @@ The three wings model **who the cached context is for**, not who wrote it:
 | ``repo:<cwd>`` | cwd matches | autosave + ``kennel_remember(wing="repo")`` (default) |
 | ``agent:<name>`` | selected agent matches | explicit ``kennel_remember(wing="agent")`` only |
 
-Autosave goes **only** to the repo wing — every response is "a
-conversation that happened in this project," which is genuinely
-repo-scoped. The agent wing is reserved for deliberate cross-project
+Autosave goes **only** to the repo wing and is marked ``role='quarantine'`` —
+every response is raw conversation material that happened in this project, not
+durable project memory. The agent wing is reserved for deliberate cross-project
 reflections; ``user:default`` is for facts about the human.
 
 This kills the previous dual-write design (where each response wrote
@@ -117,8 +126,8 @@ autosave now applies ingestion hygiene before writing:
 
 - blank responses are skipped;
 - placeholder responses like `response` / `reused response` are skipped;
-- assistant responses shorter than `PUPPY_KENNEL_MIN_DRAWER_CHARS` are skipped;
-- normalized duplicate assistant responses in the same repo wing are skipped.
+- quarantine responses shorter than `PUPPY_KENNEL_MIN_DRAWER_CHARS` are skipped;
+- normalized duplicate quarantine responses in the same repo wing are skipped.
 
 Explicit `kennel_remember` notes are trusted more than passive transcripts, but
 still use normalized duplicate protection in the target wing/role. If the same
@@ -136,8 +145,11 @@ budget. Three priority classes, no LLM, no embeddings:
 | Tier | Source | Quota (default) | Why |
 |---|---|---|---|
 | **P0** User Preferences | `user:default` wing, any role | ~30% | Short, durable, pervasive operator preferences |
-| **P1** Durable Project Notes | `repo:<cwd>` wing, `role='note'` | ~30% | Explicit facts/decisions/artifacts/relationships/history — highest signal-to-token ratio |
-| **P2** Recent Context | `repo:<cwd>` wing, `role='assistant'` | remainder | Orientation, freshness |
+| **P1** Durable Project Notes | `repo:<cwd>` wing, `role='note'` | remainder | Explicit facts/decisions/artifacts/relationships/history — highest signal-to-token ratio |
+
+Transcript quarantine is searchable and auditable, but intentionally not packed
+into the default working-context block. Promote it to explicit typed durable
+notes first.
 
 Drawers below `PUPPY_KENNEL_MIN_DRAWER_CHARS` (default 80) are skipped
 as noise. Token estimation uses the well-known 1-token ≈ 4-chars
