@@ -1,13 +1,24 @@
 # Puppy Kennel
 
-Local-first context cache for Code Puppy. A kennel is not "AI memory"; it is a
-local context object that prevents repeatedly paying to reconstruct the same
-working context through large API calls.
+Local-first decision memory for Code Puppy. A kennel is not "AI memory," chat
+history, embeddings, or app state. It is the layer that preserves durable truths
+from ongoing work: policies, architecture decisions, approval rules, project
+facts, artifacts, and commit-relevant context.
 
 ```text
-Token history -> Kennel
+Token history -> Distilled decisions -> Kennel
 Kennels -> Working context
 Working context -> Model
+```
+
+The important question is not whether 195k tokens were saved. The important
+question is whether those tokens produced durable output:
+
+```text
+1 new policy
+2 new architecture decisions
+1 new artifact
+1 new commit
 ```
 
 Inspired by [MemKennel](https://github.com/MemKennel/memkennel)'s wings -> rooms
@@ -77,9 +88,9 @@ second wing.
 
 ## Context hygiene
 
-The kennel should reduce repeated context-reconstruction cost, not preserve every
-low-signal crumb forever. Passive autosave now applies ingestion hygiene before
-writing:
+The kennel should reduce repeated context-reconstruction cost and preserve
+decision memory, not archive every low-signal crumb forever. Passive autosave now
+applies ingestion hygiene before writing:
 
 - blank responses are skipped;
 - placeholder responses like `response` / `reused response` are skipped;
