@@ -184,6 +184,17 @@ def get_enable_streaming() -> bool:
     return str(val).lower() in ("1", "true", "yes", "on")
 
 
+def get_suppress_directory_listing() -> bool:
+    """
+    Get the suppress_directory_listing configuration value.
+    Returns True if directory listing displays should be suppressed, False otherwise.
+    """
+    val = get_value("suppress_directory_listing")
+    if val is None:
+        return True  # Default to True (suppress by default)
+    return str(val).lower() in ("1", "true", "yes", "on")
+
+
 DEFAULT_SECTION = "puppy"
 REQUIRED_KEYS = ["puppy_name", "owner_name"]
 
@@ -339,6 +350,8 @@ def get_config_keys():
     default_keys.append("max_hook_retries")
     # Add streaming control key
     default_keys.append("enable_streaming")
+    # Add suppress directory listing key
+    default_keys.append("suppress_directory_listing")
     # Add cancel agent key configuration
     default_keys.append("cancel_agent_key")
     # Add max pause seconds configuration (used by pause/steer feature to
@@ -351,9 +364,13 @@ def get_config_keys():
         default_keys.append(f"banner_color_{banner_name}")
     # Add resume message count configuration
     default_keys.append("resume_message_count")
+    # Per-file AGENTS.md character cap (see get_agents_md_max_chars()).
+    default_keys.append("agents_md_max_chars")
     # Add /goal iteration cap (owned by the wiggum plugin, surfaced here so
     # /set autocompletes it). See plugins/wiggum/register_callbacks.py.
     default_keys.append("goal_max_iterations")
+    # Add dangerous command guard disable (skips force push and destructive command guards)
+    default_keys.append("disable_dangerous_command_guard")
 
     config = configparser.ConfigParser()
     config.read(CONFIG_FILE)
@@ -1236,6 +1253,30 @@ def get_grep_output_verbose():
     return False
 
 
+def get_disable_dangerous_command_guard() -> bool:
+    """
+    Checks puppy.cfg for 'disable_dangerous_command_guard' (case-insensitive in value only).
+    Defaults to False (guards enabled) if not set.
+    Allowed values for ON: 1, '1', 'true', 'yes', 'on' (all case-insensitive for value).
+
+    When False (default): Both force push guard and destructive command guard are active.
+    When True: Both guards are bypassed - commands execute without prompts.
+
+      Use with caution!
+
+    This setting disables:
+    - Force push guard (git push --force, git push -f, etc.)
+    - Destructive command guard (rm -rf, docker system prune, etc.)
+    """
+    true_vals = {"1", "true", "yes", "on"}
+    cfg_val = get_value("disable_dangerous_command_guard")
+    if cfg_val is not None:
+        if str(cfg_val).strip().lower() in true_vals:
+            return True
+        return False
+    return False
+
+
 def get_protected_token_count():
     """
     Returns the user-configured protected token count for message history compaction.
@@ -1277,6 +1318,35 @@ def get_resume_message_count() -> int:
         return max(0, min(configured_value, 100))
     except (ValueError, TypeError):
         return 50
+
+
+# Default cap (in characters) for any single AGENTS.md file injected into
+# the system prompt. Users can override this via
+# ``/set agents_md_max_chars=<int>`` — any positive integer is honoured so
+# models with very large context windows (1M+ tokens) can opt into bigger
+# AGENTS.md files when it makes sense. The default of 10,000 just keeps
+# the unbounded out-of-the-box behaviour from regressing.
+AGENTS_MD_MAX_CHARS_DEFAULT = 10_000
+
+
+def get_agents_md_max_chars() -> int:
+    """Return the per-file AGENTS.md character cap, honouring user override.
+
+    Read from the ``agents_md_max_chars`` config key (settable via
+    ``/set agents_md_max_chars=<int>``). Defaults to
+    ``AGENTS_MD_MAX_CHARS_DEFAULT`` (10,000) when unset, and falls back to
+    the default on values that can't be a sensible cap (non-numeric,
+    negative, zero). No upper clamp — if a user with a 1M-token model
+    wants ``/set agents_md_max_chars=500000``, that's their call.
+    """
+    val = get_value("agents_md_max_chars")
+    try:
+        configured = int(val) if val else AGENTS_MD_MAX_CHARS_DEFAULT
+    except (ValueError, TypeError):
+        return AGENTS_MD_MAX_CHARS_DEFAULT
+    if configured <= 0:
+        return AGENTS_MD_MAX_CHARS_DEFAULT
+    return configured
 
 
 def get_compaction_threshold():
@@ -1961,6 +2031,51 @@ def set_suppress_informational_messages(enabled: bool):
         enabled: Whether to suppress informational messages
     """
     set_config_value("suppress_informational_messages", "true" if enabled else "false")
+
+
+# ---------------------------------------------------------------------------
+# Output level (unified density control)
+# ---------------------------------------------------------------------------
+
+_VALID_OUTPUT_LEVELS = frozenset({"low", "medium", "high"})
+
+
+def get_output_level() -> str:
+    """Return the current output density level.
+
+    Valid values: ``low``, ``medium``, ``high``.  Default is ``medium``
+    (current behaviour).  The value is read from ``puppy.cfg`` with the
+    key ``output_level``.
+
+    * **low** — collapse tool calls, thinking blocks, and info messages
+      to one-line peeks.  Great for focused work.
+    * **medium** — current default behaviour.
+    * **high** — full metadata: timing, tokens, verbose grep, all
+      sub-agent output.
+    """
+    cfg_val = get_value("output_level")
+    if cfg_val is not None:
+        normalised = str(cfg_val).strip().lower()
+        if normalised in _VALID_OUTPUT_LEVELS:
+            return normalised
+    return "medium"
+
+
+def set_output_level(level: str) -> None:
+    """Set the output density level.
+
+    Args:
+        level: One of ``low``, ``medium``, or ``high``.
+
+    Raises:
+        ValueError: If *level* is not a valid choice.
+    """
+    normalised = level.strip().lower()
+    if normalised not in _VALID_OUTPUT_LEVELS:
+        raise ValueError(
+            f"Invalid output_level {level!r}; choose from low, medium, high"
+        )
+    set_config_value("output_level", normalised)
 
 
 # API Key management functions

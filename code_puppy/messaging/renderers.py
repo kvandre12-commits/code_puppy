@@ -32,6 +32,149 @@ from rich.text import Text
 
 from .message_queue import MessageQueue, MessageType, UIMessage
 
+# Lazily imported to avoid circular imports at module scope.
+_output_level_getter = None
+_suppress_info_getter = None
+_suppress_thinking_getter = None
+
+
+def _get_output_level() -> str:
+    """Lazy accessor for ``config.get_output_level``."""
+    global _output_level_getter
+    if _output_level_getter is None:
+        from code_puppy.config import get_output_level
+
+        _output_level_getter = get_output_level
+    return _output_level_getter()
+
+
+def _get_suppress_informational() -> bool:
+    global _suppress_info_getter
+    if _suppress_info_getter is None:
+        from code_puppy.config import get_suppress_informational_messages
+
+        _suppress_info_getter = get_suppress_informational_messages
+    return _suppress_info_getter()
+
+
+def _get_suppress_thinking() -> bool:
+    global _suppress_thinking_getter
+    if _suppress_thinking_getter is None:
+        from code_puppy.config import get_suppress_thinking_messages
+
+        _suppress_thinking_getter = get_suppress_thinking_messages
+    return _suppress_thinking_getter()
+
+
+# Low-mode peek formatting.
+_PEEK_INDENT = "  "
+_PEEK_MAX_LEN = 80
+
+# In low mode, these types condense to a dim ``label: summary`` line.
+_LOW_MODE_PEEK_LABELS = {
+    MessageType.INFO: "info",
+    MessageType.SUCCESS: "success",
+    MessageType.WARNING: "warning",
+    MessageType.TOOL_OUTPUT: "tool",
+    MessageType.COMMAND_OUTPUT: "output",
+    MessageType.FILE_OPERATION: "file",
+    MessageType.AGENT_REASONING: "thinking",
+    MessageType.PLANNED_NEXT_STEPS: "plan",
+    MessageType.SYSTEM: "system",
+    MessageType.DEBUG: "debug",
+}
+
+# Derived set kept for readability / backwards compatibility.
+_LOW_MODE_COLLAPSIBLE = frozenset(_LOW_MODE_PEEK_LABELS)
+
+# Types suppressed by suppress_informational_messages toggle.
+_INFORMATIONAL_TYPES = frozenset(
+    {
+        MessageType.INFO,
+        MessageType.SUCCESS,
+        MessageType.WARNING,
+    }
+)
+
+# Types suppressed by suppress_thinking_messages toggle.
+_THINKING_TYPES = frozenset(
+    {
+        MessageType.AGENT_REASONING,
+        MessageType.PLANNED_NEXT_STEPS,
+    }
+)
+
+
+def _should_suppress_legacy(message: UIMessage) -> bool:
+    """Return True if *message* should be dropped entirely.
+
+    Only ``suppress_*`` toggles drop messages; low mode condenses via
+    ``_build_legacy_peek``.  Render-only — autosave/callbacks see full data.
+    """
+    # Suppress toggles; high mode overrides them.
+    if (
+        message.type in _INFORMATIONAL_TYPES
+        and _get_output_level() != "high"
+        and _get_suppress_informational()
+    ):
+        return True
+    if (
+        message.type in _THINKING_TYPES
+        and _get_output_level() != "high"
+        and _get_suppress_thinking()
+    ):
+        return True
+    return False
+
+
+def _summarize_peek_content(content) -> str:
+    """Collapse arbitrary message content to a single truncated line."""
+    if isinstance(content, Text):
+        text = content.plain
+    elif isinstance(content, str):
+        text = content
+    else:
+        text = str(content)
+    # First non-empty line keeps the peek to a single row.
+    first_line = next((ln for ln in text.splitlines() if ln.strip()), "").strip()
+    if len(first_line) > _PEEK_MAX_LEN:
+        first_line = first_line[: _PEEK_MAX_LEN - 3] + "..."
+    return first_line
+
+
+def _build_legacy_peek(message: UIMessage) -> Optional[Text]:
+    """Return a dim one-line peek for low mode, or ``None`` to render fully.
+
+    Returns pre-styled ``Text`` to avoid Rich markup mis-parsing.
+    """
+    if _get_output_level() != "low":
+        return None
+    label = _LOW_MODE_PEEK_LABELS.get(message.type)
+    if label is None:
+        return None
+    summary = _summarize_peek_content(message.content)
+    body = f"{label}: {summary}" if summary else label
+    return Text(f"{_PEEK_INDENT}{body}", style="dim")
+
+
+def _apply_legacy_density(message: UIMessage) -> Optional[UIMessage]:
+    """Apply suppress / peek / full-render decision.
+
+    Used by both legacy renderers.
+    """
+    if _should_suppress_legacy(message):
+        return None
+    peek = _build_legacy_peek(message)
+    if peek is not None:
+        return UIMessage(
+            type=message.type,
+            content=peek,
+            timestamp=message.timestamp,
+            metadata=message.metadata,
+        )
+    return message
+
+
 # Threshold for emitting a ``[buffered N messages during pause]`` indicator
 # when the buffer is drained. Below this we stay silent; the user pressed
 # pause, output buffered, output flushed — no extra noise needed.
@@ -178,6 +321,12 @@ class InteractiveRenderer(MessageRenderer):
             await self._handle_human_input_request(message)
             return
 
+        # Output-level / suppress-toggle gate (render-only filtering).
+        resolved = _apply_legacy_density(message)
+        if resolved is None:
+            return
+        message = resolved
+
         from code_puppy.messaging.pause_controller import get_pause_controller
 
         pc = get_pause_controller()
@@ -289,6 +438,12 @@ class SynchronousInteractiveRenderer:
             # Bypass the buffer — blocking prompt, buffering would deadlock.
             self._handle_human_input_request(message)
             return
+
+        # Output-level / suppress-toggle gate.
+        resolved = _apply_legacy_density(message)
+        if resolved is None:
+            return
+        message = resolved
 
         from code_puppy.messaging.pause_controller import get_pause_controller
 

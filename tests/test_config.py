@@ -285,6 +285,7 @@ class TestGetConfigKeys:
         mock_parser_instance.read.assert_called_once_with(mock_cfg_file)
         assert keys == sorted(
             [
+                "agents_md_max_chars",
                 "allow_recursion",
                 "auto_save_session",
                 "banner_color_agent_reasoning",
@@ -311,6 +312,7 @@ class TestGetConfigKeys:
                 "compaction_threshold",
                 "default_agent",
                 "diff_context_lines",
+                "disable_dangerous_command_guard",
                 "enable_pack_agents",
                 "enable_streaming",
                 "enable_universal_constructor",
@@ -333,6 +335,7 @@ class TestGetConfigKeys:
                 "protected_token_count",
                 "resume_message_count",
                 "summarization_model",
+                "suppress_directory_listing",
                 "temperature",
                 "yolo_mode",
             ]
@@ -350,6 +353,7 @@ class TestGetConfigKeys:
         keys = cp_config.get_config_keys()
         assert keys == sorted(
             [
+                "agents_md_max_chars",
                 "allow_recursion",
                 "auto_save_session",
                 "banner_color_agent_reasoning",
@@ -376,6 +380,7 @@ class TestGetConfigKeys:
                 "compaction_threshold",
                 "default_agent",
                 "diff_context_lines",
+                "disable_dangerous_command_guard",
                 "enable_pack_agents",
                 "enable_streaming",
                 "enable_universal_constructor",
@@ -396,6 +401,7 @@ class TestGetConfigKeys:
                 "protected_token_count",
                 "resume_message_count",
                 "summarization_model",
+                "suppress_directory_listing",
                 "temperature",
                 "yolo_mode",
             ]

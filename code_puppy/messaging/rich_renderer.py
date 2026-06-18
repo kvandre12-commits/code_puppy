@@ -18,7 +18,13 @@ from rich.rule import Rule
 # Note: Syntax import removed - file content not displayed, only header
 from rich.table import Table
 
-from code_puppy.config import get_subagent_verbose
+from code_puppy.config import (
+    get_output_level,
+    get_subagent_verbose,
+    get_suppress_directory_listing,
+    get_suppress_informational_messages,
+    get_suppress_thinking_messages,
+)
 from code_puppy.tools.common import format_diff_with_colors
 from code_puppy.tools.subagent_context import is_subagent
 
@@ -117,6 +123,9 @@ def _is_paused() -> bool:
 # Rich Console Renderer
 # =============================================================================
 
+# Max length for low-mode peek lines.
+_PEEK_MAX_LEN = 100
+
 
 class RichConsoleRenderer:
     """Rich console implementation of the renderer protocol.
@@ -181,10 +190,130 @@ class RichConsoleRenderer:
     def _should_suppress_subagent_output(self) -> bool:
         """Check if sub-agent output should be suppressed.
 
+        In ``high`` output mode, sub-agent output is never suppressed
+        regardless of the ``subagent_verbose`` toggle.
+
         Returns:
-            True if we're in a sub-agent context and verbose mode is disabled
+            True if we're in a sub-agent context and verbose mode is disabled.
         """
+        if get_output_level() == "high":
+            return False
         return is_subagent() and not get_subagent_verbose()
+
+    # -- Output-level density helpers ----------------------------------------
+
+    # Types that render fully even in low mode: interactive prompts,
+    # structural controls, and signal messages (invocations, responses).
+    # StatusPanelMessage excluded — it’s multi-line, gets a peek instead.
+    _NEVER_COLLAPSE = (
+        UserInputRequest,
+        ConfirmationRequest,
+        SelectionRequest,
+        SpinnerControl,
+        DividerMessage,
+        VersionCheckMessage,
+        AgentResponseMessage,
+        SubAgentInvocationMessage,
+        SubAgentResponseMessage,
+    )
+
+    def _should_collapse(self, message: AnyMessage) -> bool:
+        """Return True if *message* should be rendered as a one-line peek.
+
+        Only applies when ``output_level`` is ``low``. Individual suppress
+        toggles (``suppress_informational_messages``,
+        ``suppress_thinking_messages``) are handled separately and may hide
+        a message entirely even when the level is ``medium``.
+        """
+        if get_output_level() != "low":
+            return False
+        if isinstance(message, self._NEVER_COLLAPSE):
+            return False
+        # Error-level text messages always render fully.
+        if isinstance(message, TextMessage) and message.level == MessageLevel.ERROR:
+            return False
+        return True
+
+    def _render_peek(self, message: AnyMessage) -> None:
+        """Emit a single dim peek line for low mode.
+
+        Body is escaped to avoid Rich markup mis-parsing.
+        """
+        peek = self._build_peek_text(message)
+        if not peek:
+            return
+        if len(peek) > _PEEK_MAX_LEN:
+            peek = peek[: _PEEK_MAX_LEN - 1] + "\u2026"
+        self._console.print(f"[dim]  {escape_rich_markup(peek)}[/dim]")
+
+    @staticmethod
+    def _peek_label_for_level(level: MessageLevel) -> str:
+        """Map a text message level to its ``label: summary`` peek label."""
+        labels = {
+            MessageLevel.WARNING: "warning",
+            MessageLevel.SUCCESS: "success",
+            MessageLevel.INFO: "info",
+            MessageLevel.DEBUG: "debug",
+        }
+        return labels.get(level, "info")
+
+    def _build_peek_text(self, message: AnyMessage) -> str:  # noqa: C901
+        """Build the human-readable one-liner for a collapsed message."""
+        if isinstance(message, FileListingMessage):
+            return (
+                f"list_files: {message.directory} "
+                f"({message.file_count} files, "
+                f"{self._format_size(message.total_size)})"
+            )
+        if isinstance(message, FileContentMessage):
+            line_info = ""
+            if message.start_line is not None and message.num_lines is not None:
+                end = message.start_line + message.num_lines - 1
+                line_info = f" (lines {message.start_line}-{end})"
+            return f"read_file: {message.path}{line_info}"
+        if isinstance(message, GrepResultMessage):
+            files = len({m.file_path for m in message.matches})
+            return f"grep: {message.total_matches} matches in {files} files"
+        if isinstance(message, DiffMessage):
+            adds = sum(1 for d in message.diff_lines if d.type == "add")
+            removes = sum(1 for d in message.diff_lines if d.type == "remove")
+            return f"diff: {message.path} (+{adds}/-{removes})"
+        if isinstance(message, ShellStartMessage):
+            cmd = message.command
+            if len(cmd) > 60:
+                cmd = cmd[:57] + "..."
+            return f"shell: $ {cmd}"
+        if isinstance(message, (ShellLineMessage, ShellOutputMessage)):
+            # Shell lines silently collapsed — the start banner has the info.
+            return ""
+        if isinstance(message, AgentReasoningMessage):
+            tokens = max(1, len(message.reasoning) // 3)
+            return f"thinking: ~{tokens} tokens"
+        if isinstance(message, SubAgentInvocationMessage):
+            prompt = message.prompt.replace("\n", " ").strip()
+            return f"invoke_agent: {message.agent_name} -- '{prompt}'"
+        if isinstance(message, SubAgentResponseMessage):
+            resp = message.response.replace("\n", " ").strip()
+            return f"agent_response: {message.agent_name} -- '{resp}'"
+        if isinstance(message, UniversalConstructorMessage):
+            tool = f" tool={message.tool_name}" if message.tool_name else ""
+            return f"constructor: {message.action}{tool}"
+        if isinstance(message, SkillListMessage):
+            return f"skills: {len(message.skills)} available"
+        if isinstance(message, SkillActivateMessage):
+            return f"skill: activated {message.skill_name}"
+        if isinstance(message, StatusPanelMessage):
+            fields = ", ".join(f"{k}={v}" for k, v in message.fields.items())
+            summary = f"{message.title} ({fields})" if fields else message.title
+            return f"status: {summary}"
+        if isinstance(message, TextMessage):
+            # label: text format.
+            text = message.text
+            if len(text) > 80:
+                text = text[:77] + "..."
+            label = self._peek_label_for_level(message.level)
+            return f"{label}: {text}"
+        return ""
 
     # =========================================================================
     # Lifecycle (Synchronous - for compatibility with main.py)
@@ -307,8 +436,31 @@ class RichConsoleRenderer:
         ``render()`` path can't end-run the check. See the bug where shell
         banners triple-printed during a Ctrl+T steer — that was the async
         path bypassing an earlier sync-only filter.
+
+        **Output-level gate** (low/medium/high) runs after the pause check
+        so paused messages are dropped before we bother classifying them.
+        Individual suppress toggles are also checked here.
         """
         if self._should_silence_during_pause(message):
+            return
+
+        # -- Individual suppress toggles (dead-code wiring: code_puppy_oss-dzz) --
+        if isinstance(message, TextMessage) and message.level in (
+            MessageLevel.INFO,
+            MessageLevel.WARNING,
+            MessageLevel.SUCCESS,
+        ):
+            # High mode = maximum visibility; override suppress toggles.
+            if get_output_level() != "high" and get_suppress_informational_messages():
+                return
+        if isinstance(message, AgentReasoningMessage):
+            # In high mode, thinking is never suppressed.
+            if get_output_level() != "high" and get_suppress_thinking_messages():
+                return
+
+        # -- Output-level density gate --
+        if self._should_collapse(message):
+            self._render_peek(message)
             return
 
         # Dispatch based on message type
@@ -336,8 +488,10 @@ class RichConsoleRenderer:
         elif isinstance(message, SubAgentInvocationMessage):
             self._render_subagent_invocation(message)
         elif isinstance(message, SubAgentResponseMessage):
-            # Skip rendering - we now display sub-agent responses via display_non_streamed_result
-            pass
+            # High mode renders via streaming or render_result_without_streaming
+            # in subagent_invocation.py. Non-high modes render here.
+            if get_output_level() != "high":
+                self._render_subagent_response(message)
         elif isinstance(message, UniversalConstructorMessage):
             self._render_universal_constructor(message)
         elif isinstance(message, UserInputRequest):
@@ -426,6 +580,9 @@ class RichConsoleRenderer:
         """
         # Skip for sub-agents unless verbose mode
         if self._should_suppress_subagent_output():
+            return
+
+        if get_suppress_directory_listing():
             return
 
         import os
@@ -566,6 +723,12 @@ class RichConsoleRenderer:
             f"\n{banner} 📂 [bold cyan]{msg.path}[/bold cyan]{line_info}"
         )
 
+        # High mode: show token count and total lines.
+        if get_output_level() == "high":
+            self._console.print(
+                f"[dim]  {msg.total_lines} total lines, ~{msg.num_tokens} tokens[/dim]"
+            )
+
     def _render_grep_result(self, msg: GrepResultMessage) -> None:
         """Render grep results grouped by file matching old format."""
         # Skip for sub-agents unless verbose mode
@@ -580,6 +743,13 @@ class RichConsoleRenderer:
             f"\n{banner} 📂 [dim]{msg.directory} for '{msg.search_term}'[/dim]"
         )
 
+        # High mode: show total files searched.
+        if get_output_level() == "high":
+            self._console.print(
+                f"[dim]  {msg.files_searched} files searched, "
+                f"{msg.total_matches} matches[/dim]"
+            )
+
         if not msg.matches:
             self._console.print(
                 f"[dim]No matches found for '{msg.search_term}' "
@@ -592,8 +762,10 @@ class RichConsoleRenderer:
         for match in msg.matches:
             by_file.setdefault(match.file_path, []).append(match)
 
-        # Show verbose or concise based on message flag
-        if msg.verbose:
+        # Show verbose or concise based on message flag.
+        # High output level forces verbose regardless of the per-message flag.
+        verbose = msg.verbose or get_output_level() == "high"
+        if verbose:
             # Verbose mode: Show full output with line numbers and content
             for file_path in sorted(by_file.keys()):
                 file_matches = by_file[file_path]
@@ -677,6 +849,12 @@ class RichConsoleRenderer:
             f"[bold cyan]{msg.path}[/bold cyan]"
         )
 
+        # High mode: show line-change summary.
+        if get_output_level() == "high" and msg.diff_lines:
+            adds = sum(1 for d in msg.diff_lines if d.type == "add")
+            removes = sum(1 for d in msg.diff_lines if d.type == "remove")
+            self._console.print(f"[dim]  +{adds}/-{removes} lines[/dim]")
+
         if not msg.diff_lines:
             return
 
@@ -753,13 +931,20 @@ class RichConsoleRenderer:
             self._console.print(text, style="dim")
 
     def _render_shell_output(self, msg: ShellOutputMessage) -> None:
-        """Render shell command output - just a trailing newline for spinner separation.
+        """Render shell command output.
 
-        Shell command results are already returned to the LLM via tool responses,
-        so we don't need to clutter the UI with redundant output.
+        In medium mode this is just a trailing newline for spinner separation.
+        In high mode the exit code and wall-clock duration are displayed.
         """
-        # Just print trailing newline for spinner separation
-        self._console.print()
+        if get_output_level() == "high":
+            exit_style = "green" if msg.exit_code == 0 else "red"
+            self._console.print(
+                f"[dim]  exit=[/dim][{exit_style}]{msg.exit_code}[/{exit_style}]"
+                f"[dim]  {msg.duration_seconds:.1f}s[/dim]"
+            )
+        else:
+            # Just print trailing newline for spinner separation
+            self._console.print()
 
     # =========================================================================
     # Agent Messages
@@ -826,10 +1011,13 @@ class RichConsoleRenderer:
                 f"[dim]Requested model override:[/dim] [bold magenta]{safe_model_name}[/bold magenta]"
             )
 
-        # Prompt (truncated if too long, rendered as markdown)
-        prompt_display = (
-            msg.prompt[:200] + "..." if len(msg.prompt) > 200 else msg.prompt
-        )
+        # Prompt (truncated in medium, full in high, rendered as markdown)
+        if get_output_level() == "high":
+            prompt_display = msg.prompt
+        else:
+            prompt_display = (
+                msg.prompt[:200] + "..." if len(msg.prompt) > 200 else msg.prompt
+            )
         self._console.print("[dim]Prompt:[/dim]")
         md_prompt = Markdown(prompt_display)
         self._console.print(md_prompt)
