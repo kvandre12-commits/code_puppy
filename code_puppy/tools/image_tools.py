@@ -16,7 +16,12 @@ import time
 from pathlib import Path
 from typing import Any, Dict, Union
 
-from PIL import Image, UnidentifiedImageError
+try:
+    from PIL import Image, UnidentifiedImageError
+except ModuleNotFoundError:
+    Image = None
+    UnidentifiedImageError = ValueError
+
 from pydantic_ai import BinaryContent, RunContext, ToolReturn
 
 from code_puppy.messaging import emit_error, emit_info, emit_success
@@ -27,6 +32,10 @@ logger = logging.getLogger(__name__)
 # Bigger than this on either edge and we resize to save tokens.
 MAX_IMAGE_EDGE = 2048
 DEFAULT_MAX_HEIGHT = 768  # kept for backward-compat in tool signature
+PILLOW_EXTRA_MESSAGE = (
+    "Image loading requires the optional images extra. "
+    "Install it with: pip install 'code-puppy[images]'"
+)
 
 
 def _validate_and_prepare_image(
@@ -40,6 +49,9 @@ def _validate_and_prepare_image(
     file extension. If the image is resized, the output is normalized to PNG so
     the returned bytes and MIME type stay in sync like civilized software.
     """
+    if Image is None:
+        raise RuntimeError(PILLOW_EXTRA_MESSAGE)
+
     try:
         with Image.open(io.BytesIO(image_bytes)) as verified_image:
             verified_image.verify()

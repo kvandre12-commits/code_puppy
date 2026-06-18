@@ -733,6 +733,10 @@ def _grep(context: RunContext, search_string: str, directory: str = ".") -> Grep
         ignore_file = f.name
         try:
             for pattern in DIR_IGNORE_PATTERNS:
+                # Do not let global ignore patterns hide the search root itself.
+                # This matters for temp dirs such as /tmp/test-project.
+                if would_match_directory(pattern, directory):
+                    continue
                 f.write(f"{pattern}\n")
         finally:
             f.close()
