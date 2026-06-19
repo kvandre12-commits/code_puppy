@@ -1,6 +1,7 @@
 # Kennel Distillation
 
 The hardest part of durable project memory is not storage. It is distillation.
+This is where memory architecture becomes knowledge economics architecture.
 The system must continuously answer:
 
 ```text
@@ -11,13 +12,40 @@ Most conversations do not. Most notifications do not. Most transcripts do not.
 Some principles do. Some facts do. Some decisions do. Some artifacts do. Some
 relationships do. Some history does.
 
+The kennel is not just storing memory. It is converting work into institutional
+knowledge.
+
 ## Core flow
 
 ```text
 Conversation
   -> Quarantine
+  -> Distillation
   -> Typed Durable Memory
   -> Future Work
+```
+
+A broader Project OS stack:
+
+```text
+Human
+  -> Projects
+  -> Institutional Knowledge
+  -> Agents
+  -> Android
+  -> Linux
+```
+
+Agents should stop asking:
+
+```text
+What was in that conversation?
+```
+
+and start asking:
+
+```text
+What does the institution know?
 ```
 
 Raw transcript is allowed into the kennel only as temporary quarantine. It must
@@ -53,6 +81,29 @@ No direct power. Only granted power.
 Do not fight Android.
 Quarantine before promotion.
 ```
+
+Principles need tiers or they inflate into noise:
+
+```text
+Principles
+  -> Constitutional
+  -> Operational
+  -> Deprecated
+```
+
+Constitutional principles govern the whole OS. Operational principles govern a
+specific project, subsystem, or workflow. Deprecated principles are retained for
+history and audit, but should not guide new work.
+
+A candidate principle should not be promoted unless it is:
+
+1. broad enough to judge future work;
+2. stable across more than one session;
+3. clearer than the decision or fact it would replace;
+4. worth enforcing or checking later.
+
+If everything becomes a principle, no principle matters. This is principle
+inflation, and it is institutional knowledge rot with a fancy hat.
 
 ### Facts
 
@@ -148,6 +199,45 @@ Promote a drawer only if it is one of these:
 
 Otherwise leave it in quarantine and prune later.
 
+## Productivity versus activity
+
+Yield metrics are not merely memory metrics. They are productivity metrics.
+
+Example:
+
+```text
+SharpEdge session
+  -> 2 principles
+  -> 8 facts
+  -> 12 decisions
+  -> 25 artifacts
+```
+
+is different from:
+
+```text
+Another project
+  -> 0 principles
+  -> 1 fact
+  -> 0 decisions
+  -> 50 quarantine transcripts
+```
+
+The second project may be generating activity. The first is generating
+institutional knowledge. Those are different outputs.
+
+A chat log is personal memory. Institutional knowledge survives the person:
+
+```text
+architecture docs
+runbooks
+standards
+decision records
+policies
+```
+
+not raw chat transcripts.
+
 ## Distillation metrics
 
 The future true metric is:
@@ -206,7 +296,8 @@ years of project history
 ```
 
 At that point Code Puppy is no longer merely an AI coding assistant. It is a
-Project Operating System running on top of Android.
+Project Operating System running on top of Android, with an Institutional
+Knowledge Layer between projects and agents.
 
 ## Constitutional docs
 

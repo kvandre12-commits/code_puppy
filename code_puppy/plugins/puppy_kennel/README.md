@@ -1,9 +1,9 @@
 # Puppy Kennel
 
 Local-first durable project memory for Code Puppy. A kennel is not "AI memory,"
-chat history, embeddings, or app state. It is the layer that preserves distilled
-project knowledge from ongoing work. The distillation doctrine lives in
-`docs/KENNEL_DISTILLATION.md`.
+chat history, embeddings, or app state. It is the Institutional Knowledge Layer
+that preserves distilled project knowledge from ongoing work. The distillation
+doctrine lives in `docs/KENNEL_DISTILLATION.md`.
 
 ```text
 Conversation -> Quarantine -> Typed Durable Memory -> Future Work
