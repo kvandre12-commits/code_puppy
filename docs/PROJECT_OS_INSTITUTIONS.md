@@ -274,14 +274,26 @@ creating, revoking, authorizing, leasing, waking, or executing anything.
 Fourth implemented command:
 
 ```text
+/project authority validate
+```
+
+This is the read-only AuthorityGrant integrity validator. It checks grant ID
+consistency, subject identity shape, exact action/capability scopes, boundary
+references, issuer presence, timestamp consistency, revocation consistency, and
+precedent references without creating, repairing, revoking, authorizing, leasing,
+waking, or executing anything.
+
+Fifth implemented command:
+
+```text
 /project run authority-check
 ```
 
 This is the read-only authority check report. It consumes `/project run
-lease-draft` output and consults AuthorityGrant records to report whether
-identity, authority grant, and capability grant evidence exists, and whether a
-lease is issuable, without authorizing, issuing, leasing, waking, or executing
-anything.
+lease-draft` output and consults AuthorityGrant records only after authority
+validation passes. It reports whether identity, authority grant, and capability
+grant evidence exists, and whether a lease is issuable, without authorizing,
+issuing, leasing, waking, or executing anything.
 
 Must not:
 
@@ -296,10 +308,12 @@ execute without an issued lease
 ```
 
 An AuthorityGrant draft proposes permission evidence. An AuthorityGrant record
-describes configured permission evidence. A lease draft describes requested
-authority. An issued lease records granted operational authority. Grant drafts
-are not grant records, grant records are not leases, and an authority check that
-passes still does not issue a lease.
+describes configured permission evidence. Authority validation checks whether
+that configured evidence is internally trustworthy. A lease draft describes
+requested authority. An issued lease records granted operational authority.
+Grant drafts are not grant records, grant validation is not grant creation,
+grant records are not leases, and an authority check that passes still does not
+issue a lease.
 
 ## Execution
 
