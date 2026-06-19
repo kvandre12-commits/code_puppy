@@ -4,10 +4,13 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
 from code_puppy.plugins.project_runtime import (
     authority_grant_create,
     commands,
     lease_issue,
+    lease_store,
     noop_execution,
     store,
 )
@@ -126,6 +129,50 @@ def test_lease_issue_duplicate_blocks_without_extra_event(tmp_path, monkeypatch)
     assert "lease_id already exists" in second
     assert after_second["leases"] == after_first["leases"]
     assert after_second["events"] == after_first["events"]
+
+
+def test_generic_lease_consumption_writes_one_bounded_effect_event(
+    tmp_path, monkeypatch
+):
+    state_file = _use_tmp_state(tmp_path, monkeypatch)
+    _create_ready_run(state_file)
+    _create_grant()
+    _issue_lease()
+    lease = lease_store.get_lease(LEASE_ID)
+
+    result = lease_store.consume_lease_for_effect(
+        lease,
+        event_type="noop_executed",
+        payload_summary="Adapter effect executed under lease",
+    )
+
+    state = _load_raw(state_file)
+    lease = state["leases"][LEASE_ID]
+    assert result.lease.consumed_at
+    assert lease["consumed_event_id"] == result.event.event_id
+    assert result.event.event_type == "noop_executed"
+    assert result.event.parent_event_id == lease["issued_event_id"]
+    assert result.event.payload_summary == "Adapter effect executed under lease"
+
+
+def test_generic_lease_consumption_rejects_unknown_event_type_without_mutation(
+    tmp_path, monkeypatch
+):
+    state_file = _use_tmp_state(tmp_path, monkeypatch)
+    _create_ready_run(state_file)
+    _create_grant()
+    _issue_lease()
+    lease = lease_store.get_lease(LEASE_ID)
+    before = state_file.read_text(encoding="utf-8")
+
+    with pytest.raises(ValueError, match="unknown event type"):
+        lease_store.consume_lease_for_effect(
+            lease,
+            event_type="browser_did_magic",
+            payload_summary="Bad adapter event",
+        )
+
+    assert state_file.read_text(encoding="utf-8") == before
 
 
 def test_execute_noop_consumes_valid_lease_and_writes_one_audit_event(

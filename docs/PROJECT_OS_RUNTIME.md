@@ -13,7 +13,8 @@ identity lives in `PROJECT_OS_IDENTITY.md`; authority lives in
 The smallest runnable governance proof lives in
 `PROJECT_OS_RUNTIME_WALKTHROUGH.md`: validated authority issues a one-shot
 lease, executes exactly one harmless no-op, records audit evidence, and refuses
-lease reuse.
+lease reuse. Future effect adapters must preserve that theorem; see
+`PROJECT_OS_EFFECT_ADAPTERS.md`.
 
 The knowledge ontology is now:
 
