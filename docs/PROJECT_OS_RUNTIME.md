@@ -288,6 +288,7 @@ Minimum shape:
 
 ```text
 event_id
+parent_event_id
 run_id
 event_type
 timestamp
@@ -328,11 +329,29 @@ The read-only vocabulary viewer is:
 /project run event-types
 ```
 
+## Event causality
+
+Events can optionally point to a parent Event Record:
+
+```text
+approval_requested
+  -> approval_granted
+      -> run_unblocked
+          -> project_run_resumed
+```
+
+This turns raw logs into explainable chains. The trace viewer is:
+
+```text
+/project event trace <event_id>
+```
+
 Doctrine:
 
 ```text
-No execution without observability.
-No observability without events.
+No scheduling without causality.
+No causality without events.
+No events without observability.
 ```
 
 This mirrors the authority rule:

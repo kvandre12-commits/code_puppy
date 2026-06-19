@@ -311,7 +311,14 @@ def test_run_events_renders_read_only_event_records(tmp_path, monkeypatch):
 
     assert events.startswith("Project Run Events")
     assert "run_id: run-events-001" in events
-    for header in ("event_id", "timestamp", "event_type", "source", "payload_summary"):
+    for header in (
+        "event_id",
+        "parent_event_id",
+        "timestamp",
+        "event_type",
+        "source",
+        "payload_summary",
+    ):
         assert header in events
     assert "run_created" in events
     assert "checkpoint_saved" in events
@@ -373,6 +380,7 @@ def test_record_event_validates_and_persists_typed_event_records(tmp_path, monke
     assert event.event_type == "work_item_completed"
     assert event.source == "tests"
     assert event.payload_summary == "Run Table tests finished"
+    assert event.parent_event_id == ""
     assert [record.event_type for record in store.list_events("run-types")] == [
         "run_created",
         "work_item_completed",
@@ -380,6 +388,87 @@ def test_record_event_validates_and_persists_typed_event_records(tmp_path, monke
 
     with pytest.raises(ValueError, match="unknown event type"):
         store.record_event("run-types", "scheduler_did_magic")
+
+
+def test_record_event_links_and_traces_causality_chain(tmp_path, monkeypatch):
+    state_file = _use_tmp_state(tmp_path, monkeypatch)
+    store.create_run(project="Code Puppy", objective="Causality", run_id="run-chain")
+    root = store.record_event(
+        "run-chain",
+        "approval_requested",
+        payload_summary="Need operator approval",
+        source="tests",
+    )
+    granted = store.record_event(
+        "run-chain",
+        "approval_granted",
+        payload_summary="Operator approved",
+        source="tests",
+        parent_event_id=root.event_id,
+    )
+    unblocked = store.record_event(
+        "run-chain",
+        "run_unblocked",
+        payload_summary="Approval dependency cleared",
+        source="tests",
+        parent_event_id=granted.event_id,
+    )
+
+    assert unblocked.parent_event_id == granted.event_id
+    raw = json.loads(state_file.read_text(encoding="utf-8"))
+    assert raw["events"][unblocked.event_id]["parent_event_id"] == granted.event_id
+
+    trace = store.trace_event(unblocked.event_id)
+
+    assert [event.event_id for event in trace] == [
+        root.event_id,
+        granted.event_id,
+        unblocked.event_id,
+    ]
+    assert [event.event_type for event in trace] == [
+        "approval_requested",
+        "approval_granted",
+        "run_unblocked",
+    ]
+
+
+def test_record_event_rejects_missing_parent_event(tmp_path, monkeypatch):
+    _use_tmp_state(tmp_path, monkeypatch)
+    store.create_run(project="Code Puppy", objective="Causality", run_id="run-chain")
+
+    with pytest.raises(ValueError, match="parent Event Record not found"):
+        store.record_event(
+            "run-chain",
+            "approval_granted",
+            parent_event_id="evt-nope",
+        )
+
+
+def test_project_event_trace_command_is_read_only(tmp_path, monkeypatch):
+    state_file = _use_tmp_state(tmp_path, monkeypatch)
+    store.create_run(project="Code Puppy", objective="Trace", run_id="run-trace")
+    root = store.record_event(
+        "run-trace",
+        "approval_requested",
+        payload_summary="Need approval",
+    )
+    child = store.record_event(
+        "run-trace",
+        "approval_granted",
+        payload_summary="Approved",
+        parent_event_id=root.event_id,
+    )
+    before = state_file.read_text(encoding="utf-8")
+
+    output = commands.dispatch(["event", "trace", child.event_id])
+
+    assert output.startswith("Project Event Trace")
+    assert f"root: {root.event_id} [approval_requested]" in output
+    assert f"caused: {child.event_id} [approval_granted]" in output
+    assert f"parent={root.event_id}" in output
+    assert "summary: Need approval" in output
+    assert "summary: Approved" in output
+    assert state_file.read_text(encoding="utf-8") == before
 
 
 def test_store_lists_event_records_by_run_id(tmp_path, monkeypatch):

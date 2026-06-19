@@ -72,6 +72,7 @@ class EventRecord:
     timestamp: str
     source: str
     payload_summary: str = ""
+    parent_event_id: str = ""
 
 
 EVENT_TYPE_CATALOG = (
@@ -218,6 +219,7 @@ def event_from_dict(raw: dict[str, Any]) -> EventRecord:
         timestamp=str(raw.get("timestamp") or ""),
         source=str(raw.get("source") or ""),
         payload_summary=str(raw.get("payload_summary") or ""),
+        parent_event_id=str(raw.get("parent_event_id") or ""),
     )
 
 
@@ -251,6 +253,13 @@ def _next_event_id(state: dict[str, Any], event_type: str) -> str:
     return f"evt-{len(events) + 1:06d}-{slugify(event_type)}"
 
 
+def _require_parent_event(state: dict[str, Any], parent_event_id: str) -> str:
+    parent = parent_event_id.strip()
+    if parent and parent not in state.setdefault("events", {}):
+        raise ValueError(f"parent Event Record not found: {parent}")
+    return parent
+
+
 def _append_event(
     state: dict[str, Any],
     *,
@@ -258,8 +267,10 @@ def _append_event(
     event_type: str,
     payload_summary: str = "",
     source: str = "project_runtime",
+    parent_event_id: str = "",
 ) -> EventRecord:
     normalized_event_type = normalize_event_type(event_type)
+    parent = _require_parent_event(state, parent_event_id)
     event = EventRecord(
         event_id=_next_event_id(state, normalized_event_type),
         run_id=run_id,
@@ -267,6 +278,7 @@ def _append_event(
         timestamp=utc_now_iso(),
         source=source.strip() or "project_runtime",
         payload_summary=payload_summary.strip(),
+        parent_event_id=parent,
     )
     state.setdefault("events", {})[event.event_id] = event_to_dict(event)
     return event
@@ -284,6 +296,7 @@ def _put_run_and_record_event(
     *,
     event_type: str,
     payload_summary: str = "",
+    parent_event_id: str = "",
 ) -> ProjectRun:
     state = load_state()
     state.setdefault("runs", {})[run.run_id] = run_to_dict(run)
@@ -292,6 +305,7 @@ def _put_run_and_record_event(
         run_id=run.run_id,
         event_type=event_type,
         payload_summary=payload_summary,
+        parent_event_id=parent_event_id,
     )
     save_state(state)
     return run
@@ -303,6 +317,7 @@ def record_event(
     *,
     payload_summary: str = "",
     source: str = "project_runtime",
+    parent_event_id: str = "",
 ) -> EventRecord:
     get_run(run_id)
     state = load_state()
@@ -312,9 +327,36 @@ def record_event(
         event_type=event_type,
         payload_summary=payload_summary,
         source=source,
+        parent_event_id=parent_event_id,
     )
     save_state(state)
     return event
+
+
+def get_event(event_id: str) -> EventRecord:
+    raw = load_state().get("events", {}).get(event_id)
+    if not isinstance(raw, dict):
+        raise KeyError(f"Event Record not found: {event_id}")
+    return event_from_dict(raw)
+
+
+def trace_event(event_id: str) -> list[EventRecord]:
+    state = load_state()
+    events = state.get("events", {})
+    chain: list[EventRecord] = []
+    seen: set[str] = set()
+    current_id = event_id
+    while current_id:
+        if current_id in seen:
+            raise ValueError(f"Event causality cycle detected at {current_id}")
+        seen.add(current_id)
+        raw = events.get(current_id)
+        if not isinstance(raw, dict):
+            raise KeyError(f"Event Record not found: {current_id}")
+        event = event_from_dict(raw)
+        chain.append(event)
+        current_id = event.parent_event_id
+    return list(reversed(chain))
 
 
 def list_events(run_id: str) -> list[EventRecord]:
