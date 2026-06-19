@@ -45,6 +45,8 @@ def test_build_audit_counts_wings_roles_and_duplicates(kennel_root: Path) -> Non
     assert audit.duplicate_group_count == 1
     assert audit.duplicate_drawer_count == 2
     assert audit.short_drawer_count == 3
+    assert audit.quarantine_count == 1
+    assert audit.durable_note_count == 2
     assert ("repo:/tmp/a", 1) in audit.by_wing
     assert ("note", 2) in audit.by_role
 
@@ -70,4 +72,7 @@ def test_render_audit_includes_operator_summary(kennel_root: Path) -> None:
 
     assert "Puppy Kennel audit" in report
     assert "exact dup groups : 1" in report
+    assert "quarantine       : 2" in report
+    assert "durable notes    : 0" in report
+    assert "distill backlog  : 2 quarantine drawer(s)" in report
     assert "response" in report

@@ -376,7 +376,7 @@ state can be replayed
 The kennel is not AI memory, chat history, embeddings, or app state. Its role is
 the durable project memory layer: distilled project knowledge that survives after
 the conversation ends. Decisions are the highest-value drawer type, but they are
-not the only type.
+not the only type. The distillation contract lives in `docs/KENNEL_DISTILLATION.md`.
 
 ```text
 Kennel
