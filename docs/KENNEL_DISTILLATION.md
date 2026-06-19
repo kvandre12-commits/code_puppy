@@ -9,8 +9,9 @@ What from today deserves to exist tomorrow?
 ```
 
 Most conversations do not. Most notifications do not. Most transcripts do not.
-Some objectives do. Some work items do. Some principles do. Some facts do. Some
-decisions do. Some artifacts do. Some relationships do. Some history does.
+Some projects do. Some objectives do. Some work items do. Some principles do.
+Some facts do. Some decisions do. Some artifacts do. Some relationships do. Some
+history does.
 
 The kennel is not just storing memory. It is converting work into institutional
 knowledge and institutional continuity.
@@ -29,6 +30,7 @@ A broader Project OS stack:
 
 ```text
 Human
+  -> Projects
   -> Objectives
   -> Work
   -> Institutional Knowledge
@@ -46,6 +48,7 @@ What was in that conversation?
 and start asking:
 
 ```text
+Which project are we continuing?
 What are we trying to accomplish?
 What have we learned?
 What remains unfinished?
@@ -61,15 +64,17 @@ quarantine transcript
   -> prune transcript crumbs
 ```
 
-## Objective-linked durable memory and work
+## Project-rooted durable memory and work
 
 Organizations do not preserve knowledge for its own sake. They preserve
-knowledge in service of goals. They also preserve the execution state needed to
-continue those goals. Without an objective, drawers become isolated facts. With
-an objective and work items, they become a continuity graph.
+knowledge in service of projects and goals. They also preserve the execution
+state needed to continue those goals. Without a project, drawers become isolated
+facts attached to nothing durable. With a project, objectives, and work items,
+they become a continuity graph.
 
 ```text
-Objective
+Project
+  -> Objectives
   -> Work Items
   -> Principles
   -> Facts
@@ -82,7 +87,8 @@ Objective
 Example:
 
 ```text
-Objective: Build Android Project OS
+Project: Code Puppy
+  -> Objective: Build Android Project OS
   -> Work Item: Implement kennel audit. Status: done.
   -> Work Item: Implement distillation agent. Status: planned.
   -> Principle: Do not fight Android.
@@ -100,12 +106,16 @@ What happened?
 It is:
 
 ```text
-What deserves to survive, for which objective, and what remains unfinished?
+What deserves to survive,
+for which project,
+for which objective,
+and what remains unfinished?
 ```
 
 ## Durable drawer types
 
 ```text
+Projects
 Objectives
 Work Items
 Principles
@@ -116,17 +126,33 @@ Relationships
 History
 ```
 
-### Objectives
+### Projects
 
-Why a cluster of durable knowledge exists. Objectives are the parent nodes that
-turn durable drawers into a project knowledge graph.
+Long-lived operating units. Projects endure across sessions, agents, models,
+objectives, and individual developers. They are the root objects for durable
+execution and knowledge.
 
 Examples:
 
 ```text
-Build Android Project OS.
-Ship Droid viewer beta.
-Connect SharpEdge to approval-gated broker workflows.
+Code Puppy.
+SharpEdge.
+DroidPuppy.
+Robinhood Bridge.
+```
+
+### Objectives
+
+Goals inside a project. Objectives can finish, change, or be replaced while the
+project persists.
+
+Examples:
+
+```text
+Design memory ontology.
+Build kennel audit.
+Create provider system.
+Create Android bridge.
 ```
 
 ### Work Items
@@ -143,7 +169,7 @@ Implement distillation agent. Status: planned.
 Add objective/work filters to recall. Status: planned.
 ```
 
-A future agent should be able to attach to an objective, load its durable
+A future agent should be able to attach to a project and objective, load durable
 knowledge, inspect unfinished work items, and continue execution without needing
 the original conversation or the original person.
 
@@ -252,6 +278,7 @@ A large session should reduce to a small durable packet.
 
 ```text
 57k-token session
+  -> 1 project link
   -> 1 objective link
   -> 1 work item update
   -> 1 principle or policy check
@@ -272,12 +299,13 @@ Promote a drawer only if it is one of these:
 
 1. reusable across future sessions;
 2. expensive to rediscover;
-3. tied to an objective;
-4. an execution state needed by future work;
-5. a principle, policy, or safety boundary;
-6. a project object or artifact reference;
-7. a relationship needed for orchestration;
-8. a history event needed for audit/replay.
+3. tied to a project;
+4. tied to an objective;
+5. an execution state needed by future work;
+6. a principle, policy, or safety boundary;
+7. a project object or artifact reference;
+8. a relationship needed for orchestration;
+9. a history event needed for audit/replay.
 
 Otherwise leave it in quarantine and prune later.
 
@@ -289,6 +317,7 @@ Example:
 
 ```text
 SharpEdge session
+  -> 1 project
   -> 1 objective
   -> 6 work item updates
   -> 2 principles
@@ -301,6 +330,7 @@ is different from:
 
 ```text
 Another project
+  -> 0 project link
   -> 0 objectives
   -> 0 work item updates
   -> 0 principles
@@ -335,6 +365,7 @@ Distillation Efficiency = Durable Drawers Created / Quarantine Drawers Processed
 Yield can also be tracked by drawer type:
 
 ```text
+Project Yield
 Objective Yield
 Work Item Yield
 Principle Yield
@@ -385,7 +416,7 @@ years of project history
 
 At that point Code Puppy is no longer merely an AI coding assistant. It is a
 Project Operating System running on top of Android, with institutional execution
-and knowledge layers between objectives and agents.
+and knowledge layers between projects, objectives, and agents.
 
 ## Constitutional docs
 

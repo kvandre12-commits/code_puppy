@@ -72,6 +72,7 @@ quarantine transcript
 Conceptually, durable kennel drawers should separate knowledge types:
 
 ```text
+Projects
 Objectives
 Work Items
 Principles

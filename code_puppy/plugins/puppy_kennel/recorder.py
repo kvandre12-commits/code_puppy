@@ -50,8 +50,8 @@ def record_run_end(
     """Persist the agent's final response into transcript quarantine.
 
     Raw transcript can enter the kennel only as temporary quarantine. Durable
-    project memory should be explicit typed notes: objectives, work items,
-    principles, facts, decisions, artifacts, relationships, and history.
+    project memory should be explicit typed notes: projects, objectives,
+    work items, principles, facts, decisions, artifacts, relationships, and history.
 
     Failures here must never crash the host app — the kennel is best-effort
     context capture, not a transactional system of record.

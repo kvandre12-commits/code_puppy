@@ -1,9 +1,9 @@
 # Puppy Kennel
 
 Local-first durable project memory for Code Puppy. A kennel is not "AI memory,"
-chat history, embeddings, or app state. It is the Institutional Knowledge Layer
-that preserves distilled project knowledge from ongoing work. The distillation
-doctrine lives in `docs/KENNEL_DISTILLATION.md`.
+chat history, embeddings, or app state. It is the Institutional Execution and
+Knowledge Layer that preserves distilled project knowledge and work state. The
+distillation doctrine lives in `docs/KENNEL_DISTILLATION.md`.
 
 ```text
 Conversation -> Quarantine -> Typed Durable Memory -> Future Work
@@ -16,6 +16,7 @@ column:
 
 ```text
 Kennel
+  -> Projects
   -> Objectives
   -> Work Items
   -> Principles
@@ -29,6 +30,7 @@ Kennel
 Examples:
 
 ```text
+Project: Code Puppy.
 Objective: Build Android Project OS.
 Work Item: Implement kennel audit. Status: done.
 Principle: No direct power. Only granted power.
@@ -43,6 +45,7 @@ The important question is not whether 195k tokens were saved. The important
 question is whether those tokens produced durable output:
 
 ```text
+projects
 objectives
 work_items
 principles
@@ -155,7 +158,7 @@ budget. Three priority classes, no LLM, no embeddings:
 | Tier | Source | Quota (default) | Why |
 |---|---|---|---|
 | **P0** User Preferences | `user:default` wing, any role | ~30% | Short, durable, pervasive operator preferences |
-| **P1** Durable Project Notes | `repo:<cwd>` wing, `role='note'` | remainder | Explicit objectives/work_items/principles/facts/decisions/artifacts/relationships/history — highest signal-to-token ratio |
+| **P1** Durable Project Notes | `repo:<cwd>` wing, `role='note'` | remainder | Explicit projects/objectives/work_items/principles/facts/decisions/artifacts/relationships/history — highest signal-to-token ratio |
 
 Transcript quarantine is searchable and auditable, but intentionally not packed
 into the default working-context block. Promote it to explicit typed durable
