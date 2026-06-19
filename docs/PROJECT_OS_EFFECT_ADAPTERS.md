@@ -91,6 +91,22 @@ wrong URL/scope    -> no browser effect
 A browser adapter is therefore not special. It is the first external effect that
 proves the control plane survives contact with the outside world.
 
+## Boundary test ladder
+
+Treat adapters as increasingly difficult boundary tests:
+
+```text
+Browser   -> external effect boundary
+Android   -> device boundary
+me@sams   -> application + identity + agent + workflow boundary
+GitHub    -> persistent mutation boundary
+Robinhood -> financial-risk boundary
+```
+
+The first effect for a new boundary should be boring: launch an approved screen,
+read an approved view, retrieve an approved status, then consume the lease and
+audit. Do not begin with complex workflows.
+
 ## Adapter implementation rule
 
 An adapter may:
