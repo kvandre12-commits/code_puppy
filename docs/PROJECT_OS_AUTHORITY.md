@@ -40,10 +40,14 @@ Related Project OS doctrines:
 Evidence first. Behavior second.
 Laws before policy.
 Validation before automation.
+No event may create an illegal state transition.
+No scheduler action may bypass state transition rules.
 No scheduling without causality.
 No causality without events.
 No events without observability.
 ```
+
+Lifecycle doctrine lives in `PROJECT_OS_STATE_MACHINE.md`.
 
 ## Authority is not capability
 

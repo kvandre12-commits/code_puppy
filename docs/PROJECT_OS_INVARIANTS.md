@@ -23,13 +23,16 @@ No authority without identity.
 No action without attribution.
 No state change without authority.
 No authority without accountability.
+No event may create an illegal state transition.
+No scheduler action may bypass state transition rules.
 No scheduling without causality.
 No causality without events.
 No events without observability.
 ```
 
 Identity doctrine lives in `PROJECT_OS_IDENTITY.md`; authority doctrine lives in
-`PROJECT_OS_AUTHORITY.md`.
+`PROJECT_OS_AUTHORITY.md`; lifecycle doctrine lives in
+`PROJECT_OS_STATE_MACHINE.md`.
 
 ## Current primitive stack
 
@@ -297,6 +300,7 @@ Every Event Record has exactly one Event Type.
 Causality points to existing events and stays acyclic.
 Agents lease runs; they do not own them.
 Authority-bearing actions have actor identity.
+State transitions follow the legal lifecycle graph.
 Read-only observability commands do not mutate state.
 ```
 

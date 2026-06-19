@@ -9,7 +9,8 @@ runtime model lives in
 `docs/PROJECT_OS_RUNTIME.md`; structural invariants live in
 `docs/PROJECT_OS_INVARIANTS.md`; Project OS identity lives in
 `docs/PROJECT_OS_IDENTITY.md`; Project OS authority lives in
-`docs/PROJECT_OS_AUTHORITY.md`; the Run Scheduler model lives in
+`docs/PROJECT_OS_AUTHORITY.md`; Project Run lifecycle law lives in
+`docs/PROJECT_OS_STATE_MACHINE.md`; the Run Scheduler model lives in
 `docs/PROJECT_OS_SCHEDULER.md`; the department hierarchy lives in
 `docs/AGENT_ORG_CHART.md`.
 
