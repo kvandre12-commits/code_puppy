@@ -58,6 +58,13 @@ class ProjectRun:
 
 
 @dataclass(frozen=True, slots=True)
+class EventType:
+    name: str
+    category: str
+    description: str
+
+
+@dataclass(frozen=True, slots=True)
 class EventRecord:
     event_id: str
     run_id: str
@@ -65,6 +72,26 @@ class EventRecord:
     timestamp: str
     source: str
     payload_summary: str = ""
+
+
+EVENT_TYPE_CATALOG = (
+    EventType("run_created", "lifecycle", "A Project Run was created"),
+    EventType("checkpoint_saved", "lifecycle", "A Project Run checkpoint was saved"),
+    EventType("project_run_resumed", "lifecycle", "A Project Run was resumed"),
+    EventType("project_run_slept", "lifecycle", "A Project Run was put to sleep"),
+    EventType("project_run_completed", "lifecycle", "A Project Run completed"),
+    EventType("work_item_completed", "work", "A work item completed"),
+    EventType("objective_changed", "work", "A Project Run objective changed"),
+    EventType("artifact_created", "work", "A related artifact was created"),
+    EventType("approval_requested", "governance", "Operator approval was requested"),
+    EventType("approval_granted", "governance", "Operator approval was granted"),
+    EventType("run_blocked", "blocking", "A Project Run became blocked"),
+    EventType("run_unblocked", "blocking", "A Project Run was unblocked"),
+)
+
+_EVENT_TYPES_BY_NAME = {
+    event_type.name: event_type for event_type in EVENT_TYPE_CATALOG
+}
 
 
 def utc_now_iso() -> str:
@@ -85,6 +112,18 @@ def normalize_status(status: str) -> str:
         allowed = ", ".join(sorted(RUN_STATUSES))
         raise ValueError(f"unknown run status {status!r}; allowed: {allowed}")
     return normalized
+
+
+def normalize_event_type(event_type: str) -> str:
+    normalized = event_type.strip().lower().replace("-", "_")
+    if normalized not in _EVENT_TYPES_BY_NAME:
+        allowed = ", ".join(sorted(_EVENT_TYPES_BY_NAME))
+        raise ValueError(f"unknown event type {event_type!r}; allowed: {allowed}")
+    return normalized
+
+
+def list_event_types() -> tuple[EventType, ...]:
+    return EVENT_TYPE_CATALOG
 
 
 def empty_state() -> dict[str, Any]:
@@ -167,10 +206,15 @@ def run_to_dict(run: ProjectRun) -> dict[str, Any]:
 
 
 def event_from_dict(raw: dict[str, Any]) -> EventRecord:
+    raw_event_type = str(raw.get("event_type") or "")
+    try:
+        event_type = normalize_event_type(raw_event_type)
+    except ValueError:
+        event_type = raw_event_type
     return EventRecord(
         event_id=str(raw.get("event_id") or ""),
         run_id=str(raw.get("run_id") or ""),
-        event_type=str(raw.get("event_type") or ""),
+        event_type=event_type,
         timestamp=str(raw.get("timestamp") or ""),
         source=str(raw.get("source") or ""),
         payload_summary=str(raw.get("payload_summary") or ""),
@@ -215,12 +259,13 @@ def _append_event(
     payload_summary: str = "",
     source: str = "project_runtime",
 ) -> EventRecord:
+    normalized_event_type = normalize_event_type(event_type)
     event = EventRecord(
-        event_id=_next_event_id(state, event_type),
+        event_id=_next_event_id(state, normalized_event_type),
         run_id=run_id,
-        event_type=event_type,
+        event_type=normalized_event_type,
         timestamp=utc_now_iso(),
-        source=source,
+        source=source.strip() or "project_runtime",
         payload_summary=payload_summary.strip(),
     )
     state.setdefault("events", {})[event.event_id] = event_to_dict(event)
@@ -250,6 +295,26 @@ def _put_run_and_record_event(
     )
     save_state(state)
     return run
+
+
+def record_event(
+    run_id: str,
+    event_type: str,
+    *,
+    payload_summary: str = "",
+    source: str = "project_runtime",
+) -> EventRecord:
+    get_run(run_id)
+    state = load_state()
+    event = _append_event(
+        state,
+        run_id=run_id,
+        event_type=event_type,
+        payload_summary=payload_summary,
+        source=source,
+    )
+    save_state(state)
+    return event
 
 
 def list_events(run_id: str) -> list[EventRecord]:

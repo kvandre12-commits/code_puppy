@@ -127,6 +127,18 @@ def _format_required_approvals(run: store.ProjectRun) -> str:
     return "(none recorded)"
 
 
+def format_event_types(event_types: Sequence[store.EventType]) -> str:
+    """Render the known Project OS Event Type vocabulary."""
+    lines = ["Project Run Event Types", ""]
+    current_category = ""
+    for event_type in event_types:
+        if event_type.category != current_category:
+            current_category = event_type.category
+            lines.extend([f"{current_category}:"])
+        lines.append(f"  - {event_type.name}: {event_type.description}")
+    return "\n".join(lines)
+
+
 def format_event_records(run_id: str, events: Sequence[store.EventRecord]) -> str:
     """Render persisted Event Records for one Project Run."""
     if not events:
@@ -193,6 +205,7 @@ def help_text() -> str:
             "  /project run list [--status <status>]",
             "  /project run inspect <run_id>",
             "  /project run events <run_id>",
+            "  /project run event-types",
             "  /project run status [run_id] [--status <status>]",
             "  /project run checkpoint <run_id> --checkpoint <text>",
             "      [--next <text>] [--status <status>]",
@@ -252,6 +265,12 @@ def _handle_run_events(parts: list[str]) -> str:
     return format_event_records(run_id, store.list_events(run_id))
 
 
+def _handle_run_event_types(parts: list[str]) -> str:
+    if parts:
+        raise ValueError("event-types does not accept arguments")
+    return format_event_types(store.list_event_types())
+
+
 def _handle_run_status(parts: list[str]) -> str:
     status = _pop_flag(parts, "--status")
     if len(parts) > 1:
@@ -309,6 +328,8 @@ def dispatch(parts: list[str]) -> str:
         return _handle_run_inspect(rest)
     if action == "events":
         return _handle_run_events(rest)
+    if action == "event-types":
+        return _handle_run_event_types(rest)
     if action == "status":
         return _handle_run_status(rest)
     if action == "checkpoint":

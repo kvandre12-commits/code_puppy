@@ -158,6 +158,18 @@ Before an Event Queue exists, the Project OS must persist Event Records. Records
 are durable evidence; queues are scheduling machinery. Do not build behavior
 before the evidence trail exists.
 
+Event Types are the stable vocabulary between records and scheduling policy:
+
+```text
+lifecycle -> run_created, checkpoint_saved, project_run_resumed, project_run_slept, project_run_completed
+work      -> work_item_completed, objective_changed, artifact_created
+governance-> approval_requested, approval_granted
+blocking  -> run_blocked, run_unblocked
+```
+
+The future scheduler should react to these typed facts, not infer state from
+free-form prose.
+
 ## Event Queue
 
 The Project OS equivalent of wakeup interrupts is an **Event Queue**. It is a
