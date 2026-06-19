@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
 from code_puppy.plugins.project_runtime import commands, store
 
 
@@ -316,6 +318,68 @@ def test_run_events_renders_read_only_event_records(tmp_path, monkeypatch):
     assert "project_runtime" in events
     assert "event record exists" in events
     assert state_file.read_text(encoding="utf-8") == before
+
+
+def test_event_type_catalog_contains_lifecycle_work_governance_and_blocking_types():
+    event_types = {
+        event_type.name: event_type for event_type in store.list_event_types()
+    }
+
+    assert {
+        "run_created",
+        "checkpoint_saved",
+        "project_run_resumed",
+        "project_run_slept",
+        "project_run_completed",
+        "work_item_completed",
+        "approval_requested",
+        "approval_granted",
+        "run_blocked",
+        "run_unblocked",
+        "artifact_created",
+        "objective_changed",
+    } <= set(event_types)
+    assert event_types["work_item_completed"].category == "work"
+    assert event_types["approval_requested"].category == "governance"
+    assert event_types["run_blocked"].category == "blocking"
+
+
+def test_run_event_types_command_is_read_only(tmp_path, monkeypatch):
+    state_file = _use_tmp_state(tmp_path, monkeypatch)
+
+    output = commands.dispatch(["run", "event-types"])
+
+    assert output.startswith("Project Run Event Types")
+    assert "lifecycle:" in output
+    assert "work:" in output
+    assert "governance:" in output
+    assert "blocking:" in output
+    assert "work_item_completed" in output
+    assert "approval_granted" in output
+    assert not state_file.exists()
+
+
+def test_record_event_validates_and_persists_typed_event_records(tmp_path, monkeypatch):
+    _use_tmp_state(tmp_path, monkeypatch)
+    store.create_run(project="Code Puppy", objective="Events", run_id="run-types")
+
+    event = store.record_event(
+        "run-types",
+        "work-item-completed",
+        payload_summary="Run Table tests finished",
+        source="tests",
+    )
+
+    assert event.event_type == "work_item_completed"
+    assert event.source == "tests"
+    assert event.payload_summary == "Run Table tests finished"
+    assert [record.event_type for record in store.list_events("run-types")] == [
+        "run_created",
+        "work_item_completed",
+    ]
+
+    with pytest.raises(ValueError, match="unknown event type"):
+        store.record_event("run-types", "scheduler_did_magic")
 
 
 def test_store_lists_event_records_by_run_id(tmp_path, monkeypatch):

@@ -295,16 +295,37 @@ source
 payload_summary
 ```
 
-Examples:
+Event Types are the vocabulary the future scheduler will react to. They are
+cataloged before they are scheduled.
+
+Current Event Type groups:
 
 ```text
-run_created
-checkpoint_saved
-work_item_completed
-approval_requested
-approval_granted
-project_run_resumed
-project_run_slept
+lifecycle:
+  run_created
+  checkpoint_saved
+  project_run_resumed
+  project_run_slept
+  project_run_completed
+
+work:
+  work_item_completed
+  objective_changed
+  artifact_created
+
+governance:
+  approval_requested
+  approval_granted
+
+blocking:
+  run_blocked
+  run_unblocked
+```
+
+The read-only vocabulary viewer is:
+
+```text
+/project run event-types
 ```
 
 Doctrine:
