@@ -49,6 +49,16 @@ The Project persists. Objectives change. Work items complete. Agents attach and
 detach. Models are swapped. The Project Run is the active or suspended execution
 instance that makes continuity possible.
 
+Durability boundary:
+
+```text
+Durable:    Project, Project Run, checkpoint, journal, institutional knowledge
+Disposable: Agent Lease, Agent, Model, provider session, hidden scratchpad
+```
+
+Projects survive. Runs survive. Knowledge survives. Agents, models, and
+providers are replaceable.
+
 ## Why Project is not enough
 
 A Project answers:
