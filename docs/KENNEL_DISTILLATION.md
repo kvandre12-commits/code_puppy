@@ -9,8 +9,8 @@ What from today deserves to exist tomorrow?
 ```
 
 Most conversations do not. Most notifications do not. Most transcripts do not.
-Some principles do. Some facts do. Some decisions do. Some artifacts do. Some
-relationships do. Some history does.
+Some objectives do. Some principles do. Some facts do. Some decisions do. Some
+artifacts do. Some relationships do. Some history does.
 
 The kennel is not just storing memory. It is converting work into institutional
 knowledge.
@@ -29,7 +29,7 @@ A broader Project OS stack:
 
 ```text
 Human
-  -> Projects
+  -> Objectives
   -> Institutional Knowledge
   -> Agents
   -> Android
@@ -58,15 +58,67 @@ quarantine transcript
   -> prune transcript crumbs
 ```
 
+## Objective-linked durable memory
+
+Organizations do not preserve knowledge for its own sake. They preserve
+knowledge in service of goals. Without an objective, drawers become isolated
+facts. With an objective, they become a knowledge graph.
+
+```text
+Objective
+  -> Principles
+  -> Facts
+  -> Decisions
+  -> Artifacts
+  -> Relationships
+  -> History
+```
+
+Example:
+
+```text
+Objective: Build Android Project OS
+  -> Principle: Do not fight Android.
+  -> Fact: Android owns permissions.
+  -> Decision: Use quarantine before promotion.
+  -> Artifact: docs/ANDROID_AGENT_OS_LAYER.md
+```
+
+The kennel's job is knowledge governance. The real question is not merely:
+
+```text
+What happened?
+```
+
+It is:
+
+```text
+What deserves to survive, and for which objective?
+```
+
 ## Durable drawer types
 
 ```text
+Objectives
 Principles
 Facts
 Decisions
 Artifacts
 Relationships
 History
+```
+
+### Objectives
+
+Why a cluster of durable knowledge exists. Objectives are the parent nodes that
+turn durable drawers into a project knowledge graph.
+
+Examples:
+
+```text
+Build Android Project OS.
+Ship Droid viewer beta.
+Connect SharpEdge to approval-gated broker workflows.
 ```
 
 ### Principles
@@ -174,6 +226,7 @@ A large session should reduce to a small durable packet.
 
 ```text
 57k-token session
+  -> 1 objective link
   -> 1 principle or policy check
   -> 1 fact
   -> 2 decisions
@@ -192,10 +245,11 @@ Promote a drawer only if it is one of these:
 
 1. reusable across future sessions;
 2. expensive to rediscover;
-3. a principle, policy, or safety boundary;
-4. a project object or artifact reference;
-5. a relationship needed for orchestration;
-6. a history event needed for audit/replay.
+3. tied to an objective;
+4. a principle, policy, or safety boundary;
+5. a project object or artifact reference;
+6. a relationship needed for orchestration;
+7. a history event needed for audit/replay.
 
 Otherwise leave it in quarantine and prune later.
 
@@ -249,6 +303,7 @@ Distillation Efficiency = Durable Drawers Created / Quarantine Drawers Processed
 Yield can also be tracked by drawer type:
 
 ```text
+Objective Yield
 Principle Yield
 Fact Yield
 Decision Yield

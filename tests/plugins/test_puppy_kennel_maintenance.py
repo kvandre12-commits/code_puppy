@@ -28,6 +28,13 @@ def test_build_audit_counts_wings_roles_and_duplicates(kennel_root: Path) -> Non
 
     _raw_drawer(
         wing_name="repo:/tmp/a",
+        room_name="objectives",
+        content="Build Android Project OS",
+        role="note",
+        memory_type="objective",
+    )
+    _raw_drawer(
+        wing_name="repo:/tmp/a",
         room_name="notes",
         content="duplicate context drawer",
         role="note",
@@ -49,19 +56,20 @@ def test_build_audit_counts_wings_roles_and_duplicates(kennel_root: Path) -> Non
 
     audit = maintenance.build_audit()
 
-    assert audit.total_drawers == 3
+    assert audit.total_drawers == 4
     assert audit.total_wings == 3
     assert audit.duplicate_group_count == 1
     assert audit.duplicate_drawer_count == 2
-    assert audit.short_drawer_count == 3
+    assert audit.short_drawer_count == 4
     assert audit.quarantine_count == 1
-    assert audit.durable_note_count == 2
-    assert audit.observable_durable_ratio == 2 / 3
+    assert audit.durable_note_count == 3
+    assert audit.observable_durable_ratio == 3 / 4
+    assert ("objective", 1) in audit.by_memory_type
     assert ("principle", 1) in audit.by_memory_type
     assert ("fact", 1) in audit.by_memory_type
     assert ("transcript_quarantine", 1) in audit.by_memory_type
-    assert ("repo:/tmp/a", 1) in audit.by_wing
-    assert ("note", 2) in audit.by_role
+    assert ("repo:/tmp/a", 2) in audit.by_wing
+    assert ("note", 3) in audit.by_role
 
 
 def test_render_audit_includes_operator_summary(kennel_root: Path) -> None:
