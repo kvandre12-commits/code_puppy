@@ -127,9 +127,10 @@ credibility; capability translation means the theorem may need a new explicit
 concept; me@sams-only special permissions, validators, leases, or trust paths
 mean the experiment has been compromised.
 
-Protect the experiment, not the theorem. If a boundary requires special
-Authority, Lease, Validator, or Audit behavior, classify that as possible
-contract evidence before adding exceptions.
+Protect the experiment, not the theorem. Learn something true and do not hide
+it. If a boundary requires special Authority, Lease, Validator, or Audit
+behavior, classify that as possible contract evidence before adding exceptions.
+Theorem changed is not the same as theorem failed.
 
 Classify action type before implementing:
 
