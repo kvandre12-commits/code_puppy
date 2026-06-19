@@ -143,10 +143,18 @@ def format_event_records(run_id: str, events: Sequence[store.EventRecord]) -> st
     """Render persisted Event Records for one Project Run."""
     if not events:
         return f"Project Run Events\n\nrun_id: {run_id}\n\nNo Event Records yet."
-    headers = ("event_id", "timestamp", "event_type", "source", "payload_summary")
+    headers = (
+        "event_id",
+        "parent_event_id",
+        "timestamp",
+        "event_type",
+        "source",
+        "payload_summary",
+    )
     rows = [
         (
             event.event_id,
+            event.parent_event_id or "-",
             event.timestamp,
             event.event_type,
             event.source,
@@ -173,6 +181,23 @@ def format_event_records(run_id: str, events: Sequence[store.EventRecord]) -> st
         render_row(tuple("-" * width for width in widths)),
     ]
     lines.extend(render_row(row) for row in rows)
+    return "\n".join(lines)
+
+
+def format_event_trace(events: Sequence[store.EventRecord]) -> str:
+    """Render one causality chain from root event to selected event."""
+    if not events:
+        return "Project Event Trace\n\nNo Event Records found."
+    lines = ["Project Event Trace", ""]
+    for index, event in enumerate(events):
+        prefix = "root" if index == 0 else "caused"
+        parent = event.parent_event_id or "-"
+        lines.append(
+            f"{prefix}: {event.event_id} [{event.event_type}] "
+            f"run={event.run_id} parent={parent}"
+        )
+        if event.payload_summary:
+            lines.append(f"  summary: {event.payload_summary}")
     return "\n".join(lines)
 
 
@@ -206,6 +231,7 @@ def help_text() -> str:
             "  /project run inspect <run_id>",
             "  /project run events <run_id>",
             "  /project run event-types",
+            "  /project event trace <event_id>",
             "  /project run status [run_id] [--status <status>]",
             "  /project run checkpoint <run_id> --checkpoint <text>",
             "      [--next <text>] [--status <status>]",
@@ -271,6 +297,12 @@ def _handle_run_event_types(parts: list[str]) -> str:
     return format_event_types(store.list_event_types())
 
 
+def _handle_project_event(parts: list[str]) -> str:
+    if len(parts) != 2 or parts[0] != "trace":
+        raise ValueError("event usage: /project event trace <event_id>")
+    return format_event_trace(store.trace_event(parts[1]))
+
+
 def _handle_run_status(parts: list[str]) -> str:
     status = _pop_flag(parts, "--status")
     if len(parts) > 1:
@@ -316,7 +348,11 @@ def _handle_run_complete(parts: list[str]) -> str:
 
 
 def dispatch(parts: list[str]) -> str:
-    if len(parts) < 2 or parts[0] != "run":
+    if len(parts) < 2:
+        return help_text()
+    if parts[0] == "event":
+        return _handle_project_event(parts[1:])
+    if parts[0] != "run":
         return help_text()
     action = parts[1]
     rest = parts[2:]

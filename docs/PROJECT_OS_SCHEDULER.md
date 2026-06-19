@@ -36,21 +36,22 @@ Projects
 The eventual event-driven execution loop is:
 
 ```text
-Event Record -> Event Queue -> Wake Run -> Lease Agent -> Execute -> Checkpoint -> Sleep
+Event Record -> Causality Chain -> Event Queue -> Wake Run -> Lease Agent -> Execute -> Checkpoint -> Sleep
 ```
 
 Scheduling turns resumable runs into an operating system, but scheduling must not
-come before observability.
+come before observability or causality.
 
 ```text
-Event Record -> Event Queue -> Run Table -> priority -> lease allocation -> checkpoint
+Event Record -> Causality Chain -> Event Queue -> Run Table -> priority -> lease allocation -> checkpoint
 ```
 
 Doctrine:
 
 ```text
-No execution without observability.
-No observability without events.
+No scheduling without causality.
+No causality without events.
+No events without observability.
 ```
 
 Durability boundary:
@@ -167,8 +168,9 @@ governance-> approval_requested, approval_granted
 blocking  -> run_blocked, run_unblocked
 ```
 
-The future scheduler should react to these typed facts, not infer state from
-free-form prose.
+Causality links those facts with `parent_event_id` before any queue consumes
+them. The future scheduler should react to typed, traceable facts, not infer
+state from free-form prose.
 
 ## Event Queue
 
@@ -199,6 +201,7 @@ Event shape conceptually:
 
 ```text
 event_id
+parent_event_id optional
 event_type
 source
 project_id
