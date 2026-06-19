@@ -7,8 +7,8 @@ token budget without ever calling an LLM or shipping a tokenizer:
   durable, pervasive operator preferences. Capped at ~30% of budget.
 * **P1 - durable project notes**: drawers in ``repo:<cwd>`` with
   ``role='note'``, i.e. content written via the ``kennel_remember`` tool.
-  Objectives, principles, facts, decisions, artifacts, relationships, and history
-  live here until typed drawers are modeled explicitly. Highest signal-to-token ratio in the kennel.
+  Objectives, work items, principles, facts, decisions, artifacts, relationships,
+  and history live here until typed drawers are modeled explicitly. Highest signal-to-token ratio in the kennel.
   Uses the remaining budget after P0.
 
 Passive transcript quarantine is intentionally not packed by default. Raw

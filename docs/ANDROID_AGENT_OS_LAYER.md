@@ -312,7 +312,7 @@ project state. The kennel preserves durable project memory.
 Linux -> CPU, memory, storage, network
 Android -> apps, notifications, locations, Bluetooth, permissions
 Code Puppy -> projects, agents, artifacts, workflows, repo state
-Kennel -> objectives, principles, facts, decisions, artifacts, relationships, history
+Kennel -> objectives, work items, principles, facts, decisions, artifacts, relationships, history
 ```
 
 Examples of durable project context:
@@ -329,7 +329,8 @@ Android Distribution Plan
 ```
 
 This is closer to a knowledge operating system than a mobile operating system.
-The kennel is the Institutional Knowledge Layer between projects and agents.
+The kennel carries institutional execution and knowledge between objectives and
+agents.
 
 ## Target stack
 
@@ -337,6 +338,7 @@ The kennel is the Institutional Knowledge Layer between projects and agents.
 Human operator
   -> Code Puppy Agent OS
       -> objectives
+      -> institutional execution
       -> institutional knowledge
       -> agents
       -> bridge grants
@@ -375,13 +377,15 @@ state can be replayed
 ### 2. Treat kennel as typed durable project memory
 
 The kennel is not AI memory, chat history, embeddings, or app state. Its role is
-the durable project memory layer: distilled project knowledge that survives after
-the conversation ends. Decisions are the highest-value drawer type, but they are
-not the only type. The distillation contract lives in `docs/KENNEL_DISTILLATION.md`.
+the durable project memory layer: distilled project knowledge and execution
+state that survive after the conversation ends. Decisions are one high-value
+drawer type, but they are not the only type. The distillation contract lives in
+`docs/KENNEL_DISTILLATION.md`.
 
 ```text
 Kennel
   -> Objectives
+  -> Work Items
   -> Principles
   -> Facts
   -> Decisions
@@ -394,6 +398,7 @@ Examples:
 
 ```text
 Objective: Build Android Project OS.
+Work Item: Implement kennel audit. Status: done.
 Principle: No direct power. Only granted power.
 Fact: Android owns runtime permissions.
 Decision: No god-agent.
@@ -407,6 +412,7 @@ question is whether those tokens produced durable project knowledge:
 
 ```text
 objectives
+work_items
 principles
 discoveries
 designs

@@ -17,6 +17,7 @@ column:
 ```text
 Kennel
   -> Objectives
+  -> Work Items
   -> Principles
   -> Facts
   -> Decisions
@@ -29,6 +30,7 @@ Examples:
 
 ```text
 Objective: Build Android Project OS.
+Work Item: Implement kennel audit. Status: done.
 Principle: No direct power. Only granted power.
 Fact: Android owns runtime permissions.
 Decision: No god-agent.
@@ -42,6 +44,7 @@ question is whether those tokens produced durable output:
 
 ```text
 objectives
+work_items
 principles
 discoveries
 designs
@@ -152,7 +155,7 @@ budget. Three priority classes, no LLM, no embeddings:
 | Tier | Source | Quota (default) | Why |
 |---|---|---|---|
 | **P0** User Preferences | `user:default` wing, any role | ~30% | Short, durable, pervasive operator preferences |
-| **P1** Durable Project Notes | `repo:<cwd>` wing, `role='note'` | remainder | Explicit objectives/principles/facts/decisions/artifacts/relationships/history — highest signal-to-token ratio |
+| **P1** Durable Project Notes | `repo:<cwd>` wing, `role='note'` | remainder | Explicit objectives/work_items/principles/facts/decisions/artifacts/relationships/history — highest signal-to-token ratio |
 
 Transcript quarantine is searchable and auditable, but intentionally not packed
 into the default working-context block. Promote it to explicit typed durable

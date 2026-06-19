@@ -73,6 +73,7 @@ Conceptually, durable kennel drawers should separate knowledge types:
 
 ```text
 Objectives
+Work Items
 Principles
 Facts
 Decisions

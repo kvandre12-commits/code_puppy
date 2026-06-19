@@ -35,6 +35,13 @@ def test_build_audit_counts_wings_roles_and_duplicates(kennel_root: Path) -> Non
     )
     _raw_drawer(
         wing_name="repo:/tmp/a",
+        room_name="work",
+        content="Implement kennel audit. Status: done.",
+        role="note",
+        memory_type="work_item",
+    )
+    _raw_drawer(
+        wing_name="repo:/tmp/a",
         room_name="notes",
         content="duplicate context drawer",
         role="note",
@@ -56,20 +63,21 @@ def test_build_audit_counts_wings_roles_and_duplicates(kennel_root: Path) -> Non
 
     audit = maintenance.build_audit()
 
-    assert audit.total_drawers == 4
+    assert audit.total_drawers == 5
     assert audit.total_wings == 3
     assert audit.duplicate_group_count == 1
     assert audit.duplicate_drawer_count == 2
-    assert audit.short_drawer_count == 4
+    assert audit.short_drawer_count == 5
     assert audit.quarantine_count == 1
-    assert audit.durable_note_count == 3
-    assert audit.observable_durable_ratio == 3 / 4
+    assert audit.durable_note_count == 4
+    assert audit.observable_durable_ratio == 4 / 5
     assert ("objective", 1) in audit.by_memory_type
+    assert ("work_item", 1) in audit.by_memory_type
     assert ("principle", 1) in audit.by_memory_type
     assert ("fact", 1) in audit.by_memory_type
     assert ("transcript_quarantine", 1) in audit.by_memory_type
-    assert ("repo:/tmp/a", 2) in audit.by_wing
-    assert ("note", 3) in audit.by_role
+    assert ("repo:/tmp/a", 3) in audit.by_wing
+    assert ("note", 4) in audit.by_role
 
 
 def test_render_audit_includes_operator_summary(kennel_root: Path) -> None:
