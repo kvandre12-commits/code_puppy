@@ -9,6 +9,7 @@ from . import (
     authority_check,
     authority_grant_draft,
     authority_grants,
+    authority_validator,
     dispatch_plan,
     lease_draft,
     runtime_candidates,
@@ -287,6 +288,7 @@ def help_text() -> str:
             "  /project validate",
             "  /project authority grants",
             "  /project authority grant-draft",
+            "  /project authority validate",
             "  /project run create [run_id] --project <name> --objective <goal>",
             "      [--work <item>]... [--checkpoint <text>] [--next <text>]",
             "      [--status sleeping|ready|running|blocked|waiting_approval|...]",
@@ -322,7 +324,12 @@ def _handle_authority(parts: list[str]) -> str:
     if parts == ["grant-draft"]:
         draft = authority_grant_draft.draft_authority_grant()
         return authority_grant_draft.format_draft(draft)
-    raise ValueError("authority usage: /project authority grants | grant-draft")
+    if parts == ["validate"]:
+        report = authority_validator.validate_authority()
+        return authority_validator.format_report(report)
+    raise ValueError(
+        "authority usage: /project authority grants | grant-draft | validate"
+    )
 
 
 def _handle_run_create(parts: list[str]) -> str:

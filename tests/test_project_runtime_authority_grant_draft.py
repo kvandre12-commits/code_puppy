@@ -112,6 +112,9 @@ def test_authority_grant_draft_rejects_arguments(tmp_path, monkeypatch):
     try:
         commands.dispatch(["authority", "grant-draft", "--create"])
     except ValueError as exc:
-        assert "authority usage: /project authority grants | grant-draft" in str(exc)
+        assert (
+            "authority usage: /project authority grants | grant-draft | validate"
+            in str(exc)
+        )
     else:  # pragma: no cover - defensive
         raise AssertionError("expected authority grant-draft command to reject args")

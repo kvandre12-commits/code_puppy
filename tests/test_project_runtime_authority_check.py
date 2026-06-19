@@ -121,6 +121,46 @@ def test_authority_check_uses_matching_grant_but_does_not_authorize(
     assert state_file.read_text(encoding="utf-8") == before
 
 
+def test_authority_check_rejects_invalid_grant_registry(tmp_path, monkeypatch):
+    state_file = _use_tmp_state(tmp_path, monkeypatch)
+    store.create_run(
+        project="Code Puppy",
+        objective="Eligible work",
+        run_id="run-eligible",
+        status="ready",
+    )
+    _patch_run(state_file, "run-eligible", updated_at="2026-01-01T00:01:00+00:00")
+    state = _load_raw(state_file)
+    state["authority_grants"] = {
+        "grant-runtime-step": {
+            "grant_id": "grant-runtime-step",
+            "subject_identity": "unassigned_agent",
+            "allowed_action_scope": "project_run.execute_bounded_step",
+            "allowed_capability_scope": "project_runtime.step",
+            "boundary": "project_run",
+            "issuer": "",
+            "issued_at": "2026-01-01T00:00:00+00:00",
+            "expires_at": "2099-01-01T00:00:00+00:00",
+            "run_id": "run-eligible",
+        }
+    }
+    _save_raw(state_file, state)
+    before = state_file.read_text(encoding="utf-8")
+
+    output = commands.dispatch(["run", "authority-check"])
+
+    assert (
+        "reason                  : authority registry validation failed; lease is not issuable"
+        in output
+    )
+    assert "identity_present       : no" in output
+    assert "authority_grant_present: no" in output
+    assert "capability_grant_present: no" in output
+    assert "lease_issuable         : no" in output
+    assert "authority registry validation failed" in output
+    assert state_file.read_text(encoding="utf-8") == before
+
+
 def test_authority_check_ignores_revoked_grants(tmp_path, monkeypatch):
     state_file = _use_tmp_state(tmp_path, monkeypatch)
     store.create_run(
