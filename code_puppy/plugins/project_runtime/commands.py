@@ -5,7 +5,7 @@ from __future__ import annotations
 import shlex
 from collections.abc import Sequence
 
-from . import store
+from . import store, validator
 
 
 def _pop_flag(parts: list[str], name: str, default: str = "") -> str:
@@ -274,6 +274,7 @@ def help_text() -> str:
     return "\n".join(
         [
             "Project runtime commands:",
+            "  /project validate",
             "  /project run create [run_id] --project <name> --objective <goal>",
             "      [--work <item>]... [--checkpoint <text>] [--next <text>]",
             "      [--status sleeping|ready|running|blocked|waiting_approval|...]",
@@ -360,6 +361,12 @@ def _handle_project_event(parts: list[str]) -> str:
     return format_event_trace(store.trace_event(parts[1]))
 
 
+def _handle_validate(parts: list[str]) -> str:
+    if parts:
+        raise ValueError("validate does not accept arguments")
+    return validator.format_report(validator.validate_state())
+
+
 def _handle_run_status(parts: list[str]) -> str:
     status = _pop_flag(parts, "--status")
     if len(parts) > 1:
@@ -405,6 +412,10 @@ def _handle_run_complete(parts: list[str]) -> str:
 
 
 def dispatch(parts: list[str]) -> str:
+    if not parts:
+        return help_text()
+    if parts[0] == "validate":
+        return _handle_validate(parts[1:])
     if len(parts) < 2:
         return help_text()
     if parts[0] == "event":
