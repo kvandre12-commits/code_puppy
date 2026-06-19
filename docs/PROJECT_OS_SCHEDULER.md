@@ -21,7 +21,8 @@ Project OS -> Run Scheduler chooses Project Runs for Agents
 ```
 
 The scheduler is not memory. It is not an agent. It is not a model. It is the
-policy service that decides what gets execution attention next.
+policy service that decides what gets execution attention next. It must obey the
+structural invariants in `PROJECT_OS_INVARIANTS.md`.
 
 ## Core model
 

@@ -6,7 +6,8 @@ not the boundary of the system. Agents should attach to Project Runs, not own
 Projects directly, and scheduling should allocate those leases explicitly. The
 Android layer model lives in `docs/ANDROID_AGENT_OS_LAYER.md`; the Project Run
 runtime model lives in
-`docs/PROJECT_OS_RUNTIME.md`; the Run Scheduler model lives in
+`docs/PROJECT_OS_RUNTIME.md`; structural invariants live in
+`docs/PROJECT_OS_INVARIANTS.md`; the Run Scheduler model lives in
 `docs/PROJECT_OS_SCHEDULER.md`; the department hierarchy lives in
 `docs/AGENT_ORG_CHART.md`.
 

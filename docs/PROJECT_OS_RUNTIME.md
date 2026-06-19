@@ -1,7 +1,8 @@
 # Project OS Runtime
 
 The kennel defines what deserves to survive. The runtime defines what can keep
-executing. The scheduler doctrine lives in `PROJECT_OS_SCHEDULER.md`.
+executing. Structural invariants live in `PROJECT_OS_INVARIANTS.md`. The
+scheduler doctrine lives in `PROJECT_OS_SCHEDULER.md`.
 
 The knowledge ontology is now:
 
