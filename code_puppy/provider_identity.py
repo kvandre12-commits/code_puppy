@@ -10,32 +10,27 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic_ai.providers.anthropic import AnthropicProvider
-from pydantic_ai.providers.openai import OpenAIProvider
+
+def _load_anthropic_provider_class():
+    try:
+        from pydantic_ai.providers.anthropic import AnthropicProvider
+    except ImportError as exc:  # pragma: no cover - optional extra absent
+        raise RuntimeError(
+            "Anthropic models require the optional anthropic extra. "
+            "Install it with: pip install 'code-puppy[anthropic]'"
+        ) from exc
+    return AnthropicProvider
 
 
-class AliasedAnthropicProvider(AnthropicProvider):
-    """Anthropic provider with an overridable runtime identity."""
-
-    def __init__(self, *args: Any, provider_name: str = "anthropic", **kwargs: Any):
-        self._provider_name = provider_name
-        super().__init__(*args, **kwargs)
-
-    @property
-    def name(self) -> str:
-        return self._provider_name
-
-
-class AliasedOpenAIProvider(OpenAIProvider):
-    """OpenAI provider with an overridable runtime identity."""
-
-    def __init__(self, *args: Any, provider_name: str = "openai", **kwargs: Any):
-        self._provider_name = provider_name
-        super().__init__(*args, **kwargs)
-
-    @property
-    def name(self) -> str:
-        return self._provider_name
+def _load_openai_provider_class():
+    try:
+        from pydantic_ai.providers.openai import OpenAIProvider
+    except ImportError as exc:  # pragma: no cover - optional extra absent
+        raise RuntimeError(
+            "OpenAI-compatible models require the optional openai extra. "
+            "Install it with: pip install 'code-puppy[openai]'"
+        ) from exc
+    return OpenAIProvider
 
 
 _TYPE_PROVIDER_OVERRIDES = {
@@ -93,15 +88,41 @@ def resolve_provider_identity(model_key: str, model_config: dict[str, Any]) -> s
     return model_type or "unknown"
 
 
-def make_anthropic_provider(provider_name: str, **kwargs: Any) -> AnthropicProvider:
+def make_anthropic_provider(provider_name: str, **kwargs: Any) -> Any:
     """Create an Anthropic-family provider with a stable runtime name."""
+    AnthropicProvider = _load_anthropic_provider_class()
     if provider_name == "anthropic":
         return AnthropicProvider(**kwargs)
+
+    class AliasedAnthropicProvider(AnthropicProvider):
+        """Anthropic provider with an overridable runtime identity."""
+
+        def __init__(self, *args: Any, provider_name: str = "anthropic", **kwargs: Any):
+            self._provider_name = provider_name
+            super().__init__(*args, **kwargs)
+
+        @property
+        def name(self) -> str:
+            return self._provider_name
+
     return AliasedAnthropicProvider(provider_name=provider_name, **kwargs)
 
 
-def make_openai_provider(provider_name: str, **kwargs: Any) -> OpenAIProvider:
+def make_openai_provider(provider_name: str, **kwargs: Any) -> Any:
     """Create an OpenAI-family provider with a stable runtime name."""
+    OpenAIProvider = _load_openai_provider_class()
     if provider_name == "openai":
         return OpenAIProvider(**kwargs)
+
+    class AliasedOpenAIProvider(OpenAIProvider):
+        """OpenAI provider with an overridable runtime identity."""
+
+        def __init__(self, *args: Any, provider_name: str = "openai", **kwargs: Any):
+            self._provider_name = provider_name
+            super().__init__(*args, **kwargs)
+
+        @property
+        def name(self) -> str:
+            return self._provider_name
+
     return AliasedOpenAIProvider(provider_name=provider_name, **kwargs)

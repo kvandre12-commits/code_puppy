@@ -14,7 +14,20 @@ from prompt_toolkit.formatted_text import HTML
 from prompt_toolkit.key_binding import KeyBindings
 from prompt_toolkit.layout import Layout, Window
 from prompt_toolkit.layout.controls import FormattedTextControl
-from rapidfuzz.distance import JaroWinkler
+
+try:  # pragma: no cover - exercised when optional fuzzy extra is installed
+    from rapidfuzz.distance import JaroWinkler
+except ImportError:  # pragma: no cover - depends on optional dependency absence
+    from difflib import SequenceMatcher
+
+    class JaroWinkler:  # type: ignore[no-redef]
+        """Small compatibility shim when rapidfuzz is not installed."""
+
+        @staticmethod
+        def normalized_similarity(left: str, right: str) -> float:
+            return SequenceMatcher(None, left, right).ratio()
+
+
 from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Prompt
