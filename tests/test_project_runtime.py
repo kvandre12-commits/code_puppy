@@ -116,6 +116,10 @@ def test_dispatch_create_status_checkpoint_resume_complete(tmp_path, monkeypatch
     assert "Project Run: run-cli-001" in status
     assert "implement run table prototype" in status
 
+    inspected = commands.dispatch(["run", "inspect", "run-cli-001"])
+    assert "Project Run Inspect" in inspected
+    assert "run_id             : run-cli-001" in inspected
+
     checkpointed = commands.dispatch(
         [
             "run",
@@ -212,6 +216,67 @@ def test_run_list_filters_status(tmp_path, monkeypatch):
 
     assert "run-blocked" in table
     assert "run-ready" not in table
+
+
+def test_run_inspect_renders_read_only_operator_view(tmp_path, monkeypatch):
+    state_file = _use_tmp_state(tmp_path, monkeypatch)
+
+    store.create_run(
+        project="Code Puppy",
+        objective="Build Android Project OS",
+        run_id="run-inspect-001",
+        checkpoint="run table exists",
+        next_action="add inspect view",
+    )
+    store.checkpoint_run(
+        "run-inspect-001",
+        checkpoint="inspect view implemented",
+        next_action="add events layer",
+    )
+    before = state_file.read_text(encoding="utf-8")
+
+    inspected = commands.dispatch(["run", "inspect", "run-inspect-001"])
+
+    assert inspected.startswith("Project Run Inspect")
+    assert "run_id             : run-inspect-001" in inspected
+    assert "project            : Code Puppy" in inspected
+    assert "objective          : Build Android Project OS" in inspected
+    assert "status             : sleeping" in inspected
+    assert "checkpoint         : inspect view implemented" in inspected
+    assert "next_action        : add events layer" in inspected
+    assert "blockers           : (none recorded)" in inspected
+    assert "required_approvals : (none recorded)" in inspected
+    assert "last_event         : " in inspected
+    assert "checkpoint: inspect view implemented" in inspected
+    assert "journal_summary    : 2 event(s)" in inspected
+    assert "created" in inspected
+    assert "checkpoint" in inspected
+    assert state_file.read_text(encoding="utf-8") == before
+
+
+def test_run_inspect_explains_unrecorded_blockers_and_approvals(tmp_path, monkeypatch):
+    _use_tmp_state(tmp_path, monkeypatch)
+
+    store.create_run(
+        project="DroidPuppy",
+        objective="Reconnect ADB",
+        run_id="run-blocked",
+        status="blocked",
+    )
+    store.create_run(
+        project="SharpEdge",
+        objective="Submit order draft",
+        run_id="run-approval",
+        status="waiting_approval",
+    )
+
+    blocked = commands.dispatch(["run", "inspect", "run-blocked"])
+    approval = commands.dispatch(["run", "inspect", "run-approval"])
+
+    assert "blockers           : (not recorded yet)" in blocked
+    assert "required_approvals : (none recorded)" in blocked
+    assert "blockers           : (none recorded)" in approval
+    assert "required_approvals : (not recorded yet)" in approval
 
 
 def test_non_project_command_is_ignored():
