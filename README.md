@@ -52,6 +52,11 @@ The product thesis:
 Agent intent -> scoped capability grants -> local execution -> observation -> audit/replay
 ```
 
+Project OS now has a tiny governed runtime proof: validated authority can issue a
+one-shot lease, execute exactly one harmless no-op, write an audit event, and
+refuse lease reuse. See `docs/PROJECT_OS_RUNTIME_WALKTHROUGH.md` for the
+sandbox walkthrough.
+
 On Android, Code Puppy is the Termux-native control layer that can code, inspect,
 launch, hand off to browsers/apps, and grow into a local Droid cockpit without
 handing every agent every dangerous tool by default.

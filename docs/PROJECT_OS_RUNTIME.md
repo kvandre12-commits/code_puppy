@@ -10,6 +10,11 @@ identity lives in `PROJECT_OS_IDENTITY.md`; authority lives in
 `PROJECT_OS_EXECUTION_LOOP.md`. The scheduler doctrine lives in
 `PROJECT_OS_SCHEDULER.md`.
 
+The smallest runnable governance proof lives in
+`PROJECT_OS_RUNTIME_WALKTHROUGH.md`: validated authority issues a one-shot
+lease, executes exactly one harmless no-op, records audit evidence, and refuses
+lease reuse.
+
 The knowledge ontology is now:
 
 ```text
