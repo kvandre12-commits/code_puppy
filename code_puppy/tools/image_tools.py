@@ -16,7 +16,15 @@ import time
 from pathlib import Path
 from typing import Any, Dict, Union
 
-from PIL import Image, UnidentifiedImageError
+try:  # pragma: no cover - optional images extra
+    from PIL import Image, UnidentifiedImageError
+except ImportError:  # pragma: no cover - depends on optional dependency absence
+    Image = None  # type: ignore[assignment]
+
+    class UnidentifiedImageError(Exception):
+        pass
+
+
 from pydantic_ai import BinaryContent, RunContext, ToolReturn
 
 from code_puppy.messaging import emit_error, emit_info, emit_success
@@ -40,6 +48,12 @@ def _validate_and_prepare_image(
     file extension. If the image is resized, the output is normalized to PNG so
     the returned bytes and MIME type stay in sync like civilized software.
     """
+    if Image is None:
+        raise RuntimeError(
+            "Image analysis requires the optional images extra. "
+            "Install it with: pip install 'code-puppy[images]'"
+        )
+
     try:
         with Image.open(io.BytesIO(image_bytes)) as verified_image:
             verified_image.verify()

@@ -5,18 +5,8 @@ import pathlib
 from typing import Any, Dict
 
 import httpx
-from anthropic import AsyncAnthropic
-#from openai import AsyncAzureOpenAI
-from pydantic_ai.models.anthropic import AnthropicModel, AnthropicModelSettings
-from pydantic_ai.models.openai import (
-    OpenAIChatModel,
-    OpenAIChatModelSettings,
-    OpenAIResponsesModel,
-    OpenAIResponsesModelSettings,
-)
-from pydantic_ai.profiles.openai import OpenAIModelProfile
-from pydantic_ai.providers.cerebras import CerebrasProvider
-from pydantic_ai.providers.openrouter import OpenRouterProvider
+
+# from openai import AsyncAzureOpenAI
 from pydantic_ai.settings import ModelSettings
 
 from code_puppy.gemini_model import GeminiModel
@@ -34,6 +24,120 @@ from .provider_identity import (
 from .round_robin_model import RoundRobinModel
 
 logger = logging.getLogger(__name__)
+
+
+def _load_async_anthropic():
+    try:
+        from anthropic import AsyncAnthropic
+    except ImportError as exc:  # pragma: no cover - optional extra absent
+        raise RuntimeError(
+            "Anthropic models require the optional anthropic extra. "
+            "Install it with: pip install 'code-puppy[anthropic]'"
+        ) from exc
+    return AsyncAnthropic
+
+
+def _load_anthropic_model_classes():
+    try:
+        from pydantic_ai.models.anthropic import AnthropicModel, AnthropicModelSettings
+    except ImportError as exc:  # pragma: no cover - optional extra absent
+        raise RuntimeError(
+            "Anthropic models require the optional anthropic extra. "
+            "Install it with: pip install 'code-puppy[anthropic]'"
+        ) from exc
+    return AnthropicModel, AnthropicModelSettings
+
+
+def _load_openai_model_classes():
+    try:
+        from pydantic_ai.models.openai import (
+            OpenAIChatModel,
+            OpenAIChatModelSettings,
+            OpenAIResponsesModel,
+            OpenAIResponsesModelSettings,
+        )
+    except ImportError as exc:  # pragma: no cover - optional extra absent
+        raise RuntimeError(
+            "OpenAI-compatible models require the optional openai extra. "
+            "Install it with: pip install 'code-puppy[openai]'"
+        ) from exc
+    return (
+        OpenAIChatModel,
+        OpenAIChatModelSettings,
+        OpenAIResponsesModel,
+        OpenAIResponsesModelSettings,
+    )
+
+
+def _make_openai_chat_settings(settings: dict[str, Any]):
+    _, OpenAIChatModelSettings, _, _ = _load_openai_model_classes()
+    return OpenAIChatModelSettings(**settings)
+
+
+def _make_openai_responses_settings(settings: dict[str, Any]):
+    _, _, _, OpenAIResponsesModelSettings = _load_openai_model_classes()
+    return OpenAIResponsesModelSettings(**settings)
+
+
+def _make_anthropic_settings(settings: dict[str, Any]):
+    _, AnthropicModelSettings = _load_anthropic_model_classes()
+    return AnthropicModelSettings(**settings)
+
+
+def _load_async_azure_openai():
+    try:
+        from openai import AsyncAzureOpenAI
+    except ImportError as exc:  # pragma: no cover - optional extra absent
+        raise RuntimeError(
+            "Azure OpenAI models require the optional azure/openai extras. "
+            "Install with: pip install 'code-puppy[azure,openai]'"
+        ) from exc
+    return AsyncAzureOpenAI
+
+
+def _load_openai_model_profile():
+    try:
+        from pydantic_ai.profiles.openai import OpenAIModelProfile
+    except ImportError as exc:  # pragma: no cover - optional extra absent
+        raise RuntimeError(
+            "OpenAI-compatible profiles require the optional openai extra. "
+            "Install it with: pip install 'code-puppy[openai]'"
+        ) from exc
+    return OpenAIModelProfile
+
+
+def _load_cerebras_provider():
+    try:
+        from pydantic_ai.providers.cerebras import CerebrasProvider
+    except ImportError as exc:  # pragma: no cover - optional extra absent
+        raise RuntimeError(
+            "Cerebras models require the optional openai extra. "
+            "Install it with: pip install 'code-puppy[openai]'"
+        ) from exc
+    return CerebrasProvider
+
+
+def _load_openrouter_provider():
+    try:
+        from pydantic_ai.providers.openrouter import OpenRouterProvider
+    except ImportError as exc:  # pragma: no cover - optional extra absent
+        raise RuntimeError(
+            "OpenRouter models require the optional openai extra. "
+            "Install it with: pip install 'code-puppy[openai]'"
+        ) from exc
+    return OpenRouterProvider
+
+
+def _make_zai_chat_model_class():
+    OpenAIChatModel, _, _, _ = _load_openai_model_classes()
+
+    class ZaiChatModel(OpenAIChatModel):
+        def _process_response(self, response):
+            response.object = "chat.completion"
+            return super()._process_response(response)
+
+    return ZaiChatModel
+
 
 # Registry for custom model provider classes from plugins
 _CUSTOM_MODEL_PROVIDERS: Dict[str, type] = {}
@@ -213,7 +317,7 @@ def make_model_settings(
         for key in ("extended_thinking", "budget_tokens", "interleaved_thinking"):
             model_settings_dict.pop(key, None)
 
-        model_settings = OpenAIChatModelSettings(**model_settings_dict)
+        model_settings = _make_openai_chat_settings(model_settings_dict)
 
     elif is_copilot and (
         copilot_underlying.startswith("gpt-")
@@ -223,7 +327,7 @@ def make_model_settings(
         # Copilot GPT/O-series — the Copilot API currently does NOT
         # support reasoning_effort for GPT models (400 Bad Request).
         # Just use plain OpenAIChatModelSettings without reasoning params.
-        model_settings = OpenAIChatModelSettings(**model_settings_dict)
+        model_settings = _make_openai_chat_settings(model_settings_dict)
 
     elif "gpt-5" in model_name:
         model_settings_dict["openai_reasoning_effort"] = get_openai_reasoning_effort()
@@ -241,14 +345,14 @@ def make_model_settings(
             )
             if "codex" not in model_name:
                 model_settings_dict["openai_text_verbosity"] = get_openai_verbosity()
-            model_settings = OpenAIResponsesModelSettings(**model_settings_dict)
+            model_settings = _make_openai_responses_settings(model_settings_dict)
         else:
             # Chat Completions models don't support configurable reasoning summaries.
             # Keep the old verbosity injection path for non-Responses GPT-5 models.
             if "codex" not in model_name:
                 verbosity = get_openai_verbosity()
                 model_settings_dict["extra_body"] = {"verbosity": verbosity}
-            model_settings = OpenAIChatModelSettings(**model_settings_dict)
+            model_settings = _make_openai_chat_settings(model_settings_dict)
     elif _is_anthropic_model(model_name, model_config):
         # Handle Anthropic extended thinking settings
         # Remove top_p as Anthropic doesn't support it with extended thinking
@@ -309,7 +413,7 @@ def make_model_settings(
                 extra_body["output_config"] = {"effort": effort}
                 model_settings_dict["extra_body"] = extra_body
 
-        model_settings = AnthropicModelSettings(**model_settings_dict)
+        model_settings = _make_anthropic_settings(model_settings_dict)
 
     # Handle thinking models
     # Check if model supports thinking settings and apply defaults
@@ -324,12 +428,6 @@ def make_model_settings(
         model_settings = ModelSettings(**model_settings_dict)
 
     return model_settings
-
-
-class ZaiChatModel(OpenAIChatModel):
-    def _process_response(self, response):
-        response.object = "chat.completion"
-        return super()._process_response(response)
 
 
 def get_custom_config(model_config):
@@ -568,6 +666,7 @@ class ModelFactory:
                 )
                 return None
 
+            OpenAIChatModel, _, OpenAIResponsesModel, _ = _load_openai_model_classes()
             provider = make_openai_provider(provider_identity, api_key=api_key)
             model = OpenAIChatModel(model_name=model_config["name"], provider=provider)
             if "codex" in model_name:
@@ -608,7 +707,7 @@ class ModelFactory:
             if beta_header:
                 default_headers["anthropic-beta"] = beta_header
 
-            anthropic_client = AsyncAnthropic(
+            anthropic_client = _load_async_anthropic()(
                 api_key=api_key,
                 http_client=client,
                 default_headers=default_headers if default_headers else None,
@@ -617,6 +716,7 @@ class ModelFactory:
             # Ensure cache_control is injected at the Anthropic SDK layer
             patch_anthropic_client_messages(anthropic_client)
 
+            AnthropicModel, _ = _load_anthropic_model_classes()
             provider = make_anthropic_provider(
                 provider_identity, anthropic_client=anthropic_client
             )
@@ -656,7 +756,7 @@ class ModelFactory:
             if beta_header:
                 default_headers["anthropic-beta"] = beta_header
 
-            anthropic_client = AsyncAnthropic(
+            anthropic_client = _load_async_anthropic()(
                 base_url=url,
                 http_client=client,
                 api_key=api_key,
@@ -719,12 +819,13 @@ class ModelFactory:
             # Configure max_retries for the Azure client, defaulting if not specified in config
             azure_max_retries = model_config.get("max_retries", 2)
 
-            azure_client = AsyncAzureOpenAI(
+            azure_client = _load_async_azure_openai()(
                 azure_endpoint=azure_endpoint,
                 api_version=api_version,
                 api_key=api_key,
                 max_retries=azure_max_retries,
             )
+            OpenAIChatModel, _, _, _ = _load_openai_model_classes()
             provider = make_openai_provider(
                 provider_identity, openai_client=azure_client
             )
@@ -742,6 +843,7 @@ class ModelFactory:
                 provider_args["http_client"] = client
             if api_key:
                 provider_args["api_key"] = api_key
+            OpenAIChatModel, _, OpenAIResponsesModel, _ = _load_openai_model_classes()
             provider = make_openai_provider(provider_identity, **provider_args)
             model = OpenAIChatModel(model_name=model_config["name"], provider=provider)
             if model_name == "chatgpt-gpt-5-codex":
@@ -759,7 +861,7 @@ class ModelFactory:
                 api_key=api_key,
                 base_url="https://api.z.ai/api/coding/paas/v4",
             )
-            return ZaiChatModel(
+            return _make_zai_chat_model_class()(
                 model_name=model_config["name"],
                 provider=provider,
             )
@@ -775,7 +877,7 @@ class ModelFactory:
                 api_key=api_key,
                 base_url="https://api.z.ai/api/paas/v4/",
             )
-            return ZaiChatModel(
+            return _make_zai_chat_model_class()(
                 model_name=model_config["name"],
                 provider=provider,
             )
@@ -829,7 +931,8 @@ class ModelFactory:
                 model_name="cerebras",
                 timeout=timeout if timeout is not None else 180,
             )
-            provider = CerebrasProvider(
+            OpenAIChatModel, _, _, _ = _load_openai_model_classes()
+            provider = _load_cerebras_provider()(
                 api_key=api_key,
                 http_client=client,
             )
@@ -837,7 +940,7 @@ class ModelFactory:
             # Cerebras rejects requests with mixed 'strict' values on tools.
             # Disable strict tool definitions so pydantic-ai never sends the
             # 'strict' field, avoiding wrong_api_format errors.
-            profile = OpenAIModelProfile(
+            profile = _load_openai_model_profile()(
                 openai_supports_strict_tool_definition=False,
             )
 
@@ -874,7 +977,8 @@ class ModelFactory:
                     )
                     return None
 
-            provider = OpenRouterProvider(api_key=api_key)
+            OpenAIChatModel, _, _, _ = _load_openai_model_classes()
+            provider = _load_openrouter_provider()(api_key=api_key)
 
             return OpenAIChatModel(model_name=model_config["name"], provider=provider)
 
