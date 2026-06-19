@@ -238,6 +238,17 @@ issue scoped lease when checks pass
 expire or revoke leases
 ```
 
+First implemented command:
+
+```text
+/project run lease-draft
+```
+
+This is the read-only authority request report. It consumes `/project run
+dispatch-plan` output and describes requested agent identity, action scope,
+capability scope, authority check, and expiry without authorizing, issuing,
+leasing, waking, or executing anything.
+
 Must not:
 
 ```text

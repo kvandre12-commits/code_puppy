@@ -5,7 +5,14 @@ from __future__ import annotations
 import shlex
 from collections.abc import Sequence
 
-from . import dispatch_plan, runtime_candidates, selection_policy, store, validator
+from . import (
+    dispatch_plan,
+    lease_draft,
+    runtime_candidates,
+    selection_policy,
+    store,
+    validator,
+)
 
 
 def _pop_flag(parts: list[str], name: str, default: str = "") -> str:
@@ -282,6 +289,7 @@ def help_text() -> str:
             "  /project run candidates",
             "  /project run selection",
             "  /project run dispatch-plan",
+            "  /project run lease-draft",
             "  /project run inspect <run_id>",
             "  /project run why <run_id>",
             "  /project run events <run_id>",
@@ -352,6 +360,13 @@ def _handle_run_dispatch_plan(parts: list[str]) -> str:
         raise ValueError("dispatch-plan does not accept arguments")
     plan = dispatch_plan.plan_dispatch()
     return dispatch_plan.format_plan(plan)
+
+
+def _handle_run_lease_draft(parts: list[str]) -> str:
+    if parts:
+        raise ValueError("lease-draft does not accept arguments")
+    draft = lease_draft.draft_lease()
+    return lease_draft.format_draft(draft)
 
 
 def _handle_run_inspect(parts: list[str]) -> str:
@@ -458,6 +473,8 @@ def dispatch(parts: list[str]) -> str:
         return _handle_run_selection(rest)
     if action == "dispatch-plan":
         return _handle_run_dispatch_plan(rest)
+    if action == "lease-draft":
+        return _handle_run_lease_draft(rest)
     if action == "inspect":
         return _handle_run_inspect(rest)
     if action == "why":
