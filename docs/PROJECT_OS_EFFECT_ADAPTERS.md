@@ -158,8 +158,14 @@ Do not mark the effect failed unless execution itself failed; do not mark the
 experiment proven unless runtime audit evidence exists.
 
 Do not promote one-off pressure into a theorem concept. Capability Translation,
-Human Approval Checkpoint, and Effect Observation Boundary are watch-list items
-until multiple boundaries demand them.
+Human Approval Checkpoint, Effect Observation Boundary, Location / Proximity
+Precondition, and Work-State / Duty-State Precondition are watch-list items until
+multiple unrelated boundaries demand them.
+
+Do not collapse every gate into authentication. Identity gates prove who is
+acting; duty-state gates prove the context/state under which they are acting.
+Adapters must not perform a state-changing action, such as employment clock-in,
+merely to unlock broader downstream capabilities.
 
 ## Adapter implementation rule
 

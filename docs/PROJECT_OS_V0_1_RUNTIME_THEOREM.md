@@ -269,11 +269,24 @@ Contract pressure watch list:
   Capability Translation
   Human Approval Checkpoint
   Effect Observation Boundary
+  Location / Proximity Precondition
+  Work-State / Duty-State Precondition
 ```
 
 Pressure points are not theorem concepts yet. A concept enters the theorem
-because multiple boundaries demand it, not because one boundary suggested it.
-This avoids both overfitting and folklore.
+because multiple unrelated boundaries demand it, not because one boundary
+suggested it. This avoids both overfitting and folklore.
+
+Identity and work-state are different facts:
+
+```text
+identity gate   -> prove who is acting
+work-state gate -> prove the context/state under which they are acting
+```
+
+The me@sams/Squiggly observation suggests assistant permissions may expand when
+the operator is clocked in. That is useful evidence for a duty-state precondition,
+not proof that Authority needs a permanent state-model expansion.
 
 Current status:
 
@@ -286,7 +299,13 @@ Validated runtime boundaries:
 Field observation:
   Android launch observed
   Human biometric checkpoint observed
-  ADB/UI observation unavailable
+  ADB/UI observation restored after reconnect
+  me@sams mixed-boundary app shell observed
+  Squiggly duty-state permission gate observed
+
+Not concluded:
+  Duty-State Precondition is a theorem concept
+  Authority requires state-model expansion
 
 Active contract experiment:
   me@sams identity/application boundary
