@@ -92,7 +92,40 @@ performance/reputation read       -> present
 personal details mutation risk    -> present
 job details sensitive read        -> present
 beneficiary/benefits high sensitivity -> present, not tapped
+sensitive identifiers             -> passively visible; do not persist values
 ```
+
+Squiggly assistant surface:
+
+```text
+Squiggly header
+assistant greeting
+suggested prompts
+freeform "Ask me anything" input
+microphone button
+barcode / scan button
+menu button
+```
+
+Observed suggested prompts included weather, club floor plan, department
+schedule, fuel prices, and overdue planograms. The exact prompt set should be
+treated as operational data, not a stable API contract.
+
+Boundary classification:
+
+```text
+assistant/chat read-query surface -> observed
+suggested prompt buttons          -> outbound query if tapped; not pure observe
+freeform text input               -> draft effect before send
+send button                       -> outbound query; not tapped
+microphone                        -> audio capture/input permission risk
+barcode / scan                    -> camera/scan or inventory lookup risk
+menu                              -> capability/history/settings surface; unclear
+```
+
+A draft text state was observed during exploration and cleared without pressing
+send. That reinforces that Squiggly is not merely a read surface: even composing
+text is a pre-send effect and should be lease-scoped.
 
 ## Initial boundary classification
 
@@ -106,7 +139,8 @@ contains several boundary classes behind one app shell.
 | Schedule view | identity/application read | Full Schedule opened and observed; still has nearby request/shift-option actions. |
 | Absence / time-off submission | workflow mutation | Report absence and My Requests affordances observed; not tapped. |
 | Frequently used links | mixed | Profile and inbox cards observed; each link needs separate classification. |
-| Me/profile hub | sensitive identity/profile | About, personal details, job details, and feedback surfaces observed. |
+| Me/profile hub | sensitive identity/profile | About, personal details, job details, feedback, and passive sensitive identifiers observed. |
+| Squiggly assistant | assistant/chat read-query | Suggested prompts and input observed; sending a query is an outbound effect. |
 | Insurance / benefits | sensitive identity/benefits | Manage beneficiaries observed; likely extra auth and high sensitivity. |
 | Stock purchases / stock-related surfaces | financial/high-risk | Stock widget observed; purchases remain outside read-boundary scope. |
 | Earnings breakdown | sensitive payroll read | Read boundary, but higher privacy/auth sensitivity. |
@@ -126,6 +160,7 @@ approved view/read
 schedule read with adjacent action affordances
 employment workflow mutation
 profile/personal-details mutation
+assistant/chat outbound query
 benefits/payroll sensitive read
 financial/high-risk action
 human approval checkpoints
@@ -160,8 +195,8 @@ Success target:
 
 The adapter should not click clock-in, submit absence/time-off, tap shift
 options, edit profile/about/background fields, edit benefits/beneficiaries, open
-stock purchase flows, send messages, change account data, or trigger any workflow
-mutation.
+stock purchase flows, send Squiggly prompts/messages, use microphone/barcode
+capture, change account data, or trigger any workflow mutation.
 
 ## Watch-list pressure
 
