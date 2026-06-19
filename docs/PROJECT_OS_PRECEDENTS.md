@@ -17,7 +17,7 @@ Governance Graph:
 Identity -> Role -> Authority -> Action
 
 Legal Graph:
-Scenario -> Ruling -> Precedent
+Scenario -> Ruling -> Precedent -> Remedy
 ```
 
 The first court is:
@@ -34,7 +34,7 @@ PROJECT_OS_SCENARIOS.md
 
 This document records reusable rulings so future validator output, scheduler
 refusals, and operator explanations can cite the reason a story is allowed or
-forbidden.
+forbidden. Lawful responses live in `PROJECT_OS_REMEDIES.md`.
 
 ## Doctrine
 
@@ -43,6 +43,7 @@ Case Law before Automation.
 Precedent explains validator judgment.
 Causality explains what happened.
 Precedent explains why the story is legal or illegal.
+Remedy explains what should happen now.
 ```
 
 ## Precedent registry
@@ -227,6 +228,7 @@ the precedent ID:
 ```text
 law      : A blocked run cannot resume without run_unblocked causality.
 precedent: PRECEDENT-002
+remedy   : REJECT_TRANSITION — reject transition until lifecycle evidence satisfies the state machine
 detail   : project_run_resumed appears after blocker evt-...
 ```
 

@@ -99,6 +99,7 @@ def test_scenario_illegal_blocked_resume_fails(tmp_path, monkeypatch):
     assert "status : FAIL" in output
     assert "A blocked run cannot resume without run_unblocked causality." in output
     assert "precedent: PRECEDENT-002" in output
+    assert "remedy: REJECT_TRANSITION" in output
     assert "project_run_resumed appears after blocker" in output
 
 
@@ -163,4 +164,5 @@ def test_scenario_governance_failure_missing_approver_attribution_fails(
     assert "status : FAIL" in output
     assert "Every Event Record must have source attribution." in output
     assert "precedent: PRECEDENT-003" in output
+    assert "remedy: REQUIRE_ATTRIBUTION" in output
     assert "event_id=evt-no-approver" in output

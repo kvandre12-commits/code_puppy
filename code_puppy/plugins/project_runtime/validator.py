@@ -25,6 +25,15 @@ class PrecedentRecord:
 
 
 @dataclass(frozen=True, slots=True)
+class RemedyRecord:
+    """One lawful response to a validator violation."""
+
+    remedy_id: str
+    instruction: str
+    applies_to_laws: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
 class ValidationViolation:
     """One Project OS law violation."""
 
@@ -33,6 +42,7 @@ class ValidationViolation:
     run_id: str = ""
     event_id: str = ""
     precedent_id: str = ""
+    remedy: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -153,6 +163,66 @@ _PRECEDENT_BY_LAW = {
     for law in precedent.applies_to_laws
 }
 
+REMEDIES = (
+    RemedyRecord(
+        "REJECT_EVENT",
+        "reject Event Record until its type, run, parent, and attribution are valid",
+        (
+            "Every Event Record must be a structured record.",
+            "Every Event Record has one stable event_id.",
+            "Every Event Record has exactly one known Event Type.",
+            "Every Event Record belongs to exactly one existing Project Run.",
+            "Event causality must point to an existing Event Record.",
+            "Event causality must remain acyclic.",
+        ),
+    ),
+    RemedyRecord(
+        "REQUIRE_ATTRIBUTION",
+        "require a non-empty source before accepting the Event Record",
+        ("Every Event Record must have source attribution.",),
+    ),
+    RemedyRecord(
+        "REJECT_TRANSITION",
+        "reject transition until lifecycle evidence satisfies the state machine",
+        (
+            "Every state transition follows the legal lifecycle graph.",
+            "A blocked run cannot resume without run_unblocked causality.",
+            "Terminal states are not resumable by default.",
+        ),
+    ),
+    RemedyRecord(
+        "REQUIRE_APPROVAL",
+        "require approval evidence before allowing the transition to proceed",
+        (
+            "A waiting_approval run cannot resume without approval_granted causality.",
+            "Approval grants require a preceding approval request.",
+        ),
+    ),
+    RemedyRecord(
+        "REQUIRE_EVIDENCE",
+        "require causal Event Record evidence before accepting the state change",
+        (
+            "Every state transition is caused by an Event Record.",
+            "Unblock transitions require blocker or approval evidence.",
+        ),
+    ),
+    RemedyRecord(
+        "MARK_INVALID",
+        "mark state invalid for operator review; do not schedule or auto-repair",
+        (
+            "Every Project Run must be a structured record.",
+            "Every Project Run has one stable run_id.",
+            "Every Project Run has exactly one valid current state.",
+        ),
+    ),
+)
+
+_REMEDY_BY_LAW = {
+    law: f"{remedy.remedy_id} — {remedy.instruction}"
+    for remedy in REMEDIES
+    for law in remedy.applies_to_laws
+}
+
 
 def _violation(
     violations: list[ValidationViolation],
@@ -169,6 +239,7 @@ def _violation(
             run_id=run_id,
             event_id=event_id,
             precedent_id=_PRECEDENT_BY_LAW.get(law, ""),
+            remedy=_REMEDY_BY_LAW.get(law, ""),
         )
     )
 
@@ -503,5 +574,7 @@ def format_report(report: ValidationReport) -> str:
         lines.append(f"  law   : {violation.law}")
         if violation.precedent_id:
             lines.append(f"  precedent: {violation.precedent_id}")
+        if violation.remedy:
+            lines.append(f"  remedy: {violation.remedy}")
         lines.append(f"  detail: {violation.detail}")
     return "\n".join(lines)
