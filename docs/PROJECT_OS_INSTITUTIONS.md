@@ -298,6 +298,17 @@ authorizing, leasing, waking, or executing anything.
 Sixth implemented command:
 
 ```text
+/project authority grant-create --confirm <grant_id>
+```
+
+This is the first privileged AuthorityGrant mutation. It re-runs the
+create-plan, requires exact grant ID confirmation, persists the AuthorityGrant
+record, writes an `authority_grant_created` Event Record, and then stops. It does
+not wake the run, issue a lease, or execute anything.
+
+Seventh implemented command:
+
+```text
 /project run authority-check
 ```
 
@@ -324,8 +335,9 @@ describes configured permission evidence. Authority validation checks whether
 that configured evidence is internally trustworthy. A lease draft describes
 requested authority. An issued lease records granted operational authority.
 Grant drafts are not grant records, grant validation is not grant creation,
-grant-create plans are not grant creation, grant records are not leases, and an
-authority check that passes still does not issue a lease.
+grant-create plans are not grant creation, grant records are not leases,
+confirmed grant creation writes permission evidence but does not issue a lease,
+and an authority check that passes still does not issue a lease.
 
 ## Execution
 
