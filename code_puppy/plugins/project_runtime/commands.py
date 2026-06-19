@@ -7,6 +7,7 @@ from collections.abc import Sequence
 
 from . import (
     authority_check,
+    authority_grant_create_plan,
     authority_grant_draft,
     authority_grants,
     authority_validator,
@@ -289,6 +290,7 @@ def help_text() -> str:
             "  /project authority grants",
             "  /project authority grant-draft",
             "  /project authority validate",
+            "  /project authority grant-create-plan",
             "  /project run create [run_id] --project <name> --objective <goal>",
             "      [--work <item>]... [--checkpoint <text>] [--next <text>]",
             "      [--status sleeping|ready|running|blocked|waiting_approval|...]",
@@ -327,8 +329,12 @@ def _handle_authority(parts: list[str]) -> str:
     if parts == ["validate"]:
         report = authority_validator.validate_authority()
         return authority_validator.format_report(report)
+    if parts == ["grant-create-plan"]:
+        plan = authority_grant_create_plan.plan_grant_create()
+        return authority_grant_create_plan.format_plan(plan)
     raise ValueError(
-        "authority usage: /project authority grants | grant-draft | validate"
+        "authority usage: /project authority grants | grant-draft | "
+        "validate | grant-create-plan"
     )
 
 
