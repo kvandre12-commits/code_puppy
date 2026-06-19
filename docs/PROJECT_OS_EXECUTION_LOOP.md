@@ -405,6 +405,47 @@ expand lease scope after issue
 execute without an issued lease
 ```
 
+## Downstream authority doctrine
+
+Meta-doctrine:
+
+```text
+Authority may flow downstream.
+Authority may not be created downstream.
+```
+
+Allowed authority flow:
+
+```text
+Validator may deny legality.
+Projection may exclude candidates.
+Selection Policy may rank candidates.
+Scheduler may dispatch selected candidates.
+Lease Authority may grant scoped execution rights.
+Execution may perform bounded effects.
+```
+
+Forbidden authority creation:
+
+```text
+Selection Policy may not create eligibility.
+Scheduler may not create eligibility or priority.
+Lease may not create legality.
+Execution may not create authority.
+Execution may not repair-and-resume blocked work by itself.
+Execution may not continue when lease, authority, or validation is missing.
+```
+
+Execution should be obedient, not creative:
+
+```text
+Lease present? execute bounded action.
+Lease absent? stop.
+Blocked? emit evidence and stop.
+Validator fail? stop.
+Need more scope? request authority and stop.
+```
+
 ## Smallest legal execution loop
 
 The smallest legal runtime loop is:
