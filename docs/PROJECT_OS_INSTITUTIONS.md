@@ -318,6 +318,29 @@ validation passes. It reports whether identity, authority grant, and capability
 grant evidence exists, and whether a lease is issuable, without authorizing,
 issuing, leasing, waking, or executing anything.
 
+Eighth implemented command:
+
+```text
+/project run lease-issue --confirm <lease_id>
+```
+
+This is the first lease mutation. It requires authority-check to pass, requires
+exact lease ID confirmation, persists a short-lived one-shot LeaseRecord, writes
+a `lease_issued` Event Record, and then stops. It does not wake the run or
+execute anything.
+
+Ninth implemented command:
+
+```text
+/project run execute-noop --confirm <lease_id>
+```
+
+This is the first bounded execution effect. It requires an existing active,
+unconsumed lease, validates that matching authority still exists, marks the lease
+consumed, writes a `noop_executed` Event Record causally linked to the
+`lease_issued` Event Record, and stops. It does not create grants, issue leases,
+wake runs, or perform external side effects.
+
 Must not:
 
 ```text
@@ -333,11 +356,12 @@ execute without an issued lease
 An AuthorityGrant draft proposes permission evidence. An AuthorityGrant record
 describes configured permission evidence. Authority validation checks whether
 that configured evidence is internally trustworthy. A lease draft describes
-requested authority. An issued lease records granted operational authority.
-Grant drafts are not grant records, grant validation is not grant creation,
-grant-create plans are not grant creation, grant records are not leases,
-confirmed grant creation writes permission evidence but does not issue a lease,
-and an authority check that passes still does not issue a lease.
+requested authority. An issued lease records granted operational authority. A
+no-op execution proves the runtime can consume one lease for exactly one bounded
+effect. Grant drafts are not grant records, grant validation is not grant
+creation, grant-create plans are not grant creation, grant records are not
+leases, confirmed grant creation writes permission evidence but does not issue a
+lease, and an authority check that passes still does not issue a lease.
 
 ## Execution
 
@@ -388,4 +412,8 @@ Scheduler dispatch plan
 Lease draft report
 Execution preflight report
 Runtime blocked/remedy report
+
+The no-op runtime slice is the first intentional exception to pure read-only
+construction: it exists only to prove that validated authority and an issued
+lease can control exactly one harmless effect.
 ```
