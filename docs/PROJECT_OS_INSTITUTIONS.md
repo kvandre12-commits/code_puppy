@@ -249,6 +249,17 @@ dispatch-plan` output and describes requested agent identity, action scope,
 capability scope, authority check, and expiry without authorizing, issuing,
 leasing, waking, or executing anything.
 
+Second implemented command:
+
+```text
+/project run authority-check
+```
+
+This is the read-only authority check report. It consumes `/project run
+lease-draft` output and reports whether identity, authority grant, and capability
+grant evidence exists, and whether a lease is issuable, without authorizing,
+issuing, leasing, waking, or executing anything.
+
 Must not:
 
 ```text

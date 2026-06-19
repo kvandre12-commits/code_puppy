@@ -6,6 +6,7 @@ import shlex
 from collections.abc import Sequence
 
 from . import (
+    authority_check,
     dispatch_plan,
     lease_draft,
     runtime_candidates,
@@ -290,6 +291,7 @@ def help_text() -> str:
             "  /project run selection",
             "  /project run dispatch-plan",
             "  /project run lease-draft",
+            "  /project run authority-check",
             "  /project run inspect <run_id>",
             "  /project run why <run_id>",
             "  /project run events <run_id>",
@@ -367,6 +369,13 @@ def _handle_run_lease_draft(parts: list[str]) -> str:
         raise ValueError("lease-draft does not accept arguments")
     draft = lease_draft.draft_lease()
     return lease_draft.format_draft(draft)
+
+
+def _handle_run_authority_check(parts: list[str]) -> str:
+    if parts:
+        raise ValueError("authority-check does not accept arguments")
+    check = authority_check.check_authority()
+    return authority_check.format_check(check)
 
 
 def _handle_run_inspect(parts: list[str]) -> str:
@@ -475,6 +484,8 @@ def dispatch(parts: list[str]) -> str:
         return _handle_run_dispatch_plan(rest)
     if action == "lease-draft":
         return _handle_run_lease_draft(rest)
+    if action == "authority-check":
+        return _handle_run_authority_check(rest)
     if action == "inspect":
         return _handle_run_inspect(rest)
     if action == "why":
