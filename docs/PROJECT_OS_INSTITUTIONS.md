@@ -184,6 +184,16 @@ identify required lease draft
 identify proof event type
 ```
 
+First implemented command:
+
+```text
+/project run dispatch-plan
+```
+
+This is the read-only dispatch evidence report. It consumes `/project run
+selection` output and describes the dispatch action, required lease scope, and
+proof event without dispatching, leasing, waking, or executing anything.
+
 Must not:
 
 ```text

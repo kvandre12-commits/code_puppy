@@ -5,7 +5,7 @@ from __future__ import annotations
 import shlex
 from collections.abc import Sequence
 
-from . import runtime_candidates, selection_policy, store, validator
+from . import dispatch_plan, runtime_candidates, selection_policy, store, validator
 
 
 def _pop_flag(parts: list[str], name: str, default: str = "") -> str:
@@ -281,6 +281,7 @@ def help_text() -> str:
             "  /project run list [--status <status>]",
             "  /project run candidates",
             "  /project run selection",
+            "  /project run dispatch-plan",
             "  /project run inspect <run_id>",
             "  /project run why <run_id>",
             "  /project run events <run_id>",
@@ -344,6 +345,13 @@ def _handle_run_selection(parts: list[str]) -> str:
         raise ValueError("selection does not accept arguments")
     report = selection_policy.select_candidate()
     return selection_policy.format_report(report)
+
+
+def _handle_run_dispatch_plan(parts: list[str]) -> str:
+    if parts:
+        raise ValueError("dispatch-plan does not accept arguments")
+    plan = dispatch_plan.plan_dispatch()
+    return dispatch_plan.format_plan(plan)
 
 
 def _handle_run_inspect(parts: list[str]) -> str:
@@ -448,6 +456,8 @@ def dispatch(parts: list[str]) -> str:
         return _handle_run_candidates(rest)
     if action == "selection":
         return _handle_run_selection(rest)
+    if action == "dispatch-plan":
+        return _handle_run_dispatch_plan(rest)
     if action == "inspect":
         return _handle_run_inspect(rest)
     if action == "why":
