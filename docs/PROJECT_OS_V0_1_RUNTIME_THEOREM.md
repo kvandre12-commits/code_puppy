@@ -188,6 +188,42 @@ Posting, commenting, messaging, endorsements, or profile edits are persistent
 public mutations with reputation consequences. They belong in a later mutation
 boundary experiment, not the first identity-boundary probe.
 
+## Human approval checkpoints
+
+Some real-world boundaries assume a human exists. Fingerprint unlock, face
+unlock, hardware security keys, authenticator approvals, bank approvals, and
+corporate SSO challenges are not necessarily automation failures. They may be
+required boundary preconditions.
+
+The base theorem remains:
+
+```text
+Authority -> Lease -> Bounded Effect -> Audit
+```
+
+But some effects may require:
+
+```text
+Authority
+  -> Lease
+      -> Human Approval Checkpoint satisfied
+          -> Bounded Effect
+              -> Audit
+```
+
+This is especially relevant for identity-bearing apps, public/reputation
+mutations, persistent repository mutations, and financial-risk effects. The
+machine may prepare a bounded effect, the human may authorize through a device
+local biometric/MFA checkpoint, and the system should record what happened.
+
+Do not treat MFA as an adapter bug by default. Also do not hide biometric or MFA
+handling as one-off adapter glue. If human approval checkpoints appear across
+multiple boundaries, record that as possible contract evidence for an explicit
+approval-checkpoint concept.
+
+Robinhood remains last partly because prepared effect and authorized effect may
+become meaningfully different there.
+
 ## Contract Validation status
 
 The theorem is accumulating evidence, not claiming final proof.
