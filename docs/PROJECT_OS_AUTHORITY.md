@@ -1,6 +1,7 @@
 # Project OS Authority
 
-Project OS authority answers a different question than capability grants.
+Project OS authority answers a different question than capability grants. It
+rests on the identity doctrine in `PROJECT_OS_IDENTITY.md`.
 
 Capability grants ask:
 
@@ -26,6 +27,8 @@ Lease implementations must obey.
 
 ```text
 No direct power. Only granted power.
+No authority without identity.
+No action without attribution.
 No state change without authority.
 No authority without accountability.
 No delegation without scope.

@@ -19,6 +19,8 @@ Related doctrines:
 
 ```text
 No direct power. Only granted power.
+No authority without identity.
+No action without attribution.
 No state change without authority.
 No authority without accountability.
 No scheduling without causality.
@@ -26,7 +28,8 @@ No causality without events.
 No events without observability.
 ```
 
-Authority doctrine lives in `PROJECT_OS_AUTHORITY.md`.
+Identity doctrine lives in `PROJECT_OS_IDENTITY.md`; authority doctrine lives in
+`PROJECT_OS_AUTHORITY.md`.
 
 ## Current primitive stack
 
@@ -293,6 +296,7 @@ Every Event Record belongs to exactly one Project Run.
 Every Event Record has exactly one Event Type.
 Causality points to existing events and stays acyclic.
 Agents lease runs; they do not own them.
+Authority-bearing actions have actor identity.
 Read-only observability commands do not mutate state.
 ```
 
