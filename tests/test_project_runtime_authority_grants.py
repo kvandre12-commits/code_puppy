@@ -82,7 +82,8 @@ def test_authority_grants_rejects_other_authority_commands(tmp_path, monkeypatch
     except ValueError as exc:
         assert (
             "authority usage: /project authority grants | grant-draft | "
-            "validate | grant-create-plan" in str(exc)
+            "validate | grant-create-plan | grant-create --confirm <grant_id>"
+            in str(exc)
         )
     else:  # pragma: no cover - defensive
         raise AssertionError("expected unsupported authority command to fail")

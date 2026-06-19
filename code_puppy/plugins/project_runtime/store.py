@@ -104,6 +104,11 @@ EVENT_TYPE_CATALOG = (
     EventType("artifact_created", "work", "A related artifact was created"),
     EventType("approval_requested", "governance", "Operator approval was requested"),
     EventType("approval_granted", "governance", "Operator approval was granted"),
+    EventType(
+        "authority_grant_created",
+        "governance",
+        "AuthorityGrant evidence was created",
+    ),
     EventType("run_blocked", "blocking", "A Project Run became blocked"),
     EventType("run_unblocked", "blocking", "A Project Run was unblocked"),
 )
@@ -288,6 +293,31 @@ def get_run(run_id: str) -> ProjectRun:
     if not isinstance(raw, dict):
         raise KeyError(f"Project Run not found: {run_id}")
     return run_from_dict(raw)
+
+
+def create_authority_grant_record(
+    record: Mapping[str, str],
+) -> tuple[AuthorityGrant, EventRecord]:
+    """Persist an AuthorityGrant record and its audit EventRecord."""
+    grant = authority_grant_from_dict(dict(record))
+    if not grant.grant_id:
+        raise ValueError("grant_id is required")
+    if not grant.run_id:
+        raise ValueError("run_id is required")
+    get_run(grant.run_id)
+    state = load_state()
+    grants = state.setdefault("authority_grants", {})
+    if grant.grant_id in grants:
+        raise ValueError(f"AuthorityGrant already exists: {grant.grant_id}")
+    grants[grant.grant_id] = authority_grant_to_dict(grant)
+    event = _append_event(
+        state,
+        run_id=grant.run_id,
+        event_type="authority_grant_created",
+        payload_summary=f"AuthorityGrant created: {grant.grant_id}",
+    )
+    save_state(state)
+    return grant, event
 
 
 def list_authority_grants(
