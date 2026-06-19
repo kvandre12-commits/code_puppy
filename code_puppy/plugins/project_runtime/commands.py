@@ -5,7 +5,7 @@ from __future__ import annotations
 import shlex
 from collections.abc import Sequence
 
-from . import store, validator
+from . import runtime_candidates, store, validator
 
 
 def _pop_flag(parts: list[str], name: str, default: str = "") -> str:
@@ -279,6 +279,7 @@ def help_text() -> str:
             "      [--work <item>]... [--checkpoint <text>] [--next <text>]",
             "      [--status sleeping|ready|running|blocked|waiting_approval|...]",
             "  /project run list [--status <status>]",
+            "  /project run candidates",
             "  /project run inspect <run_id>",
             "  /project run why <run_id>",
             "  /project run events <run_id>",
@@ -328,6 +329,13 @@ def _handle_run_list(parts: list[str]) -> str:
     if parts:
         raise ValueError("list accepts only optional --status")
     return format_run_table(store.list_runs(status=status or None))
+
+
+def _handle_run_candidates(parts: list[str]) -> str:
+    if parts:
+        raise ValueError("candidates does not accept arguments")
+    projection = runtime_candidates.project_candidates()
+    return runtime_candidates.format_projection(projection)
 
 
 def _handle_run_inspect(parts: list[str]) -> str:
@@ -428,6 +436,8 @@ def dispatch(parts: list[str]) -> str:
         return _handle_run_create(rest)
     if action == "list":
         return _handle_run_list(rest)
+    if action == "candidates":
+        return _handle_run_candidates(rest)
     if action == "inspect":
         return _handle_run_inspect(rest)
     if action == "why":
