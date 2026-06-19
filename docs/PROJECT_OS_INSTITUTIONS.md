@@ -286,6 +286,18 @@ waking, or executing anything.
 Fifth implemented command:
 
 ```text
+/project authority grant-create-plan
+```
+
+This is the read-only AuthorityGrant creation preflight. It consumes the
+AuthorityGrant draft and current authority validation to report whether the exact
+record would validate, duplicate an existing grant ID, conflict with an active
+grant, or violate scope/boundary rules without creating, repairing, revoking,
+authorizing, leasing, waking, or executing anything.
+
+Sixth implemented command:
+
+```text
 /project run authority-check
 ```
 
@@ -312,8 +324,8 @@ describes configured permission evidence. Authority validation checks whether
 that configured evidence is internally trustworthy. A lease draft describes
 requested authority. An issued lease records granted operational authority.
 Grant drafts are not grant records, grant validation is not grant creation,
-grant records are not leases, and an authority check that passes still does not
-issue a lease.
+grant-create plans are not grant creation, grant records are not leases, and an
+authority check that passes still does not issue a lease.
 
 ## Execution
 

@@ -144,8 +144,8 @@ def test_authority_validate_rejects_arguments(tmp_path, monkeypatch):
         commands.dispatch(["authority", "validate", "--fix"])
     except ValueError as exc:
         assert (
-            "authority usage: /project authority grants | grant-draft | validate"
-            in str(exc)
+            "authority usage: /project authority grants | grant-draft | "
+            "validate | grant-create-plan" in str(exc)
         )
     else:  # pragma: no cover - defensive
         raise AssertionError("expected authority validate command to reject args")
