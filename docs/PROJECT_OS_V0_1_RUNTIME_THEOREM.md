@@ -74,11 +74,15 @@ The next phase is not adapter development. It is contract validation.
 ```text
 Do not protect the theorem.
 Protect the experiment.
+
+Learn something true and do not hide it.
+Theorem changed != theorem failed.
 ```
 
 For each boundary, state the hypothesis, state what would falsify it, run the
 smallest bounded effect, then interpret the result. Adapter bugs mean fix adapter
-code. Contract failures mean rethink the platform rule.
+code. Contract failures mean rethink the platform rule. If the theorem evolves
+because a missing concept was discovered, that is progress, not embarrassment.
 
 Do not patch contradictions with special cases until the failure has been
 classified. Otherwise the theorem becomes unfalsifiable folklore.
@@ -86,7 +90,8 @@ classified. Otherwise the theorem becomes unfalsifiable folklore.
 Documentation is experimental control. It is not just knowledge storage; it
 pre-registers what evidence would change the architecture before the boundary
 experiment runs. That prevents future commits from quietly rewriting a failure as
-success.
+success. Progress is measured by trustworthy evidence, not by the number of
+adapters collected.
 
 ## Boundary test ladder
 
