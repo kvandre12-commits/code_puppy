@@ -118,6 +118,10 @@ Do not begin with task submission, workflow mutation, agent orchestration,
 background recovery, or message sending. If me@sams needs special authority or a
 special trust path, treat that as possible contract evidence before patching.
 
+If the approved-view test reveals a need to translate Project OS authority into
+an external application permission/session model, record that as possible
+capability-translation evidence. Do not hide it inside me@sams-only code.
+
 Protect the experiment, not the theorem. If a boundary requires special
 Authority, Lease, Validator, or Audit behavior, classify that as possible
 contract evidence before adding exceptions.
