@@ -309,11 +309,21 @@ Field evidence:
   ADB/UI observation restored after reconnect
   me@sams mixed-boundary app shell observed
   Squiggly duty-state permission gate observed
+  eBay home opened
+  eBay Selling node observed by UI discovery
+  eBay selling boundary not reached because navigation instrumentation failed first
+
+Instrumentation pressure:
+  UI discovery can observe a concrete node while UI action matching fails to
+  resolve the same target. This is observation/tooling pressure, not runtime
+  contract pressure.
 
 Not concluded:
   Any pressure item is a theorem concept
   Duty-State Precondition is a theorem concept
   Authority requires state-model expansion
+  eBay selling flow is unavailable
+  eBay mutation boundary failed
 
 Promotion rule:
   A concept enters the theorem only when multiple independent boundaries demand it.
