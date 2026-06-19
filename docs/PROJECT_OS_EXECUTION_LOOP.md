@@ -269,12 +269,23 @@ invalid state as executable work.
 These can be implemented before mutable runtime behavior:
 
 ```text
+Runnable Candidate Projection (`/project run candidates`)
 Event Queue projection
 Scheduler candidate report
 Lease draft report
 Execution preflight report
 Runtime blocked/remedy report
 ```
+
+The first implemented read-only runtime projection is:
+
+```text
+/project run candidates
+```
+
+It reads Project Runs and validator output, then reports runnable candidates and
+excluded runs. It does not mutate state, claim queue work, allocate leases, wake
+runs, or schedule execution.
 
 These reports should be boring and deterministic. They should answer what would
 happen, not make it happen. Yes, it is less dramatic. That is the point.
