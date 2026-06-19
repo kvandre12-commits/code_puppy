@@ -310,6 +310,33 @@ a read-only dispatch plan from a selected candidate.
 
 The smallest Agent Lease is scoped execution authority for one Project Run.
 
+Dispatch is not permission:
+
+```text
+Selected Run ≠ Authorized Agent Execution
+Scheduler dispatch intent ≠ issued lease
+Lease draft ≠ authority grant
+```
+
+The closer a component is to execution, the less authority it should possess.
+Effects happen on the far right; judgment belongs upstream. The scheduler may
+produce a dispatch plan. It may not mint execution authority. Cute try, tiny
+runtime monarch.
+
+The lease boundary is:
+
+```text
+Selected Run
+  -> Dispatch Plan
+      -> Lease Draft
+          -> Authority Check
+              -> Issued Lease
+                  -> Execution
+```
+
+A lease draft describes requested authority. An issued lease records granted
+authority. Execution may only consume issued leases.
+
 Minimum lease fields:
 
 ```text
@@ -357,11 +384,25 @@ A real active lease must remain impossible until:
 ```text
 validator PASS
 run state is runnable
+selection exists
+dispatch plan exists
 identity exists
 authority exists
 capabilities are granted
 lease scope is explicit
 expiry is defined
+```
+
+The Agent Lease layer must not:
+
+```text
+make invalid runs executable
+make excluded runs executable
+select runs
+rank candidates
+bypass authority checks
+expand lease scope after issue
+execute without an issued lease
 ```
 
 ## Smallest legal execution loop
