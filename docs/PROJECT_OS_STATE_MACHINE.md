@@ -14,9 +14,10 @@ Causality explains.
 State Machine constrains.
 ```
 
-This document defines the Project Run state-machine doctrine. It does not
-implement scheduler behavior, transition enforcement, wake policy, approval
-queues, or lease allocation.
+This document defines the Project Run state-machine doctrine. The first
+read-only validator is exposed as `/project validate`. This doctrine still does
+not implement scheduler behavior, mutating transition enforcement, wake policy,
+approval queues, or lease allocation.
 
 ## Doctrine
 
@@ -534,12 +535,24 @@ Future write paths should validate:
 | archive run | archival authority exists and terminal semantics are preserved |
 | scheduler wake | run state is runnable and triggering event exists |
 
+## Read-only validator
+
+The first court of Project OS is:
+
+```text
+/project validate
+```
+
+It reports PASS/FAIL and violations with affected `run_id`, `event_id`, the law
+violated, and a detail string. It must not mutate, repair, normalize, backfill,
+or auto-fix state.
+
 ## Non-goals
 
 This document does not implement:
 
 ```text
-transition validator
+mutating transition enforcement
 automatic scheduler
 Event Queue
 Wake Policy
