@@ -7,6 +7,7 @@ from collections.abc import Sequence
 
 from . import (
     authority_check,
+    authority_grants,
     dispatch_plan,
     lease_draft,
     runtime_candidates,
@@ -283,6 +284,7 @@ def help_text() -> str:
         [
             "Project runtime commands:",
             "  /project validate",
+            "  /project authority grants",
             "  /project run create [run_id] --project <name> --objective <goal>",
             "      [--work <item>]... [--checkpoint <text>] [--next <text>]",
             "      [--status sleeping|ready|running|blocked|waiting_approval|...]",
@@ -310,6 +312,12 @@ def help_text() -> str:
             "      --next 'implement run table prototype'",
         ]
     )
+
+
+def _handle_authority(parts: list[str]) -> str:
+    if parts != ["grants"]:
+        raise ValueError("authority usage: /project authority grants")
+    return authority_grants.format_grants(store.list_authority_grants())
 
 
 def _handle_run_create(parts: list[str]) -> str:
@@ -468,6 +476,8 @@ def dispatch(parts: list[str]) -> str:
         return help_text()
     if parts[0] == "event":
         return _handle_project_event(parts[1:])
+    if parts[0] == "authority":
+        return _handle_authority(parts[1:])
     if parts[0] != "run":
         return help_text()
     action = parts[1]
