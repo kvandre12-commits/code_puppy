@@ -2,7 +2,8 @@
 
 Local-first durable project memory for Code Puppy. A kennel is not "AI memory,"
 chat history, embeddings, or app state. It is the layer that preserves distilled
-project knowledge from ongoing work.
+project knowledge from ongoing work. The distillation doctrine lives in
+`docs/KENNEL_DISTILLATION.md`.
 
 ```text
 Conversation -> Quarantine -> Typed Durable Memory -> Future Work
@@ -160,8 +161,7 @@ heuristic — accurate to ±20%, zero deps.
 | Env var | Default | Effect |
 |---|---|---|
 | `PUPPY_KENNEL_PROMPT_BUDGET` | `1500` | Total token budget for the block |
-| `PUPPY_KENNEL_USER_PREFS_QUOTA` | `0.30` | P0 fraction |
-| `PUPPY_KENNEL_STICKY_QUOTA` | `0.30` | P1 fraction |
+| `PUPPY_KENNEL_USER_PREFS_QUOTA` | `0.30` | P0 fraction; P1 uses the remaining budget |
 | `PUPPY_KENNEL_MIN_DRAWER_CHARS` | `80` | Noise filter |
 
 **Phase 2 — active tooling:**

@@ -51,7 +51,8 @@ normal tool registration path: bridge/tool plugins should either expose tools vi
 
 A kennel is not AI memory, chat history, embeddings, or app state. It is the
 agent OS durable project memory layer: distilled project knowledge that survives
-after a conversation ends.
+after a conversation ends. See `docs/KENNEL_DISTILLATION.md` for the distillation
+contract.
 
 ```text
 Conversation -> Quarantine -> Typed Durable Memory -> Future Work

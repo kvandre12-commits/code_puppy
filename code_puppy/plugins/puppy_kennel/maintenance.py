@@ -51,6 +51,8 @@ class KennelAudit:
     by_role: tuple[tuple[str, int], ...] = field(default_factory=tuple)
     exact_duplicates: tuple[DuplicateGroup, ...] = field(default_factory=tuple)
     short_drawer_count: int = 0
+    quarantine_count: int = 0
+    durable_note_count: int = 0
     largest_drawers: tuple[tuple[int, int, str, str], ...] = field(
         default_factory=tuple
     )
@@ -119,6 +121,8 @@ def build_audit(db_path: Path = DB_PATH) -> KennelAudit:
 
     duplicates = tuple(_duplicate_groups(duplicate_buckets.values()))
     short_drawer_count = sum(1 for row in rows if len(_normalize(row.content)) < 120)
+    quarantine_count = by_role.get("quarantine", 0)
+    durable_note_count = by_role.get("note", 0)
     largest = tuple(
         (row.id, len(row.content), row.wing, _preview(row.content, 120))
         for row in sorted(rows, key=lambda item: len(item.content), reverse=True)[:8]
@@ -131,6 +135,8 @@ def build_audit(db_path: Path = DB_PATH) -> KennelAudit:
         by_role=tuple(by_role.most_common()),
         exact_duplicates=duplicates,
         short_drawer_count=short_drawer_count,
+        quarantine_count=quarantine_count,
+        durable_note_count=durable_note_count,
         largest_drawers=largest,
     )
 
@@ -159,6 +165,9 @@ def render_audit(audit: KennelAudit, max_groups: int = 5) -> list[str]:
         f"  exact dup groups : {audit.duplicate_group_count}",
         f"  dup drawer count : {audit.duplicate_drawer_count}",
         f"  short/noisy      : {audit.short_drawer_count}",
+        f"  quarantine       : {audit.quarantine_count}",
+        f"  durable notes    : {audit.durable_note_count}",
+        f"  distill backlog  : {audit.quarantine_count} quarantine drawer(s)",
     ]
     if audit.by_wing:
         lines.append("Top wings:")
