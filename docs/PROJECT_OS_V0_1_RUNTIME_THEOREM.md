@@ -123,6 +123,17 @@ Browser boundary  -> PASS
 Android boundary  -> PASS
 ```
 
+Confidence ladder:
+
+```text
+Level 0  Idea                         -> Authority -> Lease -> Effect -> Audit
+Level 1  Internal runtime             -> No-op PASS
+Level 2  External runtime             -> Browser PASS, Android PASS
+Level 3  Identity/application boundary -> me@sams PENDING
+Level 4  Persistent mutation          -> GitHub PENDING
+Level 5  Financial-risk boundary      -> Robinhood PENDING
+```
+
 Current confidence level:
 
 ```text
@@ -156,6 +167,18 @@ Success means Project OS authority can govern access to an identity-bearing
 application boundary without inventing a second permission system. A need for
 special me@sams authority, special me@sams permissions, or a special validator
 path is not an adapter bug by default; classify it as possible contract evidence.
+
+A likely pressure point is capability translation:
+
+```text
+Project OS Authority
+  -> external application identity/session/permission model
+      -> approved bounded view
+```
+
+If that mapping is necessary, do not smuggle it in as a me@sams exception. Record
+it as evidence that the theorem may need an explicit external capability mapping
+concept.
 
 Do not include task submission, workflow mutation, agent orchestration,
 background recovery, or message sending in the first me@sams experiment. Those
