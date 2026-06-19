@@ -172,6 +172,9 @@ Causality links those facts with `parent_event_id` before any queue consumes
 them. The future scheduler should react to typed, traceable facts, not infer
 state from free-form prose.
 
+The operator-facing `/project run why <run_id>` view must remain explainable from
+persisted fields and causality traces before wake policies or leases exist.
+
 ## Event Queue
 
 The Project OS equivalent of wakeup interrupts is an **Event Queue**. It is a

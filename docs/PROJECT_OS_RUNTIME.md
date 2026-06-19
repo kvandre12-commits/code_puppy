@@ -346,6 +346,26 @@ This turns raw logs into explainable chains. The trace viewer is:
 /project event trace <event_id>
 ```
 
+The run-level explanation viewer is:
+
+```text
+/project run why <run_id>
+```
+
+It uses only persisted run fields, the latest Event Record, and that event's
+causality trace. It must not infer missing blockers, approvals, scheduler
+decisions, wake policies, or lease allocation.
+
+Operator diagnostic ladder:
+
+```text
+/project run list          -> what exists
+/project run inspect <id>  -> what state exists
+/project run events <id>   -> what happened
+/project event trace <id>  -> why this event happened
+/project run why <id>      -> why this run looks this way
+```
+
 Doctrine:
 
 ```text
