@@ -19,10 +19,14 @@ Related doctrines:
 
 ```text
 No direct power. Only granted power.
+No state change without authority.
+No authority without accountability.
 No scheduling without causality.
 No causality without events.
 No events without observability.
 ```
+
+Authority doctrine lives in `PROJECT_OS_AUTHORITY.md`.
 
 ## Current primitive stack
 
