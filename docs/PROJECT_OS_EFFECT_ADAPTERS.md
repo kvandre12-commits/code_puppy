@@ -1,7 +1,8 @@
 # Project OS Effect Adapters
 
 Effect adapters are not separate runtimes. They are replaceable effect-plane
-modules plugged into the same Project OS control plane.
+modules plugged into the same Project OS control plane. The v0.1 milestone is
+summarized in `PROJECT_OS_V0_1_RUNTIME_THEOREM.md`.
 
 The system promise is:
 
