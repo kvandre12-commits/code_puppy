@@ -329,15 +329,16 @@ Android Distribution Plan
 ```
 
 This is closer to a knowledge operating system than a mobile operating system.
+The kennel is the Institutional Knowledge Layer between projects and agents.
 
 ## Target stack
 
 ```text
 Human operator
   -> Code Puppy Agent OS
-      -> project/work state
-      -> kennel durable project memory
-      -> agent org chart
+      -> projects
+      -> institutional knowledge
+      -> agents
       -> bridge grants
       -> workflow monitor
       -> audit/replay
