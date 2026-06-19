@@ -2,8 +2,10 @@
 
 Code Puppy is an agent OS layer: it routes intent into scoped capabilities,
 local execution, observation, and audit/replay. Coding is a core workflow, but
-not the boundary of the system. The Android layer model lives in
-`docs/ANDROID_AGENT_OS_LAYER.md`; the department hierarchy lives in
+not the boundary of the system. Agents should attach to Project Runs, not own
+Projects directly. The Android layer model lives in
+`docs/ANDROID_AGENT_OS_LAYER.md`; the Project Run runtime model lives in
+`docs/PROJECT_OS_RUNTIME.md`; the department hierarchy lives in
 `docs/AGENT_ORG_CHART.md`.
 
 > No direct power. Only granted power.
