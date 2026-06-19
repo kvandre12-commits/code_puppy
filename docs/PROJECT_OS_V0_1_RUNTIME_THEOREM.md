@@ -288,15 +288,22 @@ The me@sams/Squiggly observation suggests assistant permissions may expand when
 the operator is clocked in. That is useful evidence for a duty-state precondition,
 not proof that Authority needs a permanent state-model expansion.
 
-Current status:
+Project OS v0.2 contract-validation board:
 
 ```text
-Validated runtime boundaries:
+Validated:
   No-op
   Browser
   Android adapter tests
 
-Field observation:
+Observed pressure:
+  Capability Translation
+  Human Approval Checkpoint
+  Effect Observation Boundary
+  Location / Proximity Precondition
+  Work-State / Duty-State Precondition
+
+Field evidence:
   Android launch observed
   Human biometric checkpoint observed
   ADB/UI observation restored after reconnect
@@ -304,12 +311,19 @@ Field observation:
   Squiggly duty-state permission gate observed
 
 Not concluded:
+  Any pressure item is a theorem concept
   Duty-State Precondition is a theorem concept
   Authority requires state-model expansion
+
+Promotion rule:
+  A concept enters the theorem only when multiple independent boundaries demand it.
 
 Active contract experiment:
   me@sams identity/application boundary
 ```
+
+Do not ask what clever concept can be added. Ask whether reality has earned that
+concept a place in the theorem.
 
 ## Contract Validation status
 
