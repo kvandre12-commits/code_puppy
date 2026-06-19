@@ -18,6 +18,7 @@ A sharper responsibility split:
 Linux -> manages hardware/resources
 Android -> manages device state and user experiences
 Code Puppy -> manages project/work state
+Project Run -> resumable execution context
 Kennel -> preserves durable project memory
 ```
 
@@ -311,7 +312,8 @@ project state. The kennel preserves durable project memory.
 ```text
 Linux -> CPU, memory, storage, network
 Android -> apps, notifications, locations, Bluetooth, permissions
-Code Puppy -> projects, agents, artifacts, workflows, repo state
+Code Puppy -> projects, project runs, agents, artifacts, workflows, repo state
+Project Run -> project/objective/work execution state, leases, checkpoints
 Kennel -> projects, objectives, work items, principles, facts, decisions, artifacts, relationships, history
 ```
 
@@ -328,9 +330,9 @@ Kennel Hygiene
 Android Distribution Plan
 ```
 
-This is closer to a knowledge operating system than a mobile operating system.
-The kennel carries institutional execution and knowledge between projects,
-objectives, and agents.
+This is closer to a project operating system than a mobile operating system.
+Project Runs carry resumable execution between projects, objectives, and agents.
+The kennel carries durable institutional knowledge.
 
 ## Target stack
 
@@ -339,6 +341,7 @@ Human operator
   -> Code Puppy Agent OS
       -> projects
       -> objectives
+      -> project runs
       -> institutional execution
       -> institutional knowledge
       -> agents
