@@ -39,7 +39,15 @@ For noop, the effect event is:
 noop_executed
 ```
 
-Future adapters change the effect, not the theorem.
+Future adapters change the effect, not the theorem. Effect adapters use the
+normalized audit event shape:
+
+```text
+<adapter>_effect_executed
+```
+
+For example, the browser adapter writes `browser_effect_executed` without adding
+a browser-specific audit catalog rule.
 
 ## Browser adapter acceptance test
 
