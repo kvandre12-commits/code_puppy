@@ -118,6 +118,18 @@ different consequences when money movement is involved. Treat any evidence that
 financial actions need a different approval chain or state model as legitimate
 data, not as an attack on the theorem.
 
+Social platforms such as Reddit or LinkedIn are candidate identity/reputation
+boundaries. Their first experiment should be an approved view, not a public
+mutation:
+
+```text
+Authority -> Lease -> Approved Social View -> Audit
+```
+
+Posting, commenting, messaging, endorsements, or profile edits are persistent
+public mutations with reputation consequences. They belong in a later mutation
+boundary experiment, not the first identity-boundary probe.
+
 ## Contract Validation status
 
 The theorem is accumulating evidence, not claiming final proof.
