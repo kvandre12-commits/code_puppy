@@ -83,6 +83,11 @@ code. Contract failures mean rethink the platform rule.
 Do not patch contradictions with special cases until the failure has been
 classified. Otherwise the theorem becomes unfalsifiable folklore.
 
+Documentation is experimental control. It is not just knowledge storage; it
+pre-registers what evidence would change the architecture before the boundary
+experiment runs. That prevents future commits from quietly rewriting a failure as
+success.
+
 ## Boundary test ladder
 
 The roadmap is not a list of adapters. It is a sequence of increasingly
@@ -140,6 +145,13 @@ Current confidence level:
 External effects can be governed without changing the governance core.
 ```
 
+Active hypothesis:
+
+```text
+Project OS authority can cross an identity-bearing application boundary without
+requiring capability translation.
+```
+
 ## Next application-boundary test
 
 The next boundary should be boring on purpose, but it should cross identity and
@@ -179,6 +191,22 @@ Project OS Authority
 If that mapping is necessary, do not smuggle it in as a me@sams exception. Record
 it as evidence that the theorem may need an explicit external capability mapping
 concept.
+
+Pre-registered outcomes:
+
+```text
+Outcome A: Authority -> Lease -> Approved me@sams View -> Audit
+           works directly.
+           Result: theorem gains credibility.
+
+Outcome B: Authority -> Capability Translation -> me@sams identity/permissions
+           -> Approved View -> Audit is necessary.
+           Result: theorem expands; a missing concept was discovered.
+
+Outcome C: special permission + special validator + special lease + special
+           trust path appear only for me@sams.
+           Result: experiment compromised; this is the folklore path.
+```
 
 Do not include task submission, workflow mutation, agent orchestration,
 background recovery, or message sending in the first me@sams experiment. Those

@@ -122,6 +122,11 @@ If the approved-view test reveals a need to translate Project OS authority into
 an external application permission/session model, record that as possible
 capability-translation evidence. Do not hide it inside me@sams-only code.
 
+Pre-register outcomes before implementing: direct pass means the theorem gains
+credibility; capability translation means the theorem may need a new explicit
+concept; me@sams-only special permissions, validators, leases, or trust paths
+mean the experiment has been compromised.
+
 Protect the experiment, not the theorem. If a boundary requires special
 Authority, Lease, Validator, or Audit behavior, classify that as possible
 contract evidence before adding exceptions.
