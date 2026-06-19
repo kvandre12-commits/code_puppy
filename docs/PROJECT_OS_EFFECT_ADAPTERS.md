@@ -157,6 +157,10 @@ ADB/UI/CDP inspection fails afterward, classify the observer failure separately.
 Do not mark the effect failed unless execution itself failed; do not mark the
 experiment proven unless runtime audit evidence exists.
 
+Do not promote one-off pressure into a theorem concept. Capability Translation,
+Human Approval Checkpoint, and Effect Observation Boundary are watch-list items
+until multiple boundaries demand them.
+
 ## Adapter implementation rule
 
 An adapter may:
