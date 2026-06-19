@@ -1,5 +1,8 @@
 # Project OS Runtime Walkthrough
 
+For the v0.1 milestone statement, see
+`PROJECT_OS_V0_1_RUNTIME_THEOREM.md`.
+
 This is the smallest implemented Project OS runtime theorem:
 
 ```text
