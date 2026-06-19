@@ -107,6 +107,17 @@ The first effect for a new boundary should be boring: launch an approved screen,
 read an approved view, retrieve an approved status, then consume the lease and
 audit. Do not begin with complex workflows.
 
+For me@sams specifically, the first experiment should cross the identity-bearing
+application boundary without mutation:
+
+```text
+Authority -> Lease -> Approved me@sams View -> Audit
+```
+
+Do not begin with task submission, workflow mutation, agent orchestration,
+background recovery, or message sending. If me@sams needs special authority or a
+special trust path, treat that as possible contract evidence before patching.
+
 Protect the experiment, not the theorem. If a boundary requires special
 Authority, Lease, Validator, or Audit behavior, classify that as possible
 contract evidence before adding exceptions.

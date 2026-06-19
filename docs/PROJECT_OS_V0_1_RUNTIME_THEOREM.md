@@ -104,7 +104,7 @@ contract without modifying the contract.
 | --- | --- | --- |
 | Browser | Authority -> Lease -> External Effect -> Audit | effect handling incomplete |
 | Android | Authority -> Lease -> Device Effect -> Audit | lease/effect model incomplete |
-| me@sams | Authority -> Lease -> App/Agent Boundary -> Audit | authority model incomplete |
+| me@sams | Authority -> Lease -> Approved View -> Audit | identity/trust model incomplete |
 | GitHub | Authority -> Lease -> Persistent Mutation -> Audit | effect lifecycle incomplete |
 | Robinhood | Authority -> Lease -> Financial Effect -> Audit | governance model incomplete |
 
@@ -113,29 +113,50 @@ different consequences when money movement is involved. Treat any evidence that
 financial actions need a different approval chain or state model as legitimate
 data, not as an attack on the theorem.
 
-## Next repeatability test
+## Contract Validation status
 
-One adapter can still be luck. The next adapter should be boring on purpose:
+The theorem is accumulating evidence, not claiming final proof.
 
 ```text
-launch approved activity once
-consume lease
-write android_effect_executed
-refuse reuse
+No-op boundary    -> PASS
+Browser boundary  -> PASS
+Android boundary  -> PASS
+```
+
+Current confidence level:
+
+```text
+External effects can be governed without changing the governance core.
+```
+
+## Next application-boundary test
+
+The next boundary should be boring on purpose, but it should cross identity and
+application trust:
+
+```text
+Authority
+  -> Lease
+      -> Approved me@sams View
+          -> Audit
 ```
 
 It should try to produce this diff shape:
 
 ```text
-+ android_execution.py
-+ android execution tests
++ me_sams_execution.py
++ me_sams execution tests
 0 Authority changes
 0 Lease changes
 0 Validator changes
 0 Audit framework changes
 ```
 
-If multiple adapters can plug in this way, the theorem starts becoming a platform
-contract. Do not skip the boundary proof with complex workflows; otherwise it
-becomes impossible to tell whether a failure came from the platform theorem or
-from adapter complexity.
+Success means Project OS authority can govern access to an identity-bearing
+application boundary without inventing a second permission system. A need for
+special me@sams authority, special me@sams permissions, or a special validator
+path is not an adapter bug by default; classify it as possible contract evidence.
+
+Do not include task submission, workflow mutation, agent orchestration,
+background recovery, or message sending in the first me@sams experiment. Those
+belong after the approved-view boundary is understood.
