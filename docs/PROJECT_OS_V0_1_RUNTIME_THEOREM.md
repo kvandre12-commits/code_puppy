@@ -224,6 +224,33 @@ approval-checkpoint concept.
 Robinhood remains last partly because prepared effect and authorized effect may
 become meaningfully different there.
 
+## Effect execution versus observation
+
+Effect execution and effect observation are separate facts. A boundary action may
+complete while a post-effect observer fails.
+
+Field observation from phone exploration:
+
+```text
+prepared Android app launch
+  -> operator biometric approval
+      -> app opened
+          -> ADB/UI inspection unavailable
+```
+
+This should be classified as:
+
+```text
+effect execution evidence       -> succeeded
+human approval checkpoint       -> observed
+post-effect observation tooling -> failed independently
+```
+
+Do not turn observer failure into effect failure by default. Also do not claim a
+canonical Project OS proof unless Authority, Lease, bounded adapter execution,
+and Audit evidence were actually produced by the runtime. Exploratory device
+handoffs are useful boundary evidence, not a substitute for leased/audited tests.
+
 ## Contract Validation status
 
 The theorem is accumulating evidence, not claiming final proof.

@@ -152,6 +152,11 @@ inside the lease/scope and audit the bounded effect. If this pattern repeats
 across adapters, record it as possible contract evidence instead of hiding it in
 one adapter.
 
+Keep effect execution separate from effect observation. If an effect launches but
+ADB/UI/CDP inspection fails afterward, classify the observer failure separately.
+Do not mark the effect failed unless execution itself failed; do not mark the
+experiment proven unless runtime audit evidence exists.
+
 ## Adapter implementation rule
 
 An adapter may:
