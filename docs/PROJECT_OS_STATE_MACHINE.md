@@ -545,7 +545,7 @@ The first court of Project OS is:
 
 It reports PASS/FAIL and violations with affected `run_id`, `event_id`, the law
 violated, and a detail string. It must not mutate, repair, normalize, backfill,
-or auto-fix state.
+or auto-fix state. Scenario case law lives in `PROJECT_OS_SCENARIOS.md`.
 
 ## Non-goals
 
