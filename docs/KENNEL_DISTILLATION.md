@@ -418,7 +418,8 @@ At that point Code Puppy is no longer merely an AI coding assistant. It is a
 Project Operating System running on top of Android, with institutional execution
 and knowledge layers between projects, objectives, and agents. The kennel owns
 knowledge distillation; the Project Run runtime model in `PROJECT_OS_RUNTIME.md`
-owns resumable execution.
+owns resumable execution; the Run Scheduler model in `PROJECT_OS_SCHEDULER.md`
+owns runtime prioritization and lease allocation.
 
 ## Constitutional docs
 
