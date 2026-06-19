@@ -36,6 +36,9 @@ Projects
               -> Models
 ```
 
+The minimum legal execution-loop contract lives in
+`PROJECT_OS_EXECUTION_LOOP.md`.
+
 The eventual event-driven execution loop is:
 
 ```text
