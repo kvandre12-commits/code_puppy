@@ -312,7 +312,7 @@ project state. The kennel preserves durable project memory.
 Linux -> CPU, memory, storage, network
 Android -> apps, notifications, locations, Bluetooth, permissions
 Code Puppy -> projects, agents, artifacts, workflows, repo state
-Kennel -> facts, decisions, artifacts, relationships, history
+Kennel -> principles, facts, decisions, artifacts, relationships, history
 ```
 
 Examples of durable project context:
@@ -380,6 +380,7 @@ not the only type. The distillation contract lives in `docs/KENNEL_DISTILLATION.
 
 ```text
 Kennel
+  -> Principles
   -> Facts
   -> Decisions
   -> Artifacts
@@ -390,6 +391,7 @@ Kennel
 Examples:
 
 ```text
+Principle: No direct power. Only granted power.
 Fact: Android owns runtime permissions.
 Decision: No god-agent.
 Artifact: docs/ANDROID_AGENT_OS_LAYER.md
@@ -401,6 +403,7 @@ The important question is not whether 195k tokens were saved. The important
 question is whether those tokens produced durable project knowledge:
 
 ```text
+principles
 discoveries
 designs
 commits

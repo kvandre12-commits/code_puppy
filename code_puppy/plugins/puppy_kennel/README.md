@@ -16,6 +16,7 @@ column:
 
 ```text
 Kennel
+  -> Principles
   -> Facts
   -> Decisions
   -> Artifacts
@@ -26,6 +27,7 @@ Kennel
 Examples:
 
 ```text
+Principle: No direct power. Only granted power.
 Fact: Android owns runtime permissions.
 Decision: No god-agent.
 Artifact: docs/ANDROID_AGENT_OS_LAYER.md
@@ -37,6 +39,7 @@ The important question is not whether 195k tokens were saved. The important
 question is whether those tokens produced durable output:
 
 ```text
+principles
 discoveries
 designs
 commits
@@ -146,7 +149,7 @@ budget. Three priority classes, no LLM, no embeddings:
 | Tier | Source | Quota (default) | Why |
 |---|---|---|---|
 | **P0** User Preferences | `user:default` wing, any role | ~30% | Short, durable, pervasive operator preferences |
-| **P1** Durable Project Notes | `repo:<cwd>` wing, `role='note'` | remainder | Explicit facts/decisions/artifacts/relationships/history — highest signal-to-token ratio |
+| **P1** Durable Project Notes | `repo:<cwd>` wing, `role='note'` | remainder | Explicit principles/facts/decisions/artifacts/relationships/history — highest signal-to-token ratio |
 
 Transcript quarantine is searchable and auditable, but intentionally not packed
 into the default working-context block. Promote it to explicit typed durable

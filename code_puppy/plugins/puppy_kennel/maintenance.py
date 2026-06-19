@@ -8,6 +8,7 @@ operator-sensitive; audit first, bulldozer later.
 from __future__ import annotations
 
 import hashlib
+import json
 import sqlite3
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
@@ -25,6 +26,7 @@ class DrawerAuditRow:
     wing: str
     role: str
     content: str
+    memory_type: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -49,6 +51,7 @@ class KennelAudit:
     total_wings: int
     by_wing: tuple[tuple[str, int], ...] = field(default_factory=tuple)
     by_role: tuple[tuple[str, int], ...] = field(default_factory=tuple)
+    by_memory_type: tuple[tuple[str, int], ...] = field(default_factory=tuple)
     exact_duplicates: tuple[DuplicateGroup, ...] = field(default_factory=tuple)
     short_drawer_count: int = 0
     quarantine_count: int = 0
@@ -64,6 +67,19 @@ class KennelAudit:
     @property
     def duplicate_drawer_count(self) -> int:
         return sum(group.count for group in self.exact_duplicates)
+
+    @property
+    def observable_durable_ratio(self) -> float | None:
+        """Current durable/(durable + quarantine) ratio.
+
+        This is not true distillation efficiency because we do not yet track
+        which quarantine drawers have been processed. It is a useful backlog
+        pressure proxy until quarantine lifecycle events exist.
+        """
+        denominator = self.durable_note_count + self.quarantine_count
+        if denominator <= 0:
+            return None
+        return self.durable_note_count / denominator
 
 
 def _normalize(content: str) -> str:
@@ -82,6 +98,23 @@ def _content_digest(content: str) -> str:
     return hashlib.sha256(_normalize(content).encode("utf-8")).hexdigest()
 
 
+def _memory_type(role: str, metadata_raw: str | None) -> str:
+    """Return a typed-memory label for audit summaries."""
+    if metadata_raw:
+        try:
+            meta = json.loads(metadata_raw)
+        except json.JSONDecodeError:
+            meta = {}
+        value = str(meta.get("memory_type") or "").strip().lower()
+        if value:
+            return value
+    if role == "quarantine":
+        return "transcript_quarantine"
+    if role == "note":
+        return "untyped_note"
+    return role or "unknown"
+
+
 def _fetch_rows(db_path: Path) -> list[DrawerAuditRow]:
     if not db_path.exists():
         return []
@@ -90,7 +123,7 @@ def _fetch_rows(db_path: Path) -> list[DrawerAuditRow]:
     try:
         rows = con.execute(
             """
-            SELECT d.id, d.role, d.content, w.name AS wing
+            SELECT d.id, d.role, d.content, d.metadata, w.name AS wing
             FROM drawers d
             JOIN rooms r ON r.id = d.room_id
             JOIN wings w ON w.id = r.wing_id
@@ -105,6 +138,7 @@ def _fetch_rows(db_path: Path) -> list[DrawerAuditRow]:
             wing=str(row["wing"]),
             role=str(row["role"] or "null"),
             content=str(row["content"]),
+            memory_type=_memory_type(str(row["role"] or "null"), row["metadata"]),
         )
         for row in rows
     ]
@@ -115,6 +149,7 @@ def build_audit(db_path: Path = DB_PATH) -> KennelAudit:
     rows = _fetch_rows(db_path)
     by_wing = Counter(row.wing for row in rows)
     by_role = Counter(row.role for row in rows)
+    by_memory_type = Counter(row.memory_type for row in rows)
     duplicate_buckets: dict[str, list[DrawerAuditRow]] = defaultdict(list)
     for row in rows:
         duplicate_buckets[_content_digest(row.content)].append(row)
@@ -133,6 +168,7 @@ def build_audit(db_path: Path = DB_PATH) -> KennelAudit:
         total_wings=len(by_wing),
         by_wing=tuple(by_wing.most_common()),
         by_role=tuple(by_role.most_common()),
+        by_memory_type=tuple(by_memory_type.most_common()),
         exact_duplicates=duplicates,
         short_drawer_count=short_drawer_count,
         quarantine_count=quarantine_count,
@@ -169,6 +205,15 @@ def render_audit(audit: KennelAudit, max_groups: int = 5) -> list[str]:
         f"  durable notes    : {audit.durable_note_count}",
         f"  distill backlog  : {audit.quarantine_count} quarantine drawer(s)",
     ]
+    if audit.observable_durable_ratio is not None:
+        lines.append(
+            "  observable yield : "
+            f"{audit.observable_durable_ratio:.1%} durable/(durable+quarantine)"
+        )
+    if audit.by_memory_type:
+        lines.append("Memory types:")
+        for memory_type, count in audit.by_memory_type[:8]:
+            lines.append(f"  {count:>4}  {memory_type}")
     if audit.by_wing:
         lines.append("Top wings:")
         for wing, count in audit.by_wing[:5]:
