@@ -131,6 +131,14 @@ Protect the experiment, not the theorem. If a boundary requires special
 Authority, Lease, Validator, or Audit behavior, classify that as possible
 contract evidence before adding exceptions.
 
+Classify action type before implementing:
+
+```text
+approved view/read/status      -> read boundary
+commit/comment/post/edit/send  -> persistent mutation boundary
+financial/regulated action     -> high-risk boundary
+```
+
 For Reddit or LinkedIn style adapters, treat read-only approved views as the
 first identity/reputation experiment. Posting, commenting, messaging,
 endorsements, or profile edits are persistent public mutations and need their

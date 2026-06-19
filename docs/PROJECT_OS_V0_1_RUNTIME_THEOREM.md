@@ -118,6 +118,59 @@ different consequences when money movement is involved. Treat any evidence that
 financial actions need a different approval chain or state model as legitimate
 data, not as an attack on the theorem.
 
+## Boundary capability classes
+
+Not every action behind the same app boundary belongs to the same experiment.
+Read-only or low-consequence bounded effects, persistent mutations, and
+high-risk effects have different consequences and should not be collapsed into
+one adapter milestone.
+
+Read / low-consequence bounded boundaries test:
+
+```text
+Authority -> Lease -> Read-only or bounded low-consequence effect -> Audit
+```
+
+Examples:
+
+```text
+Browser view
+Android activity
+me@sams approved view
+Reddit approved view
+LinkedIn approved view
+```
+
+Mutation boundaries test:
+
+```text
+Authority -> Lease -> Persistent mutation -> Audit
+```
+
+Examples:
+
+```text
+GitHub commit
+GitHub issue update
+me@sams workflow action
+Reddit comment
+LinkedIn post
+```
+
+High-risk boundaries test whether the governance model needs stronger approval
+semantics:
+
+```text
+Authority -> Lease -> High-risk effect -> Audit
+```
+
+Examples:
+
+```text
+Robinhood financial action
+potentially regulated action
+```
+
 Social platforms such as Reddit or LinkedIn are candidate identity/reputation
 boundaries. Their first experiment should be an approved view, not a public
 mutation:
@@ -146,10 +199,15 @@ Confidence ladder:
 Level 0  Idea                         -> theory exists
 Level 1  Internal runtime             -> No-op PASS
 Level 2  External runtime             -> Browser PASS, Android PASS
-Level 3  Identity/application boundary -> me@sams PENDING
+Level 3A Identity/application read boundary
+                                      -> me@sams PENDING
+                                      -> Reddit view PENDING
+                                      -> LinkedIn view PENDING
                                       -> first realistic opportunity to
                                          discover missing authority concepts
 Level 4  Persistent mutation          -> GitHub PENDING
+                                      -> Reddit comment PENDING
+                                      -> LinkedIn post PENDING
 Level 5  Financial-risk boundary      -> Robinhood PENDING
 ```
 
