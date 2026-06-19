@@ -9,11 +9,11 @@ What from today deserves to exist tomorrow?
 ```
 
 Most conversations do not. Most notifications do not. Most transcripts do not.
-Some objectives do. Some principles do. Some facts do. Some decisions do. Some
-artifacts do. Some relationships do. Some history does.
+Some objectives do. Some work items do. Some principles do. Some facts do. Some
+decisions do. Some artifacts do. Some relationships do. Some history does.
 
 The kennel is not just storing memory. It is converting work into institutional
-knowledge.
+knowledge and institutional continuity.
 
 ## Core flow
 
@@ -30,6 +30,7 @@ A broader Project OS stack:
 ```text
 Human
   -> Objectives
+  -> Work
   -> Institutional Knowledge
   -> Agents
   -> Android
@@ -45,7 +46,9 @@ What was in that conversation?
 and start asking:
 
 ```text
-What does the institution know?
+What are we trying to accomplish?
+What have we learned?
+What remains unfinished?
 ```
 
 Raw transcript is allowed into the kennel only as temporary quarantine. It must
@@ -58,14 +61,16 @@ quarantine transcript
   -> prune transcript crumbs
 ```
 
-## Objective-linked durable memory
+## Objective-linked durable memory and work
 
 Organizations do not preserve knowledge for its own sake. They preserve
-knowledge in service of goals. Without an objective, drawers become isolated
-facts. With an objective, they become a knowledge graph.
+knowledge in service of goals. They also preserve the execution state needed to
+continue those goals. Without an objective, drawers become isolated facts. With
+an objective and work items, they become a continuity graph.
 
 ```text
 Objective
+  -> Work Items
   -> Principles
   -> Facts
   -> Decisions
@@ -78,6 +83,8 @@ Example:
 
 ```text
 Objective: Build Android Project OS
+  -> Work Item: Implement kennel audit. Status: done.
+  -> Work Item: Implement distillation agent. Status: planned.
   -> Principle: Do not fight Android.
   -> Fact: Android owns permissions.
   -> Decision: Use quarantine before promotion.
@@ -93,13 +100,14 @@ What happened?
 It is:
 
 ```text
-What deserves to survive, and for which objective?
+What deserves to survive, for which objective, and what remains unfinished?
 ```
 
 ## Durable drawer types
 
 ```text
 Objectives
+Work Items
 Principles
 Facts
 Decisions
@@ -120,6 +128,24 @@ Build Android Project OS.
 Ship Droid viewer beta.
 Connect SharpEdge to approval-gated broker workflows.
 ```
+
+### Work Items
+
+Execution units attached to an objective. Work items answer what is planned,
+active, blocked, or done. They are not principles and they are not history;
+history records how they changed over time.
+
+Examples:
+
+```text
+Implement kennel audit. Status: done.
+Implement distillation agent. Status: planned.
+Add objective/work filters to recall. Status: planned.
+```
+
+A future agent should be able to attach to an objective, load its durable
+knowledge, inspect unfinished work items, and continue execution without needing
+the original conversation or the original person.
 
 ### Principles
 
@@ -227,6 +253,7 @@ A large session should reduce to a small durable packet.
 ```text
 57k-token session
   -> 1 objective link
+  -> 1 work item update
   -> 1 principle or policy check
   -> 1 fact
   -> 2 decisions
@@ -246,10 +273,11 @@ Promote a drawer only if it is one of these:
 1. reusable across future sessions;
 2. expensive to rediscover;
 3. tied to an objective;
-4. a principle, policy, or safety boundary;
-5. a project object or artifact reference;
-6. a relationship needed for orchestration;
-7. a history event needed for audit/replay.
+4. an execution state needed by future work;
+5. a principle, policy, or safety boundary;
+6. a project object or artifact reference;
+7. a relationship needed for orchestration;
+8. a history event needed for audit/replay.
 
 Otherwise leave it in quarantine and prune later.
 
@@ -261,6 +289,8 @@ Example:
 
 ```text
 SharpEdge session
+  -> 1 objective
+  -> 6 work item updates
   -> 2 principles
   -> 8 facts
   -> 12 decisions
@@ -271,6 +301,8 @@ is different from:
 
 ```text
 Another project
+  -> 0 objectives
+  -> 0 work item updates
   -> 0 principles
   -> 1 fact
   -> 0 decisions
@@ -304,6 +336,7 @@ Yield can also be tracked by drawer type:
 
 ```text
 Objective Yield
+Work Item Yield
 Principle Yield
 Fact Yield
 Decision Yield
@@ -351,8 +384,8 @@ years of project history
 ```
 
 At that point Code Puppy is no longer merely an AI coding assistant. It is a
-Project Operating System running on top of Android, with an Institutional
-Knowledge Layer between projects and agents.
+Project Operating System running on top of Android, with institutional execution
+and knowledge layers between objectives and agents.
 
 ## Constitutional docs
 
