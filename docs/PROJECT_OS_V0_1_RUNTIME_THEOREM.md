@@ -67,6 +67,22 @@ Define theorem
 New capabilities should continue to test the architecture instead of becoming
 special-case governments.
 
+## Contract Validation posture
+
+The next phase is not adapter development. It is contract validation.
+
+```text
+Do not protect the theorem.
+Protect the experiment.
+```
+
+For each boundary, state the hypothesis, state what would falsify it, run the
+smallest bounded effect, then interpret the result. Adapter bugs mean fix adapter
+code. Contract failures mean rethink the platform rule.
+
+Do not patch contradictions with special cases until the failure has been
+classified. Otherwise the theorem becomes unfalsifiable folklore.
+
 ## Boundary test ladder
 
 The roadmap is not a list of adapters. It is a sequence of increasingly
@@ -83,6 +99,19 @@ v0.5 Robinhood -> financial-risk boundary
 Each step increases the consequence of a bad theorem. The goal is not to make the
 agent do more things; it is to make the agent do bounded things through the same
 contract without modifying the contract.
+
+| Boundary | Hypothesis | Contract failure may mean |
+| --- | --- | --- |
+| Browser | Authority -> Lease -> External Effect -> Audit | effect handling incomplete |
+| Android | Authority -> Lease -> Device Effect -> Audit | lease/effect model incomplete |
+| me@sams | Authority -> Lease -> App/Agent Boundary -> Audit | authority model incomplete |
+| GitHub | Authority -> Lease -> Persistent Mutation -> Audit | effect lifecycle incomplete |
+| Robinhood | Authority -> Lease -> Financial Effect -> Audit | governance model incomplete |
+
+Robinhood is intentionally last: bug and governance failure can have materially
+different consequences when money movement is involved. Treat any evidence that
+financial actions need a different approval chain or state model as legitimate
+data, not as an attack on the theorem.
 
 ## Next repeatability test
 

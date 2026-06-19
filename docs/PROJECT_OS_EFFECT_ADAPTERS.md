@@ -107,6 +107,10 @@ The first effect for a new boundary should be boring: launch an approved screen,
 read an approved view, retrieve an approved status, then consume the lease and
 audit. Do not begin with complex workflows.
 
+Protect the experiment, not the theorem. If a boundary requires special
+Authority, Lease, Validator, or Audit behavior, classify that as possible
+contract evidence before adding exceptions.
+
 ## Adapter implementation rule
 
 An adapter may:
