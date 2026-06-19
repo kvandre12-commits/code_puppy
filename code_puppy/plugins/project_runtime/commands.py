@@ -92,6 +92,55 @@ def format_run_table(runs: Sequence[store.ProjectRun]) -> str:
     return "\n".join(lines)
 
 
+def _format_last_event(run: store.ProjectRun) -> str:
+    if not run.journal:
+        return "(none)"
+    event = run.journal[-1]
+    detail = f": {event.detail}" if event.detail else ""
+    return f"{event.ts} {event.action}{detail}".strip()
+
+
+def _format_journal_summary(run: store.ProjectRun) -> list[str]:
+    if not run.journal:
+        return ["journal_summary    : 0 event(s)"]
+    lines = [f"journal_summary    : {len(run.journal)} event(s)"]
+    for event in run.journal[-3:]:
+        detail = f" — {event.detail}" if event.detail else ""
+        lines.append(f"  - {event.ts} {event.action}{detail}".rstrip())
+    return lines
+
+
+def _format_blockers(run: store.ProjectRun) -> str:
+    if run.status == "blocked":
+        return "(not recorded yet)"
+    return "(none recorded)"
+
+
+def _format_required_approvals(run: store.ProjectRun) -> str:
+    if run.status == "waiting_approval":
+        return "(not recorded yet)"
+    return "(none recorded)"
+
+
+def format_run_inspect(run: store.ProjectRun) -> str:
+    """Render a human inspection view for one Project Run."""
+    lines = [
+        "Project Run Inspect",
+        "",
+        f"run_id             : {run.run_id}",
+        f"project            : {run.project}",
+        f"objective          : {run.objective}",
+        f"status             : {run.status}",
+        f"checkpoint         : {run.checkpoint or '(none)'}",
+        f"next_action        : {run.next_action or '(none)'}",
+        f"blockers           : {_format_blockers(run)}",
+        f"required_approvals : {_format_required_approvals(run)}",
+        f"last_event         : {_format_last_event(run)}",
+        *_format_journal_summary(run),
+    ]
+    return "\n".join(lines)
+
+
 def help_text() -> str:
     return "\n".join(
         [
@@ -100,6 +149,7 @@ def help_text() -> str:
             "      [--work <item>]... [--checkpoint <text>] [--next <text>]",
             "      [--status sleeping|ready|running|blocked|waiting_approval|...]",
             "  /project run list [--status <status>]",
+            "  /project run inspect <run_id>",
             "  /project run status [run_id] [--status <status>]",
             "  /project run checkpoint <run_id> --checkpoint <text>",
             "      [--next <text>] [--status <status>]",
@@ -144,6 +194,12 @@ def _handle_run_list(parts: list[str]) -> str:
     if parts:
         raise ValueError("list accepts only optional --status")
     return format_run_table(store.list_runs(status=status or None))
+
+
+def _handle_run_inspect(parts: list[str]) -> str:
+    if len(parts) != 1:
+        raise ValueError("inspect requires exactly one run_id")
+    return format_run_inspect(store.get_run(parts[0]))
 
 
 def _handle_run_status(parts: list[str]) -> str:
@@ -199,6 +255,8 @@ def dispatch(parts: list[str]) -> str:
         return _handle_run_create(rest)
     if action == "list":
         return _handle_run_list(rest)
+    if action == "inspect":
+        return _handle_run_inspect(rest)
     if action == "status":
         return _handle_run_status(rest)
     if action == "checkpoint":
