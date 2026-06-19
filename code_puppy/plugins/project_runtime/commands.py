@@ -220,6 +220,56 @@ def format_run_inspect(run: store.ProjectRun) -> str:
     return "\n".join(lines)
 
 
+def _format_why_latest_event(event: store.EventRecord) -> list[str]:
+    lines = [
+        "latest_event:",
+        f"  event_id        : {event.event_id}",
+        f"  event_type      : {event.event_type}",
+        f"  timestamp       : {event.timestamp or '(unknown)'}",
+        f"  source          : {event.source or '(unknown)'}",
+        f"  parent_event_id : {event.parent_event_id or '(none)'}",
+        f"  payload_summary : {event.payload_summary or '(none)'}",
+    ]
+    return lines
+
+
+def _format_why_trace(events: Sequence[store.EventRecord]) -> list[str]:
+    if len(events) <= 1:
+        return ["causality_trace:", "  latest event is a root event"]
+    lines = ["causality_trace:"]
+    for index, event in enumerate(events):
+        prefix = "root" if index == 0 else "caused"
+        lines.append(f"  {prefix}: {event.event_id} [{event.event_type}]")
+        if event.payload_summary:
+            lines.append(f"    summary: {event.payload_summary}")
+    return lines
+
+
+def format_run_why(run: store.ProjectRun) -> str:
+    """Explain the current Project Run state using only persisted evidence."""
+    events = store.list_events(run.run_id)
+    lines = [
+        "Project Run Why",
+        "",
+        f"run_id      : {run.run_id}",
+        f"project     : {run.project}",
+        f"objective   : {run.objective}",
+        f"status      : {run.status}",
+        f"checkpoint  : {run.checkpoint or '(none)'}",
+        f"next_action : {run.next_action or '(none)'}",
+        "",
+    ]
+    if not events:
+        lines.append("No Event Records yet.")
+        return "\n".join(lines)
+    latest_event = events[-1]
+    trace = store.trace_event(latest_event.event_id)
+    lines.extend(_format_why_latest_event(latest_event))
+    lines.append("")
+    lines.extend(_format_why_trace(trace))
+    return "\n".join(lines)
+
+
 def help_text() -> str:
     return "\n".join(
         [
@@ -229,6 +279,7 @@ def help_text() -> str:
             "      [--status sleeping|ready|running|blocked|waiting_approval|...]",
             "  /project run list [--status <status>]",
             "  /project run inspect <run_id>",
+            "  /project run why <run_id>",
             "  /project run events <run_id>",
             "  /project run event-types",
             "  /project event trace <event_id>",
@@ -282,6 +333,12 @@ def _handle_run_inspect(parts: list[str]) -> str:
     if len(parts) != 1:
         raise ValueError("inspect requires exactly one run_id")
     return format_run_inspect(store.get_run(parts[0]))
+
+
+def _handle_run_why(parts: list[str]) -> str:
+    if len(parts) != 1:
+        raise ValueError("why requires exactly one run_id")
+    return format_run_why(store.get_run(parts[0]))
 
 
 def _handle_run_events(parts: list[str]) -> str:
@@ -362,6 +419,8 @@ def dispatch(parts: list[str]) -> str:
         return _handle_run_list(rest)
     if action == "inspect":
         return _handle_run_inspect(rest)
+    if action == "why":
+        return _handle_run_why(rest)
     if action == "events":
         return _handle_run_events(rest)
     if action == "event-types":

@@ -128,6 +128,10 @@ def test_dispatch_create_status_checkpoint_resume_complete(tmp_path, monkeypatch
     assert "Project Run Inspect" in inspected
     assert "run_id             : run-cli-001" in inspected
 
+    why = commands.dispatch(["run", "why", "run-cli-001"])
+    assert "Project Run Why" in why
+    assert "latest_event:" in why
+
     events = commands.dispatch(["run", "events", "run-cli-001"])
     assert "Project Run Events" in events
     assert "run_created" in events
@@ -468,6 +472,92 @@ def test_project_event_trace_command_is_read_only(tmp_path, monkeypatch):
     assert f"parent={root.event_id}" in output
     assert "summary: Need approval" in output
     assert "summary: Approved" in output
+    assert state_file.read_text(encoding="utf-8") == before
+
+
+def test_run_why_explains_current_state_from_latest_event(tmp_path, monkeypatch):
+    state_file = _use_tmp_state(tmp_path, monkeypatch)
+    store.create_run(
+        project="Code Puppy",
+        objective="Explain runs",
+        run_id="run-why",
+        checkpoint="event layer exists",
+        next_action="add why command",
+    )
+    before = state_file.read_text(encoding="utf-8")
+
+    output = commands.dispatch(["run", "why", "run-why"])
+
+    assert output.startswith("Project Run Why")
+    assert "run_id      : run-why" in output
+    assert "project     : Code Puppy" in output
+    assert "objective   : Explain runs" in output
+    assert "status      : sleeping" in output
+    assert "checkpoint  : event layer exists" in output
+    assert "next_action : add why command" in output
+    assert "latest_event:" in output
+    assert "event_type      : run_created" in output
+    assert "payload_summary : Project Run created" in output
+    assert "causality_trace:" in output
+    assert "latest event is a root event" in output
+    assert "scheduler" not in output.lower()
+    assert "wake" not in output.lower()
+    assert state_file.read_text(encoding="utf-8") == before
+
+
+def test_run_why_includes_latest_event_causality_trace(tmp_path, monkeypatch):
+    state_file = _use_tmp_state(tmp_path, monkeypatch)
+    store.create_run(
+        project="Code Puppy", objective="Trace why", run_id="run-why-chain"
+    )
+    root = store.record_event(
+        "run-why-chain",
+        "approval_requested",
+        payload_summary="Need approval",
+    )
+    granted = store.record_event(
+        "run-why-chain",
+        "approval_granted",
+        payload_summary="Approved",
+        parent_event_id=root.event_id,
+    )
+    unblocked = store.record_event(
+        "run-why-chain",
+        "run_unblocked",
+        payload_summary="Approval cleared",
+        parent_event_id=granted.event_id,
+    )
+    before = state_file.read_text(encoding="utf-8")
+
+    output = commands.dispatch(["run", "why", "run-why-chain"])
+
+    assert f"event_id        : {unblocked.event_id}" in output
+    assert f"parent_event_id : {granted.event_id}" in output
+    assert f"root: {root.event_id} [approval_requested]" in output
+    assert f"caused: {granted.event_id} [approval_granted]" in output
+    assert f"caused: {unblocked.event_id} [run_unblocked]" in output
+    assert "summary: Need approval" in output
+    assert "summary: Approved" in output
+    assert "summary: Approval cleared" in output
+    assert state_file.read_text(encoding="utf-8") == before
+
+
+def test_run_why_reports_no_event_records_honestly(tmp_path, monkeypatch):
+    state_file = _use_tmp_state(tmp_path, monkeypatch)
+    store.create_run(project="Legacy", objective="No events", run_id="run-no-events")
+    state = store.load_state()
+    state["events"] = {}
+    store.save_state(state)
+    before = state_file.read_text(encoding="utf-8")
+
+    output = commands.dispatch(["run", "why", "run-no-events"])
+
+    assert output.startswith("Project Run Why")
+    assert "run_id      : run-no-events" in output
+    assert "status      : sleeping" in output
+    assert "No Event Records yet." in output
+    assert "latest_event:" not in output
+    assert "causality_trace:" not in output
     assert state_file.read_text(encoding="utf-8") == before
 
 
