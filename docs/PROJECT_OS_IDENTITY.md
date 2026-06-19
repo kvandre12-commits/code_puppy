@@ -46,9 +46,12 @@ Related doctrines:
 No direct power. Only granted power.
 No state change without authority.
 No authority without accountability.
+No event may create an illegal state transition.
 Evidence first. Behavior second.
 No scheduling without causality.
 ```
+
+Lifecycle doctrine lives in `PROJECT_OS_STATE_MACHINE.md`.
 
 ## Identity is not authentication
 
