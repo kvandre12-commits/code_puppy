@@ -65,6 +65,12 @@ def test_create_checkpoint_resume_and_complete_project_run(tmp_path, monkeypatch
 
     raw = json.loads(state_file.read_text(encoding="utf-8"))
     assert raw["runs"]["run-android-os-001"]["status"] == "completed"
+    assert [event["event_type"] for event in raw["events"].values()] == [
+        "run_created",
+        "checkpoint_saved",
+        "project_run_resumed",
+        "project_run_completed",
+    ]
 
 
 def test_project_run_survives_reloading_without_agent_or_model(tmp_path, monkeypatch):
@@ -119,6 +125,10 @@ def test_dispatch_create_status_checkpoint_resume_complete(tmp_path, monkeypatch
     inspected = commands.dispatch(["run", "inspect", "run-cli-001"])
     assert "Project Run Inspect" in inspected
     assert "run_id             : run-cli-001" in inspected
+
+    events = commands.dispatch(["run", "events", "run-cli-001"])
+    assert "Project Run Events" in events
+    assert "run_created" in events
 
     checkpointed = commands.dispatch(
         [
@@ -247,7 +257,7 @@ def test_run_inspect_renders_read_only_operator_view(tmp_path, monkeypatch):
     assert "blockers           : (none recorded)" in inspected
     assert "required_approvals : (none recorded)" in inspected
     assert "last_event         : " in inspected
-    assert "checkpoint: inspect view implemented" in inspected
+    assert "checkpoint_saved: inspect view implemented" in inspected
     assert "journal_summary    : 2 event(s)" in inspected
     assert "created" in inspected
     assert "checkpoint" in inspected
@@ -277,6 +287,52 @@ def test_run_inspect_explains_unrecorded_blockers_and_approvals(tmp_path, monkey
     assert "required_approvals : (none recorded)" in blocked
     assert "blockers           : (none recorded)" in approval
     assert "required_approvals : (not recorded yet)" in approval
+
+
+def test_run_events_renders_read_only_event_records(tmp_path, monkeypatch):
+    state_file = _use_tmp_state(tmp_path, monkeypatch)
+
+    store.create_run(
+        project="Code Puppy",
+        objective="Build observability",
+        run_id="run-events-001",
+        checkpoint="run exists",
+    )
+    store.checkpoint_run(
+        "run-events-001",
+        checkpoint="event record exists",
+        next_action="add queue later",
+    )
+    before = state_file.read_text(encoding="utf-8")
+
+    events = commands.dispatch(["run", "events", "run-events-001"])
+
+    assert events.startswith("Project Run Events")
+    assert "run_id: run-events-001" in events
+    for header in ("event_id", "timestamp", "event_type", "source", "payload_summary"):
+        assert header in events
+    assert "run_created" in events
+    assert "checkpoint_saved" in events
+    assert "project_runtime" in events
+    assert "event record exists" in events
+    assert state_file.read_text(encoding="utf-8") == before
+
+
+def test_store_lists_event_records_by_run_id(tmp_path, monkeypatch):
+    _use_tmp_state(tmp_path, monkeypatch)
+
+    store.create_run(project="A", objective="One", run_id="run-a")
+    store.create_run(project="B", objective="Two", run_id="run-b")
+    store.checkpoint_run("run-a", checkpoint="only A")
+
+    events = store.list_events("run-a")
+
+    assert [event.run_id for event in events] == ["run-a", "run-a"]
+    assert [event.event_type for event in events] == [
+        "run_created",
+        "checkpoint_saved",
+    ]
+    assert all(event.event_id.startswith("evt-") for event in events)
 
 
 def test_non_project_command_is_ignored():

@@ -33,16 +33,24 @@ Projects
               -> Models
 ```
 
-The event-driven execution loop is:
+The eventual event-driven execution loop is:
 
 ```text
-Event -> Wake Run -> Lease Agent -> Execute -> Checkpoint -> Sleep
+Event Record -> Event Queue -> Wake Run -> Lease Agent -> Execute -> Checkpoint -> Sleep
 ```
 
-Scheduling turns resumable runs into an operating system.
+Scheduling turns resumable runs into an operating system, but scheduling must not
+come before observability.
 
 ```text
-Event Queue -> Run Table -> priority -> lease allocation -> checkpoint
+Event Record -> Event Queue -> Run Table -> priority -> lease allocation -> checkpoint
+```
+
+Doctrine:
+
+```text
+No execution without observability.
+No observability without events.
 ```
 
 Durability boundary:
@@ -144,11 +152,17 @@ Meaning:
 | `failed` | Run hit unrecovered error and needs triage |
 | `archived` | Historical only; not schedulable |
 
+## Event Record before Event Queue
+
+Before an Event Queue exists, the Project OS must persist Event Records. Records
+are durable evidence; queues are scheduling machinery. Do not build behavior
+before the evidence trail exists.
+
 ## Event Queue
 
 The Project OS equivalent of wakeup interrupts is an **Event Queue**. It is a
-kernel service, not a side list. The scheduler should react to events, not poll
-runs forever like a bored intern.
+kernel service, not a side list. The scheduler should react to queued events,
+not poll runs forever like a bored intern.
 
 Events may come from:
 
