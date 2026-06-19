@@ -145,6 +145,13 @@ first identity/reputation experiment. Posting, commenting, messaging,
 endorsements, or profile edits are persistent public mutations and need their
 own later mutation-boundary experiment.
 
+If a boundary presents biometric/MFA/operator approval, do not treat that as an
+adapter bug by default and do not bypass it. Pause at an explicit human approval
+checkpoint, let the operator satisfy the external challenge, then continue only
+inside the lease/scope and audit the bounded effect. If this pattern repeats
+across adapters, record it as possible contract evidence instead of hiding it in
+one adapter.
+
 ## Adapter implementation rule
 
 An adapter may:
