@@ -8,8 +8,8 @@ What from today deserves to exist tomorrow?
 ```
 
 Most conversations do not. Most notifications do not. Most transcripts do not.
-Some facts do. Some decisions do. Some artifacts do. Some relationships do. Some
-history does.
+Some principles do. Some facts do. Some decisions do. Some artifacts do. Some
+relationships do. Some history does.
 
 ## Core flow
 
@@ -33,11 +33,25 @@ quarantine transcript
 ## Durable drawer types
 
 ```text
+Principles
 Facts
 Decisions
 Artifacts
 Relationships
 History
+```
+
+### Principles
+
+Governing rules used to judge future work. Principles are stronger than ordinary
+decisions because they constrain future decisions.
+
+Examples:
+
+```text
+No direct power. Only granted power.
+Do not fight Android.
+Quarantine before promotion.
 ```
 
 ### Facts
@@ -109,6 +123,7 @@ A large session should reduce to a small durable packet.
 
 ```text
 57k-token session
+  -> 1 principle or policy check
   -> 1 fact
   -> 2 decisions
   -> 1 artifact
@@ -126,12 +141,42 @@ Promote a drawer only if it is one of these:
 
 1. reusable across future sessions;
 2. expensive to rediscover;
-3. a policy or safety boundary;
+3. a principle, policy, or safety boundary;
 4. a project object or artifact reference;
 5. a relationship needed for orchestration;
 6. a history event needed for audit/replay.
 
 Otherwise leave it in quarantine and prune later.
+
+## Distillation metrics
+
+The future true metric is:
+
+```text
+Distillation Efficiency = Durable Drawers Created / Quarantine Drawers Processed
+```
+
+Yield can also be tracked by drawer type:
+
+```text
+Principle Yield
+Fact Yield
+Decision Yield
+Artifact Yield
+Relationship Yield
+History Yield
+```
+
+Today, until quarantine lifecycle events exist, audit output can only show a
+proxy:
+
+```text
+observable durable ratio = durable notes / (durable notes + quarantine drawers)
+distill backlog = quarantine drawers awaiting review
+```
+
+Do not confuse the proxy with true efficiency. True efficiency requires knowing
+which quarantine drawers were processed, promoted, ignored, or pruned.
 
 ## Anti-token-burn engine
 
@@ -162,3 +207,18 @@ years of project history
 
 At that point Code Puppy is no longer merely an AI coding assistant. It is a
 Project Operating System running on top of Android.
+
+## Constitutional docs
+
+Some docs are no longer just notes. They are governing principles for future
+work:
+
+```text
+KENNEL_DISTILLATION.md
+ANDROID_AGENT_OS_LAYER.md
+AGENT_ORG_CHART.md
+AGENT_POWER.md
+```
+
+They define how future work is judged. The kennel should preserve this class of
+knowledge as Principles, not bury it as generic facts or decisions.
