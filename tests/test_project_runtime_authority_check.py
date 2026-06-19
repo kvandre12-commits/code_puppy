@@ -69,9 +69,91 @@ def test_authority_check_reports_missing_grants_without_issuing(tmp_path, monkey
     assert "wakes                  : no" in output
     assert "leases                 : no" in output
     assert "executes               : no" in output
-    assert "identity store not implemented" in output
-    assert "authority grant store not implemented" in output
-    assert "capability grant store not implemented" in output
+    assert "identity grant evidence missing" in output
+    assert "authority grant for requested action scope missing" in output
+    assert "capability grant for requested capability scope missing" in output
+    assert state_file.read_text(encoding="utf-8") == before
+
+
+def test_authority_check_uses_matching_grant_but_does_not_authorize(
+    tmp_path, monkeypatch
+):
+    state_file = _use_tmp_state(tmp_path, monkeypatch)
+    store.create_run(
+        project="Code Puppy",
+        objective="Eligible work",
+        run_id="run-eligible",
+        status="ready",
+    )
+    _patch_run(state_file, "run-eligible", updated_at="2026-01-01T00:01:00+00:00")
+    state = _load_raw(state_file)
+    state["authority_grants"] = {
+        "grant-runtime-step": {
+            "grant_id": "grant-runtime-step",
+            "subject_identity": "unassigned_agent",
+            "allowed_action_scope": "project_run.execute_bounded_step",
+            "allowed_capability_scope": "project_runtime.step",
+            "boundary": "project_run",
+            "issuer": "operator",
+            "issued_at": "2026-01-01T00:00:00+00:00",
+            "expires_at": "2099-01-01T00:00:00+00:00",
+            "run_id": "run-eligible",
+            "reason": "test authority grant",
+        }
+    }
+    _save_raw(state_file, state)
+    before = state_file.read_text(encoding="utf-8")
+
+    output = commands.dispatch(["run", "authority-check"])
+
+    assert (
+        "reason                  : authority check passed; lease is issuable but not issued"
+        in output
+    )
+    assert "identity_present       : yes" in output
+    assert "authority_grant_present: yes" in output
+    assert "capability_grant_present: yes" in output
+    assert "lease_issuable         : yes" in output
+    assert "authorizes             : no" in output
+    assert "leases                 : no" in output
+    assert "executes               : no" in output
+    assert "Blockers:\n- (none)" in output
+    assert state_file.read_text(encoding="utf-8") == before
+
+
+def test_authority_check_ignores_revoked_grants(tmp_path, monkeypatch):
+    state_file = _use_tmp_state(tmp_path, monkeypatch)
+    store.create_run(
+        project="Code Puppy",
+        objective="Eligible work",
+        run_id="run-eligible",
+        status="ready",
+    )
+    _patch_run(state_file, "run-eligible", updated_at="2026-01-01T00:01:00+00:00")
+    state = _load_raw(state_file)
+    state["authority_grants"] = {
+        "grant-revoked": {
+            "grant_id": "grant-revoked",
+            "subject_identity": "unassigned_agent",
+            "allowed_action_scope": "project_run.execute_bounded_step",
+            "allowed_capability_scope": "project_runtime.step",
+            "boundary": "project_run",
+            "issuer": "operator",
+            "issued_at": "2026-01-01T00:00:00+00:00",
+            "expires_at": "2099-01-01T00:00:00+00:00",
+            "revoked_at": "2026-01-01T00:05:00+00:00",
+            "run_id": "run-eligible",
+        }
+    }
+    _save_raw(state_file, state)
+    before = state_file.read_text(encoding="utf-8")
+
+    output = commands.dispatch(["run", "authority-check"])
+
+    assert "identity_present       : no" in output
+    assert "authority_grant_present: no" in output
+    assert "capability_grant_present: no" in output
+    assert "lease_issuable         : no" in output
     assert state_file.read_text(encoding="utf-8") == before
 
 

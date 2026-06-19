@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import re
+from collections.abc import Mapping
 from dataclasses import asdict, dataclass, field, replace
 from datetime import datetime, timezone
 from typing import Any
@@ -75,6 +76,23 @@ class EventRecord:
     parent_event_id: str = ""
 
 
+@dataclass(frozen=True, slots=True)
+class AuthorityGrant:
+    grant_id: str
+    subject_identity: str
+    allowed_action_scope: str
+    allowed_capability_scope: str
+    boundary: str
+    issuer: str
+    issued_at: str
+    expires_at: str = ""
+    revoked_at: str = ""
+    project_id: str = ""
+    run_id: str = ""
+    reason: str = ""
+    precedent_id: str = ""
+
+
 EVENT_TYPE_CATALOG = (
     EventType("run_created", "lifecycle", "A Project Run was created"),
     EventType("checkpoint_saved", "lifecycle", "A Project Run checkpoint was saved"),
@@ -128,7 +146,7 @@ def list_event_types() -> tuple[EventType, ...]:
 
 
 def empty_state() -> dict[str, Any]:
-    return {"version": 1, "runs": {}, "events": {}}
+    return {"version": 1, "runs": {}, "events": {}, "authority_grants": {}}
 
 
 def load_state() -> dict[str, Any]:
@@ -144,6 +162,8 @@ def load_state() -> dict[str, Any]:
     state.setdefault("version", 1)
     if not isinstance(state.get("events"), dict):
         state["events"] = {}
+    if not isinstance(state.get("authority_grants"), dict):
+        state["authority_grants"] = {}
     return state
 
 
@@ -227,6 +247,28 @@ def event_to_dict(event: EventRecord) -> dict[str, Any]:
     return asdict(event)
 
 
+def authority_grant_from_dict(raw: dict[str, Any]) -> AuthorityGrant:
+    return AuthorityGrant(
+        grant_id=str(raw.get("grant_id") or ""),
+        subject_identity=str(raw.get("subject_identity") or ""),
+        allowed_action_scope=str(raw.get("allowed_action_scope") or ""),
+        allowed_capability_scope=str(raw.get("allowed_capability_scope") or ""),
+        boundary=str(raw.get("boundary") or "project_run"),
+        issuer=str(raw.get("issuer") or ""),
+        issued_at=str(raw.get("issued_at") or ""),
+        expires_at=str(raw.get("expires_at") or ""),
+        revoked_at=str(raw.get("revoked_at") or ""),
+        project_id=str(raw.get("project_id") or ""),
+        run_id=str(raw.get("run_id") or ""),
+        reason=str(raw.get("reason") or ""),
+        precedent_id=str(raw.get("precedent_id") or ""),
+    )
+
+
+def authority_grant_to_dict(grant: AuthorityGrant) -> dict[str, Any]:
+    return asdict(grant)
+
+
 def append_journal(run: ProjectRun, action: str, detail: str = "") -> ProjectRun:
     event = JournalEvent(ts=utc_now_iso(), action=action, detail=detail)
     return replace(run, journal=(*run.journal, event))
@@ -246,6 +288,21 @@ def get_run(run_id: str) -> ProjectRun:
     if not isinstance(raw, dict):
         raise KeyError(f"Project Run not found: {run_id}")
     return run_from_dict(raw)
+
+
+def list_authority_grants(
+    state: Mapping[str, Any] | None = None,
+) -> tuple[AuthorityGrant, ...]:
+    raw_state = state if state is not None else load_state()
+    raw_grants = raw_state.get("authority_grants", {})
+    if not isinstance(raw_grants, dict):
+        return ()
+    grants = tuple(
+        authority_grant_from_dict(raw)
+        for raw in raw_grants.values()
+        if isinstance(raw, dict)
+    )
+    return tuple(sorted(grants, key=lambda grant: grant.grant_id))
 
 
 def _next_event_id(state: dict[str, Any], event_type: str) -> str:

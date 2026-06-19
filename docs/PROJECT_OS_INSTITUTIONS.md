@@ -252,13 +252,25 @@ leasing, waking, or executing anything.
 Second implemented command:
 
 ```text
+/project authority grants
+```
+
+This is the read-only Authority Grant registry report. It lists configured
+AuthorityGrant records and their subject identity, action scope, capability
+scope, boundary, issuer, expiry, revocation status, and rationale without
+creating, revoking, authorizing, leasing, waking, or executing anything.
+
+Third implemented command:
+
+```text
 /project run authority-check
 ```
 
 This is the read-only authority check report. It consumes `/project run
-lease-draft` output and reports whether identity, authority grant, and capability
-grant evidence exists, and whether a lease is issuable, without authorizing,
-issuing, leasing, waking, or executing anything.
+lease-draft` output and consults AuthorityGrant records to report whether
+identity, authority grant, and capability grant evidence exists, and whether a
+lease is issuable, without authorizing, issuing, leasing, waking, or executing
+anything.
 
 Must not:
 
@@ -272,8 +284,10 @@ expand lease scope after issue
 execute without an issued lease
 ```
 
-A lease draft describes requested authority. An issued lease records granted
-authority.
+An AuthorityGrant record describes permission evidence. A lease draft describes
+requested authority. An issued lease records granted operational authority.
+Grant records are not leases, and an authority check that passes still does not
+issue a lease.
 
 ## Execution
 
