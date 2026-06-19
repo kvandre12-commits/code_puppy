@@ -118,6 +118,7 @@ EVENT_TYPE_CATALOG = (
 _EVENT_TYPES_BY_NAME = {
     event_type.name: event_type for event_type in EVENT_TYPE_CATALOG
 }
+_EFFECT_EVENT_RE = re.compile(r"^[a-z][a-z0-9_]*_effect_executed$")
 
 
 def utc_now_iso() -> str:
@@ -142,10 +143,13 @@ def normalize_status(status: str) -> str:
 
 def normalize_event_type(event_type: str) -> str:
     normalized = event_type.strip().lower().replace("-", "_")
-    if normalized not in _EVENT_TYPES_BY_NAME:
-        allowed = ", ".join(sorted(_EVENT_TYPES_BY_NAME))
-        raise ValueError(f"unknown event type {event_type!r}; allowed: {allowed}")
-    return normalized
+    if normalized in _EVENT_TYPES_BY_NAME or _EFFECT_EVENT_RE.fullmatch(normalized):
+        return normalized
+    allowed = ", ".join(sorted(_EVENT_TYPES_BY_NAME))
+    raise ValueError(
+        f"unknown event type {event_type!r}; allowed: {allowed}, "
+        "or <adapter>_effect_executed"
+    )
 
 
 def list_event_types() -> tuple[EventType, ...]:
