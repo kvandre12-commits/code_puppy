@@ -131,13 +131,18 @@ Android boundary  -> PASS
 Confidence ladder:
 
 ```text
-Level 0  Idea                         -> Authority -> Lease -> Effect -> Audit
+Level 0  Idea                         -> theory exists
 Level 1  Internal runtime             -> No-op PASS
 Level 2  External runtime             -> Browser PASS, Android PASS
 Level 3  Identity/application boundary -> me@sams PENDING
+                                      -> first realistic opportunity to
+                                         discover missing authority concepts
 Level 4  Persistent mutation          -> GitHub PENDING
 Level 5  Financial-risk boundary      -> Robinhood PENDING
 ```
+
+The theorem has survived every boundary tested so far. No tested boundary has yet
+required Authority, Lease, Validator, or Audit framework changes.
 
 Current confidence level:
 
