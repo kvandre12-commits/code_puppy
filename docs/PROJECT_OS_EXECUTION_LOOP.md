@@ -74,6 +74,8 @@ The invariant is:
 ```text
 State ≠ Legality ≠ Eligibility ≠ Priority ≠ Selection ≠ Scheduling ≠ Execution
 Eligibility ≠ Priority
+Eligibility is upstream of Priority.
+Priority cannot modify Eligibility.
 ```
 
 This separation is the difference between a governed process engine and one big
@@ -95,9 +97,9 @@ Project Run
 That keeps governance drift and priority drift out of dispatch machinery. The
 validator applies law but never performs work. The projection publishes eligible
 runs but never selects or wakes them. Selection Policy chooses among eligible
-runs but never decides legality. The scheduler dispatches selected work but never
-ranks candidates or decides what is legal. Execution performs bounded work only
-after the upstream layers allow it.
+runs but never decides legality or creates candidates. The scheduler dispatches
+selected work but never ranks candidates or decides what is legal. Execution
+performs bounded work only after the upstream layers allow it.
 
 The first formal docket command is:
 
@@ -203,6 +205,8 @@ selection_reason
 policy_inputs
 ```
 
+The Selection Policy consumes candidates. It does not create candidates.
+
 The Selection Policy must not:
 
 ```text
@@ -210,6 +214,8 @@ make invalid runs eligible
 turn validator FAIL into runnable work
 bypass waiting_approval
 bypass blocked evidence
+promote excluded runs
+create candidates from raw Project Runs
 allocate leases
 wake runs
 dispatch work
@@ -217,6 +223,41 @@ dispatch work
 
 Eligibility is permission. Priority is preference. Those are not the same thing,
 because apparently civilization requires writing that down.
+
+Constitutional analogy:
+
+```text
+Validator                 = Judicial branch
+Runnable Candidate Projection = Court docket
+Selection Policy          = Agenda setting
+Scheduler                 = Clerk / dispatcher
+Execution                 = Executive action
+```
+
+Each layer receives authority from the upstream layer. None may manufacture
+authority on its own.
+
+Doctrine test case:
+
+```text
+Input runs:
+  run-high    eligible, high priority
+  run-low     eligible, low priority
+  run-blocked blocked, high priority
+
+Runnable Candidate Projection:
+  Candidates: run-high, run-low
+  Excluded  : run-blocked
+
+Selection Policy:
+  Selected: run-high
+
+Scheduler:
+  Dispatch: run-high
+```
+
+If any layer can jump from `run-blocked` to `Selected`, the architecture has a
+doctrine violation. Priority never turns an excluded run into an eligible run.
 
 ## Minimum viable Scheduler
 
@@ -414,6 +455,7 @@ These should remain impossible until read-only preflight is proven:
 
 ```text
 mutable Event Queue
+automatic Selection Policy
 automatic Scheduler
 active Agent Lease allocation
 automatic run wake
