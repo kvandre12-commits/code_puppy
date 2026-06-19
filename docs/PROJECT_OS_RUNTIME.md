@@ -277,6 +277,58 @@ final checkpoints
 Archival should not preserve live execution leases. A restored project starts a
 new Project Run.
 
+## Event Record
+
+Before the Project OS gets an Event Queue, it needs an **Event Record**.
+
+An Event Record is persisted evidence that something happened. It does not wake,
+schedule, lease, or execute anything by itself.
+
+Minimum shape:
+
+```text
+event_id
+run_id
+event_type
+timestamp
+source
+payload_summary
+```
+
+Examples:
+
+```text
+run_created
+checkpoint_saved
+work_item_completed
+approval_requested
+approval_granted
+project_run_resumed
+project_run_slept
+```
+
+Doctrine:
+
+```text
+No execution without observability.
+No observability without events.
+```
+
+This mirrors the authority rule:
+
+```text
+No direct power. Only granted power.
+```
+
+The implementation starts with persisted Event Records and a read-only viewer:
+
+```text
+/project run events <run_id>
+```
+
+Only after Event Records exist should the Project OS grow an Event Queue,
+Scheduler, and Agent Lease allocation.
+
 ## Project Run table
 
 The Project OS equivalent of a process table is a **Run Table**.

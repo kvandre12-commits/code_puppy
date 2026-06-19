@@ -57,6 +57,16 @@ class ProjectRun:
     journal: tuple[JournalEvent, ...] = field(default_factory=tuple)
 
 
+@dataclass(frozen=True, slots=True)
+class EventRecord:
+    event_id: str
+    run_id: str
+    event_type: str
+    timestamp: str
+    source: str
+    payload_summary: str = ""
+
+
 def utc_now_iso() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
@@ -78,7 +88,7 @@ def normalize_status(status: str) -> str:
 
 
 def empty_state() -> dict[str, Any]:
-    return {"version": 1, "runs": {}}
+    return {"version": 1, "runs": {}, "events": {}}
 
 
 def load_state() -> dict[str, Any]:
@@ -92,6 +102,8 @@ def load_state() -> dict[str, Any]:
     if not isinstance(state, dict) or not isinstance(state.get("runs"), dict):
         return empty_state()
     state.setdefault("version", 1)
+    if not isinstance(state.get("events"), dict):
+        state["events"] = {}
     return state
 
 
@@ -154,6 +166,21 @@ def run_to_dict(run: ProjectRun) -> dict[str, Any]:
     return asdict(run)
 
 
+def event_from_dict(raw: dict[str, Any]) -> EventRecord:
+    return EventRecord(
+        event_id=str(raw.get("event_id") or ""),
+        run_id=str(raw.get("run_id") or ""),
+        event_type=str(raw.get("event_type") or ""),
+        timestamp=str(raw.get("timestamp") or ""),
+        source=str(raw.get("source") or ""),
+        payload_summary=str(raw.get("payload_summary") or ""),
+    )
+
+
+def event_to_dict(event: EventRecord) -> dict[str, Any]:
+    return asdict(event)
+
+
 def append_journal(run: ProjectRun, action: str, detail: str = "") -> ProjectRun:
     event = JournalEvent(ts=utc_now_iso(), action=action, detail=detail)
     return replace(run, journal=(*run.journal, event))
@@ -175,11 +202,64 @@ def get_run(run_id: str) -> ProjectRun:
     return run_from_dict(raw)
 
 
+def _next_event_id(state: dict[str, Any], event_type: str) -> str:
+    events = state.setdefault("events", {})
+    return f"evt-{len(events) + 1:06d}-{slugify(event_type)}"
+
+
+def _append_event(
+    state: dict[str, Any],
+    *,
+    run_id: str,
+    event_type: str,
+    payload_summary: str = "",
+    source: str = "project_runtime",
+) -> EventRecord:
+    event = EventRecord(
+        event_id=_next_event_id(state, event_type),
+        run_id=run_id,
+        event_type=event_type,
+        timestamp=utc_now_iso(),
+        source=source,
+        payload_summary=payload_summary.strip(),
+    )
+    state.setdefault("events", {})[event.event_id] = event_to_dict(event)
+    return event
+
+
 def _put_run(run: ProjectRun) -> ProjectRun:
     state = load_state()
     state.setdefault("runs", {})[run.run_id] = run_to_dict(run)
     save_state(state)
     return run
+
+
+def _put_run_and_record_event(
+    run: ProjectRun,
+    *,
+    event_type: str,
+    payload_summary: str = "",
+) -> ProjectRun:
+    state = load_state()
+    state.setdefault("runs", {})[run.run_id] = run_to_dict(run)
+    _append_event(
+        state,
+        run_id=run.run_id,
+        event_type=event_type,
+        payload_summary=payload_summary,
+    )
+    save_state(state)
+    return run
+
+
+def list_events(run_id: str) -> list[EventRecord]:
+    get_run(run_id)
+    events = [
+        event_from_dict(raw)
+        for raw in load_state().get("events", {}).values()
+        if isinstance(raw, dict) and raw.get("run_id") == run_id
+    ]
+    return sorted(events, key=lambda event: (event.timestamp, event.event_id))
 
 
 def create_run(
@@ -215,7 +295,11 @@ def create_run(
         created_at=now,
         updated_at=now,
     )
-    return _put_run(append_journal(run, "created", "Project Run created"))
+    return _put_run_and_record_event(
+        append_journal(run, "created", "Project Run created"),
+        event_type="run_created",
+        payload_summary="Project Run created",
+    )
 
 
 def checkpoint_run(
@@ -234,18 +318,31 @@ def checkpoint_run(
         updated_at=utc_now_iso(),
     )
     detail = checkpoint.strip()
-    return _put_run(append_journal(updated, "checkpoint", detail))
+    return _put_run_and_record_event(
+        append_journal(updated, "checkpoint", detail),
+        event_type="checkpoint_saved",
+        payload_summary=detail,
+    )
 
 
 def resume_run(run_id: str) -> ProjectRun:
     run = get_run(run_id)
     now = utc_now_iso()
     updated = replace(run, status="running", resumed_at=now, updated_at=now)
-    return _put_run(append_journal(updated, "resumed", "Project Run resumed"))
+    return _put_run_and_record_event(
+        append_journal(updated, "resumed", "Project Run resumed"),
+        event_type="project_run_resumed",
+        payload_summary="Project Run resumed",
+    )
 
 
 def complete_run(run_id: str, detail: str = "") -> ProjectRun:
     run = get_run(run_id)
     now = utc_now_iso()
+    final_detail = detail.strip()
     updated = replace(run, status="completed", completed_at=now, updated_at=now)
-    return _put_run(append_journal(updated, "completed", detail.strip()))
+    return _put_run_and_record_event(
+        append_journal(updated, "completed", final_detail),
+        event_type="project_run_completed",
+        payload_summary=final_detail or "Project Run completed",
+    )

@@ -93,6 +93,11 @@ def format_run_table(runs: Sequence[store.ProjectRun]) -> str:
 
 
 def _format_last_event(run: store.ProjectRun) -> str:
+    events = store.list_events(run.run_id)
+    if events:
+        event = events[-1]
+        detail = f": {event.payload_summary}" if event.payload_summary else ""
+        return f"{event.timestamp} {event.event_type}{detail}".strip()
     if not run.journal:
         return "(none)"
     event = run.journal[-1]
@@ -120,6 +125,43 @@ def _format_required_approvals(run: store.ProjectRun) -> str:
     if run.status == "waiting_approval":
         return "(not recorded yet)"
     return "(none recorded)"
+
+
+def format_event_records(run_id: str, events: Sequence[store.EventRecord]) -> str:
+    """Render persisted Event Records for one Project Run."""
+    if not events:
+        return f"Project Run Events\n\nrun_id: {run_id}\n\nNo Event Records yet."
+    headers = ("event_id", "timestamp", "event_type", "source", "payload_summary")
+    rows = [
+        (
+            event.event_id,
+            event.timestamp,
+            event.event_type,
+            event.source,
+            event.payload_summary or "-",
+        )
+        for event in events
+    ]
+    widths = [
+        max(len(str(value)) for value in column)
+        for column in zip(headers, *rows, strict=True)
+    ]
+
+    def render_row(values: Sequence[str]) -> str:
+        return "  ".join(
+            value.ljust(width) for value, width in zip(values, widths, strict=True)
+        )
+
+    lines = [
+        "Project Run Events",
+        "",
+        f"run_id: {run_id}",
+        "",
+        render_row(headers),
+        render_row(tuple("-" * width for width in widths)),
+    ]
+    lines.extend(render_row(row) for row in rows)
+    return "\n".join(lines)
 
 
 def format_run_inspect(run: store.ProjectRun) -> str:
@@ -150,6 +192,7 @@ def help_text() -> str:
             "      [--status sleeping|ready|running|blocked|waiting_approval|...]",
             "  /project run list [--status <status>]",
             "  /project run inspect <run_id>",
+            "  /project run events <run_id>",
             "  /project run status [run_id] [--status <status>]",
             "  /project run checkpoint <run_id> --checkpoint <text>",
             "      [--next <text>] [--status <status>]",
@@ -200,6 +243,13 @@ def _handle_run_inspect(parts: list[str]) -> str:
     if len(parts) != 1:
         raise ValueError("inspect requires exactly one run_id")
     return format_run_inspect(store.get_run(parts[0]))
+
+
+def _handle_run_events(parts: list[str]) -> str:
+    if len(parts) != 1:
+        raise ValueError("events requires exactly one run_id")
+    run_id = parts[0]
+    return format_event_records(run_id, store.list_events(run_id))
 
 
 def _handle_run_status(parts: list[str]) -> str:
@@ -257,6 +307,8 @@ def dispatch(parts: list[str]) -> str:
         return _handle_run_list(rest)
     if action == "inspect":
         return _handle_run_inspect(rest)
+    if action == "events":
+        return _handle_run_events(rest)
     if action == "status":
         return _handle_run_status(rest)
     if action == "checkpoint":
