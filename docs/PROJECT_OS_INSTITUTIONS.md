@@ -112,6 +112,16 @@ select candidate(s)
 explain policy inputs
 ```
 
+First implemented command:
+
+```text
+/project run selection
+```
+
+This is the read-only agenda report. It consumes `/project run candidates` output
+and selects one eligible candidate without dispatching, leasing, waking, or
+executing anything.
+
 Possible inputs:
 
 ```text

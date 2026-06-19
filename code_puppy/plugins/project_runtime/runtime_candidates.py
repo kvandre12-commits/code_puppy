@@ -33,6 +33,7 @@ class RuntimeCandidate:
     objective: str
     status: str
     reason: str
+    updated_at: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -150,6 +151,7 @@ def project_candidates(state: Mapping[str, Any] | None = None) -> CandidateProje
     )
     for key, raw in sorted_runs:
         run_id, project, objective, status = _run_fields(str(key), raw)
+        updated_at = _text(raw, "updated_at") if isinstance(raw, dict) else ""
         run_violations = violations_by_run.get(str(key), []) or violations_by_run.get(
             run_id, []
         )
@@ -183,6 +185,7 @@ def project_candidates(state: Mapping[str, Any] | None = None) -> CandidateProje
                     objective=objective,
                     status=status,
                     reason=f"runnable: status {status!r} with validator PASS",
+                    updated_at=updated_at,
                 )
             )
             continue
