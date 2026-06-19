@@ -27,7 +27,8 @@ Effect plane:
 ```
 
 Future Android, browser, GitHub, or broker-adjacent effects should preserve this
-shape. Only the effect implementation should change.
+shape. Only the effect implementation should change. Adapter-specific acceptance
+criteria live in `PROJECT_OS_EFFECT_ADAPTERS.md`.
 
 ## Implemented lifecycle
 

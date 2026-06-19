@@ -113,8 +113,13 @@ def create_lease_record(record: Mapping[str, str]) -> LeaseWriteResult:
     return LeaseWriteResult(lease=final_lease, event=event)
 
 
-def consume_lease_for_noop(lease: LeaseRecord) -> LeaseWriteResult:
-    """Mark one lease consumed and write the no-op execution event."""
+def consume_lease_for_effect(
+    lease: LeaseRecord,
+    *,
+    event_type: str,
+    payload_summary: str,
+) -> LeaseWriteResult:
+    """Mark one lease consumed and write one bounded-effect audit event."""
     state = store.load_state()
     leases = state.setdefault("leases", {})
     if lease.lease_id not in leases:
@@ -125,8 +130,8 @@ def consume_lease_for_noop(lease: LeaseRecord) -> LeaseWriteResult:
     event = store.append_event_to_state(
         state,
         run_id=current.run_id,
-        event_type="noop_executed",
-        payload_summary=f"No-op executed under lease: {current.lease_id}",
+        event_type=event_type,
+        payload_summary=payload_summary,
         parent_event_id=current.issued_event_id,
     )
     consumed = LeaseRecord(
@@ -139,3 +144,12 @@ def consume_lease_for_noop(lease: LeaseRecord) -> LeaseWriteResult:
     leases[consumed.lease_id] = lease_to_dict(consumed)
     store.save_state(state)
     return LeaseWriteResult(lease=consumed, event=event)
+
+
+def consume_lease_for_noop(lease: LeaseRecord) -> LeaseWriteResult:
+    """Mark one lease consumed and write the no-op execution event."""
+    return consume_lease_for_effect(
+        lease,
+        event_type="noop_executed",
+        payload_summary=f"No-op executed under lease: {lease.lease_id}",
+    )
