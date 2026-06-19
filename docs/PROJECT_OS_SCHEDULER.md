@@ -33,17 +33,23 @@ Projects
               -> Models
 ```
 
-Scheduling turns this from a collection of resumable runs into an operating
-system.
+The event-driven execution loop is:
 
 ```text
-Run Table
-  -> priority calculation
-  -> readiness checks
-  -> lease allocation
-  -> execution
-  -> checkpoint/journal
-  -> wake/suspend/requeue
+Event -> Wake Run -> Lease Agent -> Execute -> Checkpoint -> Sleep
+```
+
+Scheduling turns resumable runs into an operating system.
+
+```text
+Event Queue -> Run Table -> priority -> lease allocation -> checkpoint
+```
+
+Durability boundary:
+
+```text
+Project/Project Run/Knowledge survive.
+Agent Lease/Agent/Model/Provider session are disposable.
 ```
 
 ## Kernel service: Run Scheduler
@@ -140,18 +146,23 @@ Meaning:
 
 ## Event Queue
 
-The Project OS equivalent of wakeup interrupts is an **Event Queue**.
+The Project OS equivalent of wakeup interrupts is an **Event Queue**. It is a
+kernel service, not a side list. The scheduler should react to events, not poll
+runs forever like a bored intern.
 
 Events may come from:
 
 ```text
 operator command
+Git commit or PR merged
 file/repo change
 timer/calendar
 Android notification
 Android app state
 browser state
-market/session clock
+broker/market alert
+work item completed
+project run stalled
 approval decision
 agent heartbeat timeout
 capability grant change
@@ -447,6 +458,7 @@ Reboot rule:
 ```text
 Project Runs survive.
 Agent Leases do not.
+Agents/models/providers do not own continuity.
 Scheduler decisions are replayed/recomputed.
 ```
 
@@ -535,7 +547,7 @@ What does this project know?
 The Run Scheduler answers:
 
 ```text
-What should run next?
+What should run next, and which event woke it?
 ```
 
 Project Run bridges them:
