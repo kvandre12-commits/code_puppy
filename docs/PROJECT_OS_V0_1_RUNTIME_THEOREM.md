@@ -251,6 +251,47 @@ canonical Project OS proof unless Authority, Lease, bounded adapter execution,
 and Audit evidence were actually produced by the runtime. Exploratory device
 handoffs are useful boundary evidence, not a substitute for leased/audited tests.
 
+## Validation axes and pressure watch list
+
+Project OS currently tracks four separate axes:
+
+```text
+Runtime path:
+  Authority -> Lease -> Effect -> Audit
+
+Observation path:
+  Observation -> Verification -> Inspection -> Telemetry
+
+Contract validation:
+  Hypothesis -> Experiment -> Evidence -> Theory Update
+
+Contract pressure watch list:
+  Capability Translation
+  Human Approval Checkpoint
+  Effect Observation Boundary
+```
+
+Pressure points are not theorem concepts yet. A concept enters the theorem
+because multiple boundaries demand it, not because one boundary suggested it.
+This avoids both overfitting and folklore.
+
+Current status:
+
+```text
+Validated runtime boundaries:
+  No-op
+  Browser
+  Android adapter tests
+
+Field observation:
+  Android launch observed
+  Human biometric checkpoint observed
+  ADB/UI observation unavailable
+
+Active contract experiment:
+  me@sams identity/application boundary
+```
+
 ## Contract Validation status
 
 The theorem is accumulating evidence, not claiming final proof.
