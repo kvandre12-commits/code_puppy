@@ -36,8 +36,9 @@ Projects
               -> Models
 ```
 
-The minimum legal execution-loop contract lives in
-`PROJECT_OS_EXECUTION_LOOP.md`.
+Runtime constitutional doctrine lives in `PROJECT_OS_CONSTITUTION.md`.
+Institutional powers live in `PROJECT_OS_INSTITUTIONS.md`. The minimum legal
+execution-loop contract lives in `PROJECT_OS_EXECUTION_LOOP.md`.
 
 The eventual event-driven execution loop is:
 
@@ -541,81 +542,27 @@ The scheduler should treat model choice as a lease attribute, not project truth.
 
 ## Scheduling policies
 
-Start with conservative policies:
-
-```text
-operator-pinned first
-ready before waiting
-blocked never scheduled
-approval waits never bypassed
-single writer per artifact
-short safe runs may batch
-aging prevents starvation
-risk requires stronger approval
-```
+Start conservatively: operator-pinned first, ready before waiting, blocked never
+scheduled, approval waits never bypassed, single writer per artifact, aging
+prevents starvation, and risk requires stronger approval.
 
 Avoid autonomous background chaos. The scheduler should be boring, inspectable,
 and interruptible.
 
-## Relationship to Android
+## Relationship to Android and kennel
 
 Android owns device scheduling, app lifecycle, power, notifications, and
-permissions. Code Puppy should not fight that.
+permissions. Code Puppy adapts to Android signals instead of fighting them.
 
-The Run Scheduler should adapt to Android:
-
-```text
-battery low -> reduce background runs
-network absent -> block network-dependent runs
-ADB absent -> block Android-observation runs
-notification arrives -> enqueue event
-operator opens project -> boost focused run
-```
-
-Android schedules apps and services. Code Puppy schedules project execution.
-
-## Relationship to kennel
-
-The kennel answers:
-
-```text
-What does this project know?
-```
-
-The Run Scheduler answers:
-
-```text
-What should run next, and which event woke it?
-```
-
-Project Run bridges them:
-
-```text
-Run Scheduler -> picks run
-Project Run   -> defines execution context
-Kennel        -> supplies institutional knowledge
-Agent Lease   -> grants replaceable worker execution rights
-```
+The kennel answers what the project knows. The Run Scheduler answers what should
+run next and which event woke it. Project Run bridges scheduler choice to kennel
+context; Agent Lease grants temporary worker rights.
 
 ## Minimal scheduler state
 
-Minimum state to resume scheduling after months:
-
-```text
-run table
-agent lease table, with stale leases expirable
-pending event queue
-pending approval queue
-project priorities
-blocked reasons
-next wake times
-last checkpoints
-operator constraints
-capability/grant state
-```
-
-Everything else can be recomputed from projects, runs, kennel, and Android
-observation.
+Minimum state to resume scheduling after months: run table, lease table, pending
+event/approval queues, priorities, blockers, wake times, checkpoints, operator
+constraints, and capability/grant state. Everything else can be recomputed.
 
 ## Design rule
 

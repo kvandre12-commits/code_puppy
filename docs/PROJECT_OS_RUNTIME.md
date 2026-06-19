@@ -4,7 +4,9 @@ The kennel defines what deserves to survive. The runtime defines what can keep
 executing. Structural invariants live in `PROJECT_OS_INVARIANTS.md`. Project OS
 identity lives in `PROJECT_OS_IDENTITY.md`; authority lives in
 `PROJECT_OS_AUTHORITY.md`; lifecycle law lives in
-`PROJECT_OS_STATE_MACHINE.md`; the minimum legal execution loop lives in
+`PROJECT_OS_STATE_MACHINE.md`; constitutional runtime doctrine lives in
+`PROJECT_OS_CONSTITUTION.md`; institutional powers live in
+`PROJECT_OS_INSTITUTIONS.md`; the minimum legal execution loop lives in
 `PROJECT_OS_EXECUTION_LOOP.md`. The scheduler doctrine lives in
 `PROJECT_OS_SCHEDULER.md`.
 
@@ -483,136 +485,41 @@ project state every time it wakes up.
 
 ## What survives replacement
 
-### Agent replacement
-
-Survives:
-
-```text
-Project
-Objectives
-Work Items
-Project Run
-checkpoint
-journal
-artifact refs
-capability requirements
-institutional knowledge
-```
-
-Does not survive:
-
-```text
-agent lease
-hidden scratchpad
-uncommitted tool intent
-in-flight local variables
-```
-
-### Model replacement
-
-Survives:
-
-```text
-every durable project object
-Project Run state
-checkpoint
-journal
-operator approvals
-artifact refs
-```
-
-Does not survive:
-
-```text
-model-specific hidden reasoning
-prompt cache
-provider session state
-```
+Agent/model replacement preserves durable project objects, Project Run state,
+checkpoint, journal, artifact refs, capability requirements, approvals, and
+institutional knowledge. It does not preserve leases, hidden scratchpads,
+uncommitted tool intent, local variables, prompt caches, or provider sessions.
 
 The model is compute. It is not the project.
 
-### Project archival
-
-Survives:
-
-```text
-project manifest
-closed objectives
-closed work items
-run records
-final checkpoints
-artifacts
-decisions
-principles
-history
-```
-
-Does not survive as live state:
-
-```text
-active leases
-active grants
-running status
-heartbeat expectations
-```
-
-A restored archived project should create a new Project Run, not pretend an old
-run is still alive.
+Project archival preserves closed project history, final checkpoints, artifacts,
+decisions, and principles. It does not preserve live leases, active grants,
+running status, or heartbeat expectations. Restoring an archived project should
+create a new Project Run, not pretend an old run is still alive.
 
 ## Minimum resume state after months
 
-To resume execution after months of inactivity, the Project OS needs at least:
-
-```text
-project id/name
-project location/repo/artifact roots
-active or selected objective
-unfinished work items with status
-last checkpoint summary
-next action
-blocked reason, if any
-required approvals/grants
-relevant principles
-relevant decisions
-artifact references
-recent history/journal summary
-operator constraints
-```
-
-Everything else can be recomputed or rediscovered. This set is the minimum
-state that turns archaeology into resumption.
+To resume execution after months of inactivity, Project OS needs durable project
+identity, objective/work status, checkpoint, next action, blockers/approvals,
+relevant principles/decisions, artifact refs, recent journal, and operator
+constraints. Everything else can be recomputed or rediscovered.
 
 ## Relationship to kennel
 
-The kennel is not the scheduler. The kennel preserves durable institutional
-knowledge and continuity material.
-
-The Project Run is runtime state. It can ask the kennel for knowledge, and it can
-produce new candidate knowledge, but it should not be replaced by the kennel.
+The kennel preserves institutional knowledge. Project Run preserves runtime
+state. A run may ask the kennel for context and propose durable drawers, but the
+kennel must not become a fake process manager.
 
 ```text
-Project Run -> asks kennel: what does this project know?
-Project Run -> updates work/journal/checkpoint
-Project Run -> proposes durable drawers
-Kennel      -> stores promoted institutional knowledge
+Project Run -> runtime/checkpoint/journal
+Kennel      -> promoted institutional knowledge
 ```
-
-That separation prevents memory from becoming a fake process manager.
 
 ## First primitive
 
-The minimal persisted implementation supports:
-
-```text
-/project run create
-/project run status
-/project run checkpoint
-/project run resume
-/project run complete
-```
-
-It stores Project Run state independently of any agent/model lease. This proves
-the architectural boundary:
+The minimal persisted implementation supports create/status/checkpoint/resume/
+complete commands and stores Project Run state independently of agent/model
+leases.
 
 ```text
 data structure -> runtime object -> resumable instance
