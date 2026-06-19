@@ -19,6 +19,7 @@ Linux -> manages hardware/resources
 Android -> manages device state and user experiences
 Code Puppy -> manages project/work state
 Project Run -> resumable execution context
+Run Scheduler -> decides which Project Run gets agent attention next
 Kennel -> preserves durable project memory
 ```
 
@@ -314,6 +315,7 @@ Linux -> CPU, memory, storage, network
 Android -> apps, notifications, locations, Bluetooth, permissions
 Code Puppy -> projects, project runs, agents, artifacts, workflows, repo state
 Project Run -> project/objective/work execution state, leases, checkpoints
+Run Scheduler -> run priority, wakeups, approvals, blockers, lease allocation
 Kennel -> projects, objectives, work items, principles, facts, decisions, artifacts, relationships, history
 ```
 
@@ -332,7 +334,8 @@ Android Distribution Plan
 
 This is closer to a project operating system than a mobile operating system.
 Project Runs carry resumable execution between projects, objectives, and agents.
-The kennel carries durable institutional knowledge.
+The Run Scheduler decides which Project Runs receive agent leases. The kennel
+carries durable institutional knowledge.
 
 ## Target stack
 
@@ -342,6 +345,7 @@ Human operator
       -> projects
       -> objectives
       -> project runs
+      -> run scheduler
       -> institutional execution
       -> institutional knowledge
       -> agents

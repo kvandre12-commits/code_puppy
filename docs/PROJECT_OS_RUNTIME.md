@@ -1,7 +1,7 @@
 # Project OS Runtime
 
 The kennel defines what deserves to survive. The runtime defines what can keep
-executing.
+executing. The scheduler doctrine lives in `PROJECT_OS_SCHEDULER.md`.
 
 The knowledge ontology is now:
 
