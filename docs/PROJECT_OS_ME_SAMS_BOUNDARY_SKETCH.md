@@ -127,6 +127,19 @@ A draft text state was observed during exploration and cleared without pressing
 send. That reinforces that Squiggly is not merely a read surface: even composing
 text is a pre-send effect and should be lease-scoped.
 
+Operator follow-up observation: a sent Squiggly prompt returned a clocked-in
+permission gate. This suggests the assistant's capability set is state-dependent:
+
+```text
+clocked out -> reduced assistant permissions
+clocked in  -> broader work-context permissions likely available
+```
+
+Do not treat this as permission failure or as proof that clock-in should be
+performed for testing. Treat it as boundary evidence for a work-state / duty-state
+precondition. Clock-in remains an employment timekeeping mutation and must not be
+used merely to unlock assistant capabilities.
+
 ## Initial boundary classification
 
 The app appears to be the work me@sams surface. It is not a single boundary. It
@@ -135,7 +148,7 @@ contains several boundary classes behind one app shell.
 | Surface | Boundary class | Notes |
 | --- | --- | --- |
 | App launch / landing page | read / low-consequence bounded | Approved-view surface observed with ADB. |
-| Clock in | employment timekeeping mutation | Requires proximity/location; not a first experiment; button observed but not tapped. |
+| Clock in | employment timekeeping mutation | Requires proximity/location; not a first experiment; button observed but not tapped; also gates some Squiggly permissions. |
 | Schedule view | identity/application read | Full Schedule opened and observed; still has nearby request/shift-option actions. |
 | Absence / time-off submission | workflow mutation | Report absence and My Requests affordances observed; not tapped. |
 | Frequently used links | mixed | Profile and inbox cards observed; each link needs separate classification. |
@@ -161,6 +174,7 @@ schedule read with adjacent action affordances
 employment workflow mutation
 profile/personal-details mutation
 assistant/chat outbound query
+work-state / duty-state precondition
 benefits/payroll sensitive read
 financial/high-risk action
 human approval checkpoints
@@ -217,6 +231,11 @@ Effect Observation Boundary
 
 Location / proximity precondition
   Clock-in is not just a button; it depends on physical/proximity policy.
+
+Work-state / duty-state precondition
+  Squiggly may expose different assistant capabilities depending on whether the
+  operator is clocked in. This is state-gated authority, not a reason to mutate
+  timekeeping just to test the chatbot.
 ```
 
 Do not promote any of these into theorem concepts from this single observation.
