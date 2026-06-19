@@ -56,6 +56,42 @@ def format_run_list(runs: Sequence[store.ProjectRun]) -> str:
     return "\n".join(lines)
 
 
+def format_run_table(runs: Sequence[store.ProjectRun]) -> str:
+    """Render the Project OS run table."""
+    if not runs:
+        return "Run Table\n\nNo Project Runs yet."
+    headers = ("run_id", "project", "objective", "status", "next_action", "updated_at")
+    rows = [
+        (
+            run.run_id,
+            run.project,
+            run.objective,
+            run.status,
+            run.next_action or "-",
+            run.updated_at or "-",
+        )
+        for run in runs
+    ]
+    widths = [
+        max(len(str(value)) for value in column)
+        for column in zip(headers, *rows, strict=True)
+    ]
+
+    def render_row(values: Sequence[str]) -> str:
+        return "  ".join(
+            value.ljust(width) for value, width in zip(values, widths, strict=True)
+        )
+
+    lines = [
+        "Run Table",
+        "",
+        render_row(headers),
+        render_row(tuple("-" * w for w in widths)),
+    ]
+    lines.extend(render_row(row) for row in rows)
+    return "\n".join(lines)
+
+
 def help_text() -> str:
     return "\n".join(
         [
@@ -63,6 +99,7 @@ def help_text() -> str:
             "  /project run create [run_id] --project <name> --objective <goal>",
             "      [--work <item>]... [--checkpoint <text>] [--next <text>]",
             "      [--status sleeping|ready|running|blocked|waiting_approval|...]",
+            "  /project run list [--status <status>]",
             "  /project run status [run_id] [--status <status>]",
             "  /project run checkpoint <run_id> --checkpoint <text>",
             "      [--next <text>] [--status <status>]",
@@ -100,6 +137,13 @@ def _handle_run_create(parts: list[str]) -> str:
         status=status,
     )
     return f"Created Project Run.\n\n{format_run(run)}"
+
+
+def _handle_run_list(parts: list[str]) -> str:
+    status = _pop_flag(parts, "--status")
+    if parts:
+        raise ValueError("list accepts only optional --status")
+    return format_run_table(store.list_runs(status=status or None))
 
 
 def _handle_run_status(parts: list[str]) -> str:
@@ -153,7 +197,9 @@ def dispatch(parts: list[str]) -> str:
     rest = parts[2:]
     if action == "create":
         return _handle_run_create(rest)
-    if action in {"status", "list"}:
+    if action == "list":
+        return _handle_run_list(rest)
+    if action == "status":
         return _handle_run_status(rest)
     if action == "checkpoint":
         return _handle_run_checkpoint(rest)

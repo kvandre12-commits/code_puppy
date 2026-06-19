@@ -158,5 +158,61 @@ def test_status_lists_runs_and_filters_status(tmp_path, monkeypatch):
     assert "run-one" not in blocked
 
 
+def test_run_list_renders_read_only_run_table(tmp_path, monkeypatch):
+    state_file = _use_tmp_state(tmp_path, monkeypatch)
+
+    store.create_run(
+        project="Code Puppy",
+        objective="Build Android Project OS",
+        run_id="run-android-os-001",
+        next_action="implement run table prototype",
+    )
+    store.create_run(
+        project="SharpEdge",
+        objective="Market cockpit",
+        run_id="run-sharpedge-001",
+        next_action="wait for market open",
+        status="waiting_event",
+    )
+    before = state_file.read_text(encoding="utf-8")
+
+    table = commands.dispatch(["run", "list"])
+
+    assert table.startswith("Run Table")
+    for header in (
+        "run_id",
+        "project",
+        "objective",
+        "status",
+        "next_action",
+        "updated_at",
+    ):
+        assert header in table
+    assert "run-android-os-001" in table
+    assert "Code Puppy" in table
+    assert "Build Android Project OS" in table
+    assert "sleeping" in table
+    assert "implement run table prototype" in table
+    assert "run-sharpedge-001" in table
+    assert state_file.read_text(encoding="utf-8") == before
+
+
+def test_run_list_filters_status(tmp_path, monkeypatch):
+    _use_tmp_state(tmp_path, monkeypatch)
+
+    store.create_run(project="Code Puppy", objective="Ready", run_id="run-ready")
+    store.create_run(
+        project="DroidPuppy",
+        objective="Reconnect ADB",
+        run_id="run-blocked",
+        status="blocked",
+    )
+
+    table = commands.dispatch(["run", "list", "--status", "blocked"])
+
+    assert "run-blocked" in table
+    assert "run-ready" not in table
+
+
 def test_non_project_command_is_ignored():
     assert commands.handle("/bridge list", "bridge") is None
