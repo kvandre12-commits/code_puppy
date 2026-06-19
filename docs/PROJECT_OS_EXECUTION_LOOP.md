@@ -54,6 +54,56 @@ whether invalid state should be repaired silently
 
 Those are governance questions.
 
+## Runtime question boundaries
+
+Project OS must keep these questions separate:
+
+| Layer | Question |
+|---|---|
+| State | What exists? |
+| Law | What is permitted? |
+| Validation | Is this specific state legal? |
+| Eligibility | What may proceed? |
+| Selection | What should proceed next? |
+| Execution | What actually happens? |
+
+The invariant is:
+
+```text
+State ≠ Legality ≠ Eligibility ≠ Selection ≠ Execution
+```
+
+This separation is the difference between a governed process engine and one big
+scheduler wearing a fake mustache.
+
+The scheduler must not inspect raw Project Runs to decide legality. It should
+consume the Runnable Candidate Projection:
+
+```text
+Project Run
+  -> Validator
+      -> Runnable Candidate Projection
+          -> Scheduler
+              -> Execution
+```
+
+That keeps governance drift out of scheduling policy. The validator applies law
+but never performs work. The projection publishes eligible runs but never selects
+or wakes them. The scheduler selects from eligible runs but never decides what is
+legal. Execution performs bounded work only after the upstream layers allow it.
+
+The first formal docket command is:
+
+```text
+/project run candidates
+```
+
+It answers:
+
+```text
+Show me every run that is legally eligible to proceed, without actually proceeding.
+```
+
 ## Minimum viable Event Queue
 
 The smallest Event Queue is not a new source of truth. It is a scheduling view
