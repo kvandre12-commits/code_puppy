@@ -131,6 +131,11 @@ Protect the experiment, not the theorem. If a boundary requires special
 Authority, Lease, Validator, or Audit behavior, classify that as possible
 contract evidence before adding exceptions.
 
+For Reddit or LinkedIn style adapters, treat read-only approved views as the
+first identity/reputation experiment. Posting, commenting, messaging,
+endorsements, or profile edits are persistent public mutations and need their
+own later mutation-boundary experiment.
+
 ## Adapter implementation rule
 
 An adapter may:
