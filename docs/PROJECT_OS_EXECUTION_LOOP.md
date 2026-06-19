@@ -7,7 +7,7 @@ Governance Stack:
 Identity -> Authority -> Events -> Causality -> State Machine -> Validator -> Precedent -> Remedy
 
 Runtime Stack:
-Project -> Project Run -> Event Queue -> Scheduler -> Agent Lease -> Execution
+Project -> Project Run -> Event Queue -> Runnable Candidate Projection -> Selection Policy -> Scheduler -> Agent Lease -> Execution
 ```
 
 This document defines the minimum runtime that can execute a legal Project Run.
@@ -64,33 +64,40 @@ Project OS must keep these questions separate:
 | Law | What is permitted? |
 | Validation | Is this specific state legal? |
 | Eligibility | What may proceed? |
-| Selection | What should proceed next? |
+| Priority | Which eligible thing should go first? |
+| Selection | Which eligible thing was chosen? |
+| Scheduling | How is the selected thing dispatched? |
 | Execution | What actually happens? |
 
 The invariant is:
 
 ```text
-State ≠ Legality ≠ Eligibility ≠ Selection ≠ Execution
+State ≠ Legality ≠ Eligibility ≠ Priority ≠ Selection ≠ Scheduling ≠ Execution
+Eligibility ≠ Priority
 ```
 
 This separation is the difference between a governed process engine and one big
 scheduler wearing a fake mustache.
 
-The scheduler must not inspect raw Project Runs to decide legality. It should
-consume the Runnable Candidate Projection:
+The scheduler must not inspect raw Project Runs to decide legality or priority.
+It should consume the output of Selection Policy, which consumes the Runnable
+Candidate Projection:
 
 ```text
 Project Run
   -> Validator
       -> Runnable Candidate Projection
-          -> Scheduler
-              -> Execution
+          -> Selection Policy
+              -> Scheduler
+                  -> Execution
 ```
 
-That keeps governance drift out of scheduling policy. The validator applies law
-but never performs work. The projection publishes eligible runs but never selects
-or wakes them. The scheduler selects from eligible runs but never decides what is
-legal. Execution performs bounded work only after the upstream layers allow it.
+That keeps governance drift and priority drift out of dispatch machinery. The
+validator applies law but never performs work. The projection publishes eligible
+runs but never selects or wakes them. Selection Policy chooses among eligible
+runs but never decides legality. The scheduler dispatches selected work but never
+ranks candidates or decides what is legal. Execution performs bounded work only
+after the upstream layers allow it.
 
 The first formal docket command is:
 
@@ -153,41 +160,99 @@ turn validator FAIL into runnable work
 hide a remedy behind queue state
 ```
 
-## Minimum viable Scheduler
+## Minimum viable Selection Policy
 
-The smallest Scheduler is a selector, not an executor.
+The smallest Selection Policy is a ranking decision over already eligible runs.
+It is not validation, not projection, not dispatch, and not execution.
 
 Read-only first version:
 
 ```text
-Run Table + validator PASS + queue candidates -> scheduling candidates
+Runnable Candidate Projection -> selected candidate report
 ```
 
 It should answer:
 
 ```text
-which Project Runs are eligible?
-why are they eligible?
-which Event Record made them eligible?
-which state transition would be required next?
-which remedy blocks ineligible runs?
+which eligible candidates were considered?
+which candidate was selected?
+why was it selected first?
+which policy rule applied?
 ```
 
-Minimum scheduler candidate fields:
+Possible policy inputs:
+
+```text
+explicit priority
+FIFO order
+aging
+fairness
+deadlines
+quotas
+resource limits
+operator focus
+```
+
+Minimum selection fields:
+
+```text
+selected_run_id
+candidate_run_ids
+policy_name
+selection_reason
+policy_inputs
+```
+
+The Selection Policy must not:
+
+```text
+make invalid runs eligible
+turn validator FAIL into runnable work
+bypass waiting_approval
+bypass blocked evidence
+allocate leases
+wake runs
+dispatch work
+```
+
+Eligibility is permission. Priority is preference. Those are not the same thing,
+because apparently civilization requires writing that down.
+
+## Minimum viable Scheduler
+
+The smallest Scheduler is a dispatcher, not a judge and not a prioritizer.
+
+Read-only first version:
+
+```text
+Selected candidate -> dispatch plan
+```
+
+It should answer:
+
+```text
+which selected run would be dispatched?
+which dispatch action would be attempted?
+which lease draft would be required?
+which Event Record would prove dispatch?
+```
+
+Minimum dispatch plan fields:
 
 ```text
 run_id
-current_status
-trigger_event_id
-candidate_reason
-required_transition
-validator_status
-blocking_remedy optional
+selection_policy
+selected_at
+dispatch_action
+required_lease_scope
+proof_event_type
 ```
 
 The scheduler must not:
 
 ```text
+inspect raw Project Runs to decide eligibility
+rank eligible candidates
 wake archived runs
 resume completed runs
 bypass waiting_approval
@@ -198,7 +263,7 @@ invent remedies
 ```
 
 Mutable scheduling can come later. First, the scheduler should be able to produce
-a read-only explanation of what it would do and why.
+a read-only dispatch plan from a selected candidate.
 
 ## Minimum viable Agent Lease
 
@@ -266,14 +331,15 @@ The smallest legal runtime loop is:
 1. Event Record exists.
 2. Causality is traceable.
 3. /project validate returns PASS.
-4. Event Queue marks or projects runnable work.
-5. Scheduler selects an eligible Project Run.
-6. Lease draft identifies agent, authority, actions, and capabilities.
-7. Lease is issued only if authority and grants exist.
-8. Agent executes one bounded step.
-9. Agent records Event Record and/or checkpoint.
-10. Validator runs again.
-11. Run sleeps, blocks, waits, completes, or remains ready according to state law.
+4. Runnable Candidate Projection publishes eligible work.
+5. Selection Policy chooses among eligible candidates.
+6. Scheduler prepares dispatch for the selected run.
+7. Lease draft identifies agent, authority, actions, and capabilities.
+8. Lease is issued only if authority and grants exist.
+9. Agent executes one bounded step.
+10. Agent records Event Record and/or checkpoint.
+11. Validator runs again.
+12. Run sleeps, blocks, waits, completes, or remains ready according to state law.
 ```
 
 If validation fails at any point:
@@ -295,7 +361,8 @@ Validator PASS is required before:
 
 ```text
 queue claim
-scheduler selection
+selection policy choice
+scheduler dispatch
 lease issuance
 run resume
 run completion
@@ -321,7 +388,8 @@ These can be implemented before mutable runtime behavior:
 ```text
 Runnable Candidate Projection (`/project run candidates`)
 Event Queue projection
-Scheduler candidate report
+Selection Policy report
+Scheduler dispatch plan
 Lease draft report
 Execution preflight report
 Runtime blocked/remedy report
@@ -358,7 +426,8 @@ The correct order is:
 
 ```text
 read-only projection
-read-only candidate selection
+read-only selection policy
+read-only dispatch plan
 read-only lease draft
 operator-visible preflight
 then bounded mutation
@@ -389,6 +458,7 @@ This document does not implement:
 
 ```text
 Event Queue
+Selection Policy
 Scheduler
 Agent Lease allocation
 Wake Policy
