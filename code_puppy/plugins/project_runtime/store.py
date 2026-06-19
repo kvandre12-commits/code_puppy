@@ -109,6 +109,8 @@ EVENT_TYPE_CATALOG = (
         "governance",
         "AuthorityGrant evidence was created",
     ),
+    EventType("lease_issued", "governance", "A short-lived lease was issued"),
+    EventType("noop_executed", "execution", "A bounded no-op was executed"),
     EventType("run_blocked", "blocking", "A Project Run became blocked"),
     EventType("run_unblocked", "blocking", "A Project Run was unblocked"),
 )
@@ -151,7 +153,13 @@ def list_event_types() -> tuple[EventType, ...]:
 
 
 def empty_state() -> dict[str, Any]:
-    return {"version": 1, "runs": {}, "events": {}, "authority_grants": {}}
+    return {
+        "version": 1,
+        "runs": {},
+        "events": {},
+        "authority_grants": {},
+        "leases": {},
+    }
 
 
 def load_state() -> dict[str, Any]:
@@ -169,6 +177,8 @@ def load_state() -> dict[str, Any]:
         state["events"] = {}
     if not isinstance(state.get("authority_grants"), dict):
         state["authority_grants"] = {}
+    if not isinstance(state.get("leases"), dict):
+        state["leases"] = {}
     return state
 
 
@@ -369,6 +379,26 @@ def _append_event(
     )
     state.setdefault("events", {})[event.event_id] = event_to_dict(event)
     return event
+
+
+def append_event_to_state(
+    state: dict[str, Any],
+    *,
+    run_id: str,
+    event_type: str,
+    payload_summary: str = "",
+    source: str = "project_runtime",
+    parent_event_id: str = "",
+) -> EventRecord:
+    """Append an EventRecord to a caller-owned mutable state object."""
+    return _append_event(
+        state,
+        run_id=run_id,
+        event_type=event_type,
+        payload_summary=payload_summary,
+        source=source,
+        parent_event_id=parent_event_id,
+    )
 
 
 def _put_run(run: ProjectRun) -> ProjectRun:

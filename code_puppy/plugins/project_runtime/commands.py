@@ -14,6 +14,8 @@ from . import (
     authority_validator,
     dispatch_plan,
     lease_draft,
+    lease_issue,
+    noop_execution,
     runtime_candidates,
     selection_policy,
     store,
@@ -302,6 +304,8 @@ def help_text() -> str:
             "  /project run dispatch-plan",
             "  /project run lease-draft",
             "  /project run authority-check",
+            "  /project run lease-issue --confirm <lease_id>",
+            "  /project run execute-noop --confirm <lease_id>",
             "  /project run inspect <run_id>",
             "  /project run why <run_id>",
             "  /project run events <run_id>",
@@ -411,6 +415,22 @@ def _handle_run_authority_check(parts: list[str]) -> str:
         raise ValueError("authority-check does not accept arguments")
     check = authority_check.check_authority()
     return authority_check.format_check(check)
+
+
+def _handle_run_lease_issue(parts: list[str]) -> str:
+    confirm = _pop_flag(parts, "--confirm")
+    if parts or not confirm:
+        raise ValueError("lease-issue requires --confirm <lease_id>")
+    result = lease_issue.issue_lease(confirm_lease_id=confirm)
+    return lease_issue.format_result(result)
+
+
+def _handle_run_execute_noop(parts: list[str]) -> str:
+    confirm = _pop_flag(parts, "--confirm")
+    if parts or not confirm:
+        raise ValueError("execute-noop requires --confirm <lease_id>")
+    result = noop_execution.execute_noop(confirm_lease_id=confirm)
+    return noop_execution.format_result(result)
 
 
 def _handle_run_inspect(parts: list[str]) -> str:
@@ -523,6 +543,10 @@ def dispatch(parts: list[str]) -> str:
         return _handle_run_lease_draft(rest)
     if action == "authority-check":
         return _handle_run_authority_check(rest)
+    if action == "lease-issue":
+        return _handle_run_lease_issue(rest)
+    if action == "execute-noop":
+        return _handle_run_execute_noop(rest)
     if action == "inspect":
         return _handle_run_inspect(rest)
     if action == "why":
