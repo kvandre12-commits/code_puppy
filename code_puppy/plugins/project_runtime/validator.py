@@ -187,6 +187,15 @@ def _validate_events(
                 run_id=run_id,
                 event_id=event_id,
             )
+        source = str(raw.get("source") or "").strip()
+        if not source:
+            _violation(
+                violations,
+                "Every Event Record must have source attribution.",
+                "event source is empty",
+                run_id=run_id,
+                event_id=event_id,
+            )
         if run_id not in run_ids:
             _violation(
                 violations,
@@ -270,6 +279,7 @@ def _validate_run_event_sequence(
     inferred_status = ""
     pending_block_event = ""
     pending_approval_event = ""
+    approval_resolution_event = ""
     terminal_event = ""
 
     for event in events:
@@ -306,15 +316,16 @@ def _validate_run_event_sequence(
             )
 
         if event.event_type == "run_unblocked":
-            if not pending_block_event:
+            if not pending_block_event and not approval_resolution_event:
                 _violation(
                     violations,
-                    "Unblock transitions require blocker evidence.",
-                    "run_unblocked appears without a preceding run_blocked",
+                    "Unblock transitions require blocker or approval evidence.",
+                    "run_unblocked appears without a preceding run_blocked or approval_granted",
                     run_id=run_id,
                     event_id=event.event_id,
                 )
             pending_block_event = ""
+            approval_resolution_event = ""
             if inferred_status == "blocked":
                 inferred_status = "ready"
             continue
@@ -329,6 +340,7 @@ def _validate_run_event_sequence(
                     event_id=event.event_id,
                 )
             pending_approval_event = ""
+            approval_resolution_event = event.event_id
             if inferred_status == "waiting_approval":
                 inferred_status = "ready"
             continue
