@@ -47,7 +47,8 @@ next action
 
 The Project persists. Objectives change. Work items complete. Agents attach and
 detach. Models are swapped. The Project Run is the active or suspended execution
-instance that makes continuity possible.
+instance that makes continuity possible. The first concrete primitive lives in
+`code_puppy/plugins/project_runtime/` and exposes `/project run ...` commands.
 
 Durability boundary:
 
@@ -480,6 +481,25 @@ Kennel      -> stores promoted institutional knowledge
 ```
 
 That separation prevents memory from becoming a fake process manager.
+
+## First primitive
+
+The minimal persisted implementation supports:
+
+```text
+/project run create
+/project run status
+/project run checkpoint
+/project run resume
+/project run complete
+```
+
+It stores Project Run state independently of any agent/model lease. This proves
+the architectural boundary:
+
+```text
+data structure -> runtime object -> resumable instance
+```
 
 ## Design rule
 
