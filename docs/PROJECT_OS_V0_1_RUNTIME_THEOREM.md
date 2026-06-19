@@ -67,10 +67,35 @@ Define theorem
 New capabilities should continue to test the architecture instead of becoming
 special-case governments.
 
+## Boundary test ladder
+
+The roadmap is not a list of adapters. It is a sequence of increasingly
+difficult boundary tests:
+
+```text
+v0.1 Browser   -> external effect boundary
+v0.2 Android   -> device boundary
+v0.3 me@sams   -> application + identity + agent + workflow boundary
+v0.4 GitHub    -> persistent mutation boundary
+v0.5 Robinhood -> financial-risk boundary
+```
+
+Each step increases the consequence of a bad theorem. The goal is not to make the
+agent do more things; it is to make the agent do bounded things through the same
+contract without modifying the contract.
+
 ## Next repeatability test
 
-One adapter can still be luck. The next adapter should try to produce this diff
-shape:
+One adapter can still be luck. The next adapter should be boring on purpose:
+
+```text
+launch approved activity once
+consume lease
+write android_effect_executed
+refuse reuse
+```
+
+It should try to produce this diff shape:
 
 ```text
 + android_execution.py
@@ -82,4 +107,6 @@ shape:
 ```
 
 If multiple adapters can plug in this way, the theorem starts becoming a platform
-contract.
+contract. Do not skip the boundary proof with complex workflows; otherwise it
+becomes impossible to tell whether a failure came from the platform theorem or
+from adapter complexity.
