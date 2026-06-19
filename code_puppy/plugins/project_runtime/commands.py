@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import shlex
-from collections.abc import Sequence
 
 from . import (
     authority_check,
@@ -12,6 +11,7 @@ from . import (
     authority_grant_draft,
     authority_grants,
     authority_validator,
+    command_formatters,
     dispatch_plan,
     lease_draft,
     lease_issue,
@@ -43,246 +43,6 @@ def _pop_repeated(parts: list[str], name: str) -> list[str]:
         values.append(parts[index + 1])
         del parts[index : index + 2]
     return values
-
-
-def format_run(run: store.ProjectRun) -> str:
-    work = ", ".join(f"[{item.status}] {item.title}" for item in run.work_items)
-    lines = [
-        f"Project Run: {run.run_id}",
-        f"project     : {run.project}",
-        f"objective   : {run.objective}",
-        f"status      : {run.status}",
-        f"work items  : {work if work else '(none)'}",
-        f"checkpoint  : {run.checkpoint or '(none)'}",
-        f"next action : {run.next_action or '(none)'}",
-        f"updated     : {run.updated_at or '(unknown)'}",
-    ]
-    return "\n".join(lines)
-
-
-def format_run_list(runs: Sequence[store.ProjectRun]) -> str:
-    if not runs:
-        return "No Project Runs yet."
-    lines = ["Project Runs", ""]
-    for run in runs:
-        lines.append(f"- {run.run_id} [{run.status}] {run.project} :: {run.objective}")
-        if run.next_action:
-            lines.append(f"  next: {run.next_action}")
-    return "\n".join(lines)
-
-
-def format_run_table(runs: Sequence[store.ProjectRun]) -> str:
-    """Render the Project OS run table."""
-    if not runs:
-        return "Run Table\n\nNo Project Runs yet."
-    headers = ("run_id", "project", "objective", "status", "next_action", "updated_at")
-    rows = [
-        (
-            run.run_id,
-            run.project,
-            run.objective,
-            run.status,
-            run.next_action or "-",
-            run.updated_at or "-",
-        )
-        for run in runs
-    ]
-    widths = [
-        max(len(str(value)) for value in column)
-        for column in zip(headers, *rows, strict=True)
-    ]
-
-    def render_row(values: Sequence[str]) -> str:
-        return "  ".join(
-            value.ljust(width) for value, width in zip(values, widths, strict=True)
-        )
-
-    lines = [
-        "Run Table",
-        "",
-        render_row(headers),
-        render_row(tuple("-" * w for w in widths)),
-    ]
-    lines.extend(render_row(row) for row in rows)
-    return "\n".join(lines)
-
-
-def _format_last_event(run: store.ProjectRun) -> str:
-    events = store.list_events(run.run_id)
-    if events:
-        event = events[-1]
-        detail = f": {event.payload_summary}" if event.payload_summary else ""
-        return f"{event.timestamp} {event.event_type}{detail}".strip()
-    if not run.journal:
-        return "(none)"
-    event = run.journal[-1]
-    detail = f": {event.detail}" if event.detail else ""
-    return f"{event.ts} {event.action}{detail}".strip()
-
-
-def _format_journal_summary(run: store.ProjectRun) -> list[str]:
-    if not run.journal:
-        return ["journal_summary    : 0 event(s)"]
-    lines = [f"journal_summary    : {len(run.journal)} event(s)"]
-    for event in run.journal[-3:]:
-        detail = f" — {event.detail}" if event.detail else ""
-        lines.append(f"  - {event.ts} {event.action}{detail}".rstrip())
-    return lines
-
-
-def _format_blockers(run: store.ProjectRun) -> str:
-    if run.status == "blocked":
-        return "(not recorded yet)"
-    return "(none recorded)"
-
-
-def _format_required_approvals(run: store.ProjectRun) -> str:
-    if run.status == "waiting_approval":
-        return "(not recorded yet)"
-    return "(none recorded)"
-
-
-def format_event_types(event_types: Sequence[store.EventType]) -> str:
-    """Render the known Project OS Event Type vocabulary."""
-    lines = ["Project Run Event Types", ""]
-    current_category = ""
-    for event_type in event_types:
-        if event_type.category != current_category:
-            current_category = event_type.category
-            lines.extend([f"{current_category}:"])
-        lines.append(f"  - {event_type.name}: {event_type.description}")
-    return "\n".join(lines)
-
-
-def format_event_records(run_id: str, events: Sequence[store.EventRecord]) -> str:
-    """Render persisted Event Records for one Project Run."""
-    if not events:
-        return f"Project Run Events\n\nrun_id: {run_id}\n\nNo Event Records yet."
-    headers = (
-        "event_id",
-        "parent_event_id",
-        "timestamp",
-        "event_type",
-        "source",
-        "payload_summary",
-    )
-    rows = [
-        (
-            event.event_id,
-            event.parent_event_id or "-",
-            event.timestamp,
-            event.event_type,
-            event.source,
-            event.payload_summary or "-",
-        )
-        for event in events
-    ]
-    widths = [
-        max(len(str(value)) for value in column)
-        for column in zip(headers, *rows, strict=True)
-    ]
-
-    def render_row(values: Sequence[str]) -> str:
-        return "  ".join(
-            value.ljust(width) for value, width in zip(values, widths, strict=True)
-        )
-
-    lines = [
-        "Project Run Events",
-        "",
-        f"run_id: {run_id}",
-        "",
-        render_row(headers),
-        render_row(tuple("-" * width for width in widths)),
-    ]
-    lines.extend(render_row(row) for row in rows)
-    return "\n".join(lines)
-
-
-def format_event_trace(events: Sequence[store.EventRecord]) -> str:
-    """Render one causality chain from root event to selected event."""
-    if not events:
-        return "Project Event Trace\n\nNo Event Records found."
-    lines = ["Project Event Trace", ""]
-    for index, event in enumerate(events):
-        prefix = "root" if index == 0 else "caused"
-        parent = event.parent_event_id or "-"
-        lines.append(
-            f"{prefix}: {event.event_id} [{event.event_type}] "
-            f"run={event.run_id} parent={parent}"
-        )
-        if event.payload_summary:
-            lines.append(f"  summary: {event.payload_summary}")
-    return "\n".join(lines)
-
-
-def format_run_inspect(run: store.ProjectRun) -> str:
-    """Render a human inspection view for one Project Run."""
-    lines = [
-        "Project Run Inspect",
-        "",
-        f"run_id             : {run.run_id}",
-        f"project            : {run.project}",
-        f"objective          : {run.objective}",
-        f"status             : {run.status}",
-        f"checkpoint         : {run.checkpoint or '(none)'}",
-        f"next_action        : {run.next_action or '(none)'}",
-        f"blockers           : {_format_blockers(run)}",
-        f"required_approvals : {_format_required_approvals(run)}",
-        f"last_event         : {_format_last_event(run)}",
-        *_format_journal_summary(run),
-    ]
-    return "\n".join(lines)
-
-
-def _format_why_latest_event(event: store.EventRecord) -> list[str]:
-    lines = [
-        "latest_event:",
-        f"  event_id        : {event.event_id}",
-        f"  event_type      : {event.event_type}",
-        f"  timestamp       : {event.timestamp or '(unknown)'}",
-        f"  source          : {event.source or '(unknown)'}",
-        f"  parent_event_id : {event.parent_event_id or '(none)'}",
-        f"  payload_summary : {event.payload_summary or '(none)'}",
-    ]
-    return lines
-
-
-def _format_why_trace(events: Sequence[store.EventRecord]) -> list[str]:
-    if len(events) <= 1:
-        return ["causality_trace:", "  latest event is a root event"]
-    lines = ["causality_trace:"]
-    for index, event in enumerate(events):
-        prefix = "root" if index == 0 else "caused"
-        lines.append(f"  {prefix}: {event.event_id} [{event.event_type}]")
-        if event.payload_summary:
-            lines.append(f"    summary: {event.payload_summary}")
-    return lines
-
-
-def format_run_why(run: store.ProjectRun) -> str:
-    """Explain the current Project Run state using only persisted evidence."""
-    events = store.list_events(run.run_id)
-    lines = [
-        "Project Run Why",
-        "",
-        f"run_id      : {run.run_id}",
-        f"project     : {run.project}",
-        f"objective   : {run.objective}",
-        f"status      : {run.status}",
-        f"checkpoint  : {run.checkpoint or '(none)'}",
-        f"next_action : {run.next_action or '(none)'}",
-        "",
-    ]
-    if not events:
-        lines.append("No Event Records yet.")
-        return "\n".join(lines)
-    latest_event = events[-1]
-    trace = store.trace_event(latest_event.event_id)
-    lines.extend(_format_why_latest_event(latest_event))
-    lines.append("")
-    lines.extend(_format_why_trace(trace))
-    return "\n".join(lines)
 
 
 def help_text() -> str:
@@ -372,14 +132,14 @@ def _handle_run_create(parts: list[str]) -> str:
         next_action=next_action,
         status=status,
     )
-    return f"Created Project Run.\n\n{format_run(run)}"
+    return f"Created Project Run.\n\n{command_formatters.format_run(run)}"
 
 
 def _handle_run_list(parts: list[str]) -> str:
     status = _pop_flag(parts, "--status")
     if parts:
         raise ValueError("list accepts only optional --status")
-    return format_run_table(store.list_runs(status=status or None))
+    return command_formatters.format_run_table(store.list_runs(status=status or None))
 
 
 def _handle_run_candidates(parts: list[str]) -> str:
@@ -436,32 +196,32 @@ def _handle_run_execute_noop(parts: list[str]) -> str:
 def _handle_run_inspect(parts: list[str]) -> str:
     if len(parts) != 1:
         raise ValueError("inspect requires exactly one run_id")
-    return format_run_inspect(store.get_run(parts[0]))
+    return command_formatters.format_run_inspect(store.get_run(parts[0]))
 
 
 def _handle_run_why(parts: list[str]) -> str:
     if len(parts) != 1:
         raise ValueError("why requires exactly one run_id")
-    return format_run_why(store.get_run(parts[0]))
+    return command_formatters.format_run_why(store.get_run(parts[0]))
 
 
 def _handle_run_events(parts: list[str]) -> str:
     if len(parts) != 1:
         raise ValueError("events requires exactly one run_id")
     run_id = parts[0]
-    return format_event_records(run_id, store.list_events(run_id))
+    return command_formatters.format_event_records(run_id, store.list_events(run_id))
 
 
 def _handle_run_event_types(parts: list[str]) -> str:
     if parts:
         raise ValueError("event-types does not accept arguments")
-    return format_event_types(store.list_event_types())
+    return command_formatters.format_event_types(store.list_event_types())
 
 
 def _handle_project_event(parts: list[str]) -> str:
     if len(parts) != 2 or parts[0] != "trace":
         raise ValueError("event usage: /project event trace <event_id>")
-    return format_event_trace(store.trace_event(parts[1]))
+    return command_formatters.format_event_trace(store.trace_event(parts[1]))
 
 
 def _handle_validate(parts: list[str]) -> str:
@@ -475,8 +235,8 @@ def _handle_run_status(parts: list[str]) -> str:
     if len(parts) > 1:
         raise ValueError("status accepts zero or one run_id")
     if parts:
-        return format_run(store.get_run(parts[0]))
-    return format_run_list(store.list_runs(status=status or None))
+        return command_formatters.format_run(store.get_run(parts[0]))
+    return command_formatters.format_run_list(store.list_runs(status=status or None))
 
 
 def _handle_run_checkpoint(parts: list[str]) -> str:
@@ -493,14 +253,14 @@ def _handle_run_checkpoint(parts: list[str]) -> str:
     run = store.checkpoint_run(
         run_id, checkpoint=checkpoint, next_action=next_action, status=status or None
     )
-    return f"Checkpointed Project Run.\n\n{format_run(run)}"
+    return f"Checkpointed Project Run.\n\n{command_formatters.format_run(run)}"
 
 
 def _handle_run_resume(parts: list[str]) -> str:
     if len(parts) != 1:
         raise ValueError("resume requires exactly one run_id")
     run = store.resume_run(parts[0])
-    return f"Resumed Project Run.\n\n{format_run(run)}"
+    return f"Resumed Project Run.\n\n{command_formatters.format_run(run)}"
 
 
 def _handle_run_complete(parts: list[str]) -> str:
@@ -511,7 +271,7 @@ def _handle_run_complete(parts: list[str]) -> str:
     if parts:
         raise ValueError(f"unexpected arguments: {' '.join(parts)}")
     run = store.complete_run(run_id, detail=detail)
-    return f"Completed Project Run.\n\n{format_run(run)}"
+    return f"Completed Project Run.\n\n{command_formatters.format_run(run)}"
 
 
 def dispatch(parts: list[str]) -> str:
