@@ -5,7 +5,7 @@ Project OS has enough constitutional doctrine to start hearing cases.
 This document records scenario stories that exercise the model end-to-end:
 
 ```text
-Constitution -> Court -> Case Law
+Constitution -> Court -> Case Law -> Remedy
 ```
 
 The court is:
@@ -46,6 +46,12 @@ Reusable rulings live in:
 
 ```text
 PROJECT_OS_PRECEDENTS.md
+```
+
+Lawful responses live in:
+
+```text
+PROJECT_OS_REMEDIES.md
 ```
 
 ## Scenario 1: Approval Gate
@@ -205,6 +211,7 @@ minimum attribution hook until Event Records grow structured identity fields.
 ```text
 Legal stories should PASS.
 Illegal stories should FAIL.
+Illegal stories should name a lawful remedy when possible.
 Ambiguous stories should become either explicit law or explicit non-goals.
 No scenario should require scheduler, queue, wake policy, or lease allocation.
 ```
