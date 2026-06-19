@@ -15,6 +15,16 @@ from . import store
 
 
 @dataclass(frozen=True, slots=True)
+class PrecedentRecord:
+    """One reusable Project OS validator precedent."""
+
+    precedent_id: str
+    title: str
+    ruling: str
+    applies_to_laws: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
 class ValidationViolation:
     """One Project OS law violation."""
 
@@ -22,6 +32,7 @@ class ValidationViolation:
     detail: str
     run_id: str = ""
     event_id: str = ""
+    precedent_id: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -98,6 +109,50 @@ _ACTIVE_AFTER_TERMINAL_EVENTS = {
     "approval_granted",
 }
 
+PRECEDENTS = (
+    PrecedentRecord(
+        "PRECEDENT-001",
+        "Approval granted may legally unblock a run.",
+        "approval_granted may serve as valid evidence for a following run_unblocked.",
+        ("Unblock transitions require blocker or approval evidence.",),
+    ),
+    PrecedentRecord(
+        "PRECEDENT-002",
+        "Blocked runs may not resume without unblock evidence.",
+        "run_blocked followed by project_run_resumed is illegal without run_unblocked.",
+        ("A blocked run cannot resume without run_unblocked causality.",),
+    ),
+    PrecedentRecord(
+        "PRECEDENT-003",
+        "Event source attribution is mandatory.",
+        "approval and other Event Records must retain a non-empty source.",
+        ("Every Event Record must have source attribution.",),
+    ),
+    PrecedentRecord(
+        "PRECEDENT-004",
+        "Waiting-approval runs may not resume without approval granted.",
+        "approval_requested followed by project_run_resumed is illegal without approval_granted.",
+        ("A waiting_approval run cannot resume without approval_granted causality.",),
+    ),
+    PrecedentRecord(
+        "PRECEDENT-005",
+        "Terminal runs are not resumable by default.",
+        "project_run_completed makes later active lifecycle events invalid by default.",
+        ("Terminal states are not resumable by default.",),
+    ),
+    PrecedentRecord(
+        "PRECEDENT-006",
+        "Project Runs survive agent and model replacement.",
+        "checkpointed Project Run state is durable across disposable workers.",
+    ),
+)
+
+_PRECEDENT_BY_LAW = {
+    law: precedent.precedent_id
+    for precedent in PRECEDENTS
+    for law in precedent.applies_to_laws
+}
+
 
 def _violation(
     violations: list[ValidationViolation],
@@ -108,7 +163,13 @@ def _violation(
     event_id: str = "",
 ) -> None:
     violations.append(
-        ValidationViolation(law=law, detail=detail, run_id=run_id, event_id=event_id)
+        ValidationViolation(
+            law=law,
+            detail=detail,
+            run_id=run_id,
+            event_id=event_id,
+            precedent_id=_PRECEDENT_BY_LAW.get(law, ""),
+        )
     )
 
 
@@ -440,5 +501,7 @@ def format_report(report: ValidationReport) -> str:
         target_text = " ".join(target) if target else "state=global"
         lines.append(f"- {target_text}")
         lines.append(f"  law   : {violation.law}")
+        if violation.precedent_id:
+            lines.append(f"  precedent: {violation.precedent_id}")
         lines.append(f"  detail: {violation.detail}")
     return "\n".join(lines)

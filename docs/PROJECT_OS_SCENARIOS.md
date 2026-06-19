@@ -42,7 +42,19 @@ Scenario tests live in:
 tests/test_project_os_scenarios.py
 ```
 
+Reusable rulings live in:
+
+```text
+PROJECT_OS_PRECEDENTS.md
+```
+
 ## Scenario 1: Approval Gate
+
+Precedent:
+
+```text
+PRECEDENT-001
+```
 
 Expected judgment:
 
@@ -76,6 +88,12 @@ can be the thing being unblocked.
 
 ## Scenario 2: Illegal Blocked Resume
 
+Precedent:
+
+```text
+PRECEDENT-002
+```
+
 Expected judgment:
 
 ```text
@@ -104,6 +122,12 @@ A blocked run cannot resume without run_unblocked causality.
 ```
 
 ## Scenario 3: Project Continuity
+
+Precedent:
+
+```text
+PRECEDENT-006
+```
 
 Expected judgment:
 
@@ -138,6 +162,12 @@ Agent/Model/Provider session are disposable.
 ```
 
 ## Scenario 4: Governance Failure
+
+Precedent:
+
+```text
+PRECEDENT-003
+```
 
 Expected judgment:
 
