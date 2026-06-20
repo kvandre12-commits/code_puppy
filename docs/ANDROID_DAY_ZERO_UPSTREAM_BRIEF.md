@@ -76,6 +76,7 @@ shape in reviewable pieces.
 - core imports now degrade gracefully when optional stacks are missing
 - README updated to document optional MCP install
 - regression tests added for missing optional dependencies
+- a generic background-worker contract seam was added in public code so foreground models can define bounded delegated jobs without pretending the whole runtime already lives in core
 
 ### Relevant commits on this branch
 
