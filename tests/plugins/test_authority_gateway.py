@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from code_puppy.plugins.authority_gateway import anomaly
 from code_puppy.plugins.authority_gateway.audit import revoke_all_leases_with_audit
 from code_puppy.plugins.authority_gateway.lease_store import (
     consume_lease,
@@ -372,6 +373,102 @@ class TestLeaseBinding:
             {"command": "npm install", "cwd": str(allowed_dir)},
         )
         assert allowed is None
+
+    def test_repeated_constraint_violations_trip_circuit_breaker(
+        self, monkeypatch, tmp_path
+    ):
+        monkeypatch.setenv("PROJECT_OS_EYES_ROOT", str(tmp_path))
+        monkeypatch.setattr(anomaly, "CONSTRAINT_BLOCK_THRESHOLD", 3)
+        monkeypatch.setattr(anomaly, "CONSTRAINT_BLOCK_WINDOW_SECONDS", 60)
+        _write_lease(
+            tmp_path,
+            _v2_lease(
+                "lease-breaker",
+                capabilities=["android.intent.send"],
+                constraints={
+                    "intent_actions": ["android.intent.action.VIEW"],
+                    "intent_packages": ["com.brave.browser"],
+                },
+            ),
+        )
+
+        result = None
+        for _ in range(3):
+            result = build_pre_tool_response(
+                "android_intent_send",
+                {
+                    "action": "android.intent.action.SEND",
+                    "package_name": "com.brave.browser",
+                    "dry_run": False,
+                },
+            )
+
+        assert result is not None
+        assert result["blocked"] is True
+        assert "Security isolation triggered" in result["error_message"]
+
+        lease_payload = json.loads(
+            (tmp_path / "leases" / "active" / "lease-breaker.json").read_text()
+        )
+        assert lease_payload["status"] == "revoked"
+        assert "constraint violations" in lease_payload["revocation_reason"]
+
+        events = [
+            json.loads(path.read_text())
+            for path in sorted((tmp_path / "audit" / "events").glob("*.json"))
+        ]
+        kinds = [event["event_type"] for event in events]
+        assert kinds.count("tool_blocked") == 3
+        assert "anomaly_detected" in kinds
+        assert "lease_revoked" in kinds
+        assert "leases_revoked" in kinds
+
+    def test_runaway_shell_loop_trips_circuit_breaker(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("PROJECT_OS_EYES_ROOT", str(tmp_path))
+        monkeypatch.setattr(anomaly, "RUNAWAY_ATTEMPT_THRESHOLD", 3)
+        monkeypatch.setattr(anomaly, "RUNAWAY_ATTEMPT_WINDOW_SECONDS", 60)
+        _write_lease(
+            tmp_path,
+            _v2_lease(
+                "lease-runaway",
+                capabilities=["shell.exec"],
+                remaining_uses=5,
+                max_uses=5,
+                max_tool_calls=5,
+            ),
+        )
+
+        first = build_pre_tool_response(
+            "agent_run_shell_command", {"command": "npm install", "cwd": str(tmp_path)}
+        )
+        second = build_pre_tool_response(
+            "agent_run_shell_command", {"command": "npm install", "cwd": str(tmp_path)}
+        )
+        third = build_pre_tool_response(
+            "agent_run_shell_command", {"command": "npm install", "cwd": str(tmp_path)}
+        )
+
+        assert first is None
+        assert second is None
+        assert third is not None
+        assert third["blocked"] is True
+        assert "runaway shell/intent execution loop" in third["error_message"]
+        assert reservation_debug_state()["lease_id"] is None
+
+        lease_payload = json.loads(
+            (tmp_path / "leases" / "active" / "lease-runaway.json").read_text()
+        )
+        assert lease_payload["status"] == "revoked"
+
+        events = [
+            json.loads(path.read_text())
+            for path in sorted((tmp_path / "audit" / "events").glob("*.json"))
+        ]
+        kinds = [event["event_type"] for event in events]
+        assert kinds.count("tool_allowed") == 3
+        assert "anomaly_detected" in kinds
+        assert "lease_revoked" in kinds
+        assert "leases_revoked" in kinds
 
 
 class TestLeaseStoreHelpers:

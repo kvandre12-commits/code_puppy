@@ -44,6 +44,26 @@ def _audit_events_dir() -> Path:
     return path
 
 
+def read_recent_authority_events(
+    *, event_types: set[str] | None = None, window_seconds: int = 10
+) -> list[dict[str, Any]]:
+    cutoff_ns = time.time_ns() - (window_seconds * 1_000_000_000)
+    events: list[dict[str, Any]] = []
+    for path in sorted(_audit_events_dir().glob("*.json")):
+        try:
+            payload = _read_json(path)
+        except Exception:
+            continue
+        if event_types and str(payload.get("event_type", "")) not in event_types:
+            continue
+        timestamp_ns = int(payload.get("timestamp_ns", 0) or 0)
+        if timestamp_ns < cutoff_ns:
+            continue
+        events.append(payload)
+    events.sort(key=lambda payload: int(payload.get("timestamp_ns", 0) or 0))
+    return events
+
+
 def _read_json(path: Path) -> dict[str, Any]:
     return json.loads(path.read_text())
 

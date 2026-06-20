@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
+from .anomaly import evaluate_runtime_anomalies
 from .audit import emit_authority_event
 from .constraints import lease_constraint_failure
 from .lease_store import (
@@ -189,11 +190,20 @@ def _summarize_tool_args(tool_args: dict[str, Any]) -> dict[str, Any]:
             "artifact_name",
             "keycode",
             "submit",
+            "cwd",
         }:
             summary[key] = value
     if not summary:
         summary["keys"] = sorted(tool_args.keys())
     return summary
+
+
+def _maybe_trip_circuit_breaker(principal_id: str) -> str | None:
+    anomaly = evaluate_runtime_anomalies(principal_id=principal_id)
+    if not anomaly.tripped:
+        return None
+    _clear_reservation()
+    return anomaly.reason
 
 
 def assess_shell_command(command: str) -> PolicyDecision:
@@ -399,8 +409,15 @@ def build_pre_tool_response(
                 tool_name=tool_name,
                 outcome="blocked",
                 reason=decision.reason,
-                details=details,
+                details={**details, "block_kind": "policy"},
             )
+            anomaly_reason = _maybe_trip_circuit_breaker(principal_id)
+            if anomaly_reason:
+                return {
+                    "blocked": True,
+                    "error_message": anomaly_reason,
+                    "reason": anomaly_reason,
+                }
         return {
             "blocked": True,
             "error_message": decision.reason,
@@ -439,8 +456,15 @@ def build_pre_tool_response(
             tool_name=tool_name,
             outcome="blocked",
             reason=reason,
-            details=details,
+            details={**details, "block_kind": "lease_missing"},
         )
+        anomaly_reason = _maybe_trip_circuit_breaker(principal_id)
+        if anomaly_reason:
+            return {
+                "blocked": True,
+                "error_message": anomaly_reason,
+                "reason": anomaly_reason,
+            }
         return {
             "blocked": True,
             "error_message": reason,
@@ -475,13 +499,15 @@ def build_pre_tool_response(
             reason=reason,
             details={
                 **details,
+                "block_kind": "constraint",
                 "lease_constraints": leases[0].constraints,
             },
         )
+        anomaly_reason = _maybe_trip_circuit_breaker(principal_id)
         return {
             "blocked": True,
-            "error_message": reason,
-            "reason": decision.reason,
+            "error_message": anomaly_reason or reason,
+            "reason": anomaly_reason or decision.reason,
         }
 
     _reserve_lease(lease, tool_name, decision.capability)
@@ -498,6 +524,13 @@ def build_pre_tool_response(
             "lease_constraints": lease.constraints,
         },
     )
+    anomaly_reason = _maybe_trip_circuit_breaker(principal_id)
+    if anomaly_reason:
+        return {
+            "blocked": True,
+            "error_message": anomaly_reason,
+            "reason": anomaly_reason,
+        }
     return None
 
 
