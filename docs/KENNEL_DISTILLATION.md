@@ -333,6 +333,21 @@ unchanged. Searchable recall can be broad; durable mutation must be narrow,
 evidenced, and auditable. This prevents an agent from quietly rewriting
 institutional knowledge while technically following the generic effect path.
 
+Durable memory mutation is atomic:
+
+```text
+promote/distill/archive succeeds completely
+  or
+no durable memory mutation occurs
+```
+
+No half-written institutional memory is allowed. A mutation that cannot preserve
+source evidence, mutation reason, before/after or input/output evidence, Project
+OS lease consumption, and audit evidence must refuse before changing the kennel.
+Archive, delete, and remedy operations are higher-risk than creation because
+they remove or correct institutional knowledge; they should require additional
+authority or precedent/remedy evidence.
+
 ## Productivity versus activity
 
 Yield metrics are not merely memory metrics. They are productivity metrics.
