@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from .bus import tail_project_os_events
 from .manager import (
     clear_supervisor_state,
     start_manifest,
@@ -62,3 +63,15 @@ def project_os_supervisor_reset_state(confirm: bool = False) -> dict[str, Any]:
             "reason": "Set confirm=True to clear supervisor state.",
         }
     return clear_supervisor_state()
+
+
+def project_os_tail(
+    topics: list[str] | None = None,
+    seconds: float = 3.0,
+    max_events: int = 20,
+) -> dict[str, Any]:
+    return tail_project_os_events(
+        topics=topics,
+        seconds=seconds,
+        max_events=max_events,
+    )

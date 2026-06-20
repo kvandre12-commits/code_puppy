@@ -13,6 +13,7 @@ from .tooling import (
     project_os_supervisor_stop_manifest as project_os_supervisor_stop_manifest_impl,
     project_os_supervisor_stop_service as project_os_supervisor_stop_service_impl,
     project_os_supervisor_write_authority_manifest as project_os_supervisor_write_authority_manifest_impl,
+    project_os_tail as project_os_tail_impl,
 )
 
 _STATUS = "project_os_supervisor_status"
@@ -21,6 +22,7 @@ _START_MANIFEST = "project_os_supervisor_start_manifest"
 _STOP_SERVICE = "project_os_supervisor_stop_service"
 _STOP_MANIFEST = "project_os_supervisor_stop_manifest"
 _RESET_STATE = "project_os_supervisor_reset_state"
+_TAIL = "project_os_tail"
 
 
 def register_project_os_supervisor_status(agent: Any) -> None:
@@ -97,6 +99,22 @@ def register_project_os_supervisor_reset_state(agent: Any) -> None:
         return project_os_supervisor_reset_state_impl(confirm=confirm)
 
 
+def register_project_os_tail(agent: Any) -> None:
+    @agent.tool
+    async def project_os_tail(
+        context: RunContext,
+        topics: list[str] | None = None,
+        seconds: float = 3.0,
+        max_events: int = 20,
+    ) -> dict[str, Any]:
+        del context
+        return project_os_tail_impl(
+            topics=topics,
+            seconds=seconds,
+            max_events=max_events,
+        )
+
+
 def register_tools_callback() -> list[dict[str, Any]]:
     return [
         {"name": _STATUS, "register_func": register_project_os_supervisor_status},
@@ -120,6 +138,7 @@ def register_tools_callback() -> list[dict[str, Any]]:
             "name": _RESET_STATE,
             "register_func": register_project_os_supervisor_reset_state,
         },
+        {"name": _TAIL, "register_func": register_project_os_tail},
     ]
 
 
@@ -132,6 +151,7 @@ def _advertise_tools_to_agent(agent_name: str | None = None) -> list[str]:
         _STOP_SERVICE,
         _STOP_MANIFEST,
         _RESET_STATE,
+        _TAIL,
     ]
 
 

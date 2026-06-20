@@ -8,6 +8,10 @@ import uuid
 from pathlib import Path
 from typing import Any
 
+from code_puppy.plugins.project_os_supervisor.bus import (
+    publish_project_os_event_best_effort,
+)
+
 from .lease_store import (
     LeaseRecord,
     get_default_principal_id,
@@ -144,6 +148,12 @@ def emit_authority_event(
         _validate(event)
         path = _audit_events_dir() / f"{timestamp_ns}_{event['event_id']}.json"
         _write_json_new(path, event)
+        publish_project_os_event_best_effort(
+            "authority.audit",
+            event_type,
+            source="authority_gateway.audit",
+            payload=event,
+        )
         return path
     except Exception:
         return None

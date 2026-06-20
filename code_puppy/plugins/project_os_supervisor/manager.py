@@ -7,6 +7,7 @@ import time
 from pathlib import Path
 from typing import Any
 
+from .bus import publish_project_os_event_best_effort
 from .daemon import run_authority_daemon
 from .state import (
     AUTHORITY_DAEMON_BUILTIN,
@@ -58,6 +59,25 @@ __all__ = [
 ]
 
 DEFAULT_POLL_SECONDS = 0.5
+
+
+def _publish_service_event(
+    event_type: str,
+    *,
+    manifest_path: Path,
+    service: ServiceManifest,
+    payload: dict[str, Any] | None = None,
+) -> None:
+    publish_project_os_event_best_effort(
+        "system.service",
+        event_type,
+        source="project_os_supervisor",
+        payload={
+            "service_name": service.name,
+            "manifest_path": str(manifest_path),
+            **(payload or {}),
+        },
+    )
 
 
 def _terminate_tree(child: subprocess.Popen[Any] | None) -> int | None:
@@ -149,6 +169,15 @@ def run_monitor(manifest_path: str | Path, service_name: str) -> int:
                         last_event="stopped_by_operator",
                     ),
                 )
+                _publish_service_event(
+                    "service_stopped",
+                    manifest_path=manifest,
+                    service=service,
+                    payload={
+                        "exit_code": exit_code,
+                        "restart_count": restart_count,
+                    },
+                )
                 return 0
 
             child = _start_child(manifest, service)
@@ -164,6 +193,12 @@ def run_monitor(manifest_path: str | Path, service_name: str) -> int:
                 last_event="child_started",
             )
             write_runtime(rt_path, runtime)
+            _publish_service_event(
+                "service_started",
+                manifest_path=manifest,
+                service=service,
+                payload={"child_pid": child.pid, "restart_count": restart_count},
+            )
 
             stale = False
             while True:
@@ -232,6 +267,16 @@ def run_monitor(manifest_path: str | Path, service_name: str) -> int:
                         last_event=event,
                     ),
                 )
+                _publish_service_event(
+                    "service_restarting",
+                    manifest_path=manifest,
+                    service=service,
+                    payload={
+                        "exit_code": exit_code,
+                        "restart_count": restart_count,
+                        "reason": event,
+                    },
+                )
                 time.sleep(service.restart_backoff_seconds)
                 continue
 
@@ -252,6 +297,16 @@ def run_monitor(manifest_path: str | Path, service_name: str) -> int:
                     last_exit_at=utc_now(),
                     last_event=event,
                 ),
+            )
+            _publish_service_event(
+                f"service_{final_state}",
+                manifest_path=manifest,
+                service=service,
+                payload={
+                    "exit_code": exit_code,
+                    "restart_count": restart_count,
+                    "reason": event,
+                },
             )
             return int(exit_code or 0)
     finally:

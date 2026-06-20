@@ -42,6 +42,7 @@ class TestProjectOsSupervisorRegistration:
             "project_os_supervisor_stop_service",
             "project_os_supervisor_stop_manifest",
             "project_os_supervisor_reset_state",
+            "project_os_tail",
         }
 
     def test_register_agent_tools_advertises_same_surface(self):
@@ -52,6 +53,7 @@ class TestProjectOsSupervisorRegistration:
             "project_os_supervisor_stop_service",
             "project_os_supervisor_stop_manifest",
             "project_os_supervisor_reset_state",
+            "project_os_tail",
         ]
 
 
@@ -64,7 +66,10 @@ class TestProjectOsSupervisorTooling:
 
         assert result["success"] is True
         manifest = json.loads(Path(result["manifest_path"]).read_text())
-        assert manifest["services"][0]["builtin"] == "authority_daemon"
+        assert [service["builtin"] for service in manifest["services"]] == [
+            "event_bus",
+            "authority_daemon",
+        ]
 
     def test_authority_daemon_start_status_and_stop(self, monkeypatch, tmp_path):
         monkeypatch.setenv("PROJECT_OS_SUPERVISOR_ROOT", str(tmp_path / "supervisor"))

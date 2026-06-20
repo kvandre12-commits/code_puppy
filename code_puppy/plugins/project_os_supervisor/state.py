@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import shutil
 import sys
+import tempfile
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -15,6 +17,7 @@ DEFAULT_LOG_BACKUPS = 3
 DEFAULT_RESTART_BACKOFF_SECONDS = 1.0
 DEFAULT_MAX_RESTART_ATTEMPTS = 3
 AUTHORITY_DAEMON_BUILTIN = "authority_daemon"
+EVENT_BUS_BUILTIN = "event_bus"
 
 
 @dataclass(frozen=True)
@@ -82,6 +85,15 @@ def heartbeats_dir() -> Path:
 
 def control_dir() -> Path:
     return _state_dir("control")
+
+
+def bus_dir() -> Path:
+    return _state_dir("bus")
+
+
+def event_socket_path() -> Path:
+    digest = hashlib.sha1(str(get_supervisor_root()).encode("utf-8")).hexdigest()[:16]
+    return Path(tempfile.gettempdir()) / f"po-bus-{digest}.sock"
 
 
 def _safe_name(value: str) -> str:
@@ -167,6 +179,13 @@ def _service_from_payload(payload: dict[str, Any]) -> ServiceManifest:
             "code_puppy.plugins.project_os_supervisor",
             "run-authority-daemon",
         ]
+    if builtin == EVENT_BUS_BUILTIN and not command:
+        command = [
+            sys.executable,
+            "-m",
+            "code_puppy.plugins.project_os_supervisor",
+            "run-broker",
+        ]
     if not name:
         raise ValueError("service name is required")
     if not command:
@@ -222,6 +241,17 @@ def write_authority_manifest(output_path: str | Path) -> dict[str, Any]:
         "manifest_version": "1.0.0",
         "services": [
             {
+                "name": "event-bus",
+                "builtin": EVENT_BUS_BUILTIN,
+                "autostart": True,
+                "restart_policy": "always",
+                "restart_backoff_seconds": 1.0,
+                "max_restart_attempts": 5,
+                "heartbeat_timeout_seconds": 0.0,
+                "log_max_bytes": DEFAULT_LOG_MAX_BYTES,
+                "log_backups": DEFAULT_LOG_BACKUPS,
+            },
+            {
                 "name": "authority-daemon",
                 "builtin": AUTHORITY_DAEMON_BUILTIN,
                 "autostart": True,
@@ -232,7 +262,7 @@ def write_authority_manifest(output_path: str | Path) -> dict[str, Any]:
                 "heartbeat_timeout_seconds": 8.0,
                 "log_max_bytes": DEFAULT_LOG_MAX_BYTES,
                 "log_backups": DEFAULT_LOG_BACKUPS,
-            }
+            },
         ],
     }
     write_json(path, payload)

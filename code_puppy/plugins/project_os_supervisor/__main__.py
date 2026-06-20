@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 
+from .bus import run_event_broker, tail_project_os_events
 from .manager import (
     run_authority_daemon,
     run_monitor,
@@ -45,6 +46,13 @@ def main() -> None:
     authority = subparsers.add_parser("run-authority-daemon")
     authority.add_argument("--max-beats", type=int)
 
+    subparsers.add_parser("run-broker")
+
+    tail = subparsers.add_parser("tail")
+    tail.add_argument("--seconds", type=float, default=3.0)
+    tail.add_argument("--max-events", type=int, default=20)
+    tail.add_argument("--topic", dest="topics", action="append")
+
     args = parser.parse_args()
 
     if args.command == "write-authority-manifest":
@@ -74,6 +82,16 @@ def main() -> None:
         raise SystemExit(run_monitor(args.manifest, args.service))
     if args.command == "run-authority-daemon":
         raise SystemExit(run_authority_daemon(max_beats=args.max_beats))
+    if args.command == "run-broker":
+        raise SystemExit(run_event_broker())
+    if args.command == "tail":
+        result = tail_project_os_events(
+            topics=args.topics,
+            seconds=args.seconds,
+            max_events=args.max_events,
+        )
+        print(json.dumps(result, indent=2, sort_keys=True))
+        raise SystemExit(0 if result.get("success") else 1)
 
     raise SystemExit(2)
 

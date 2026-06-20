@@ -5,6 +5,7 @@ import os
 import time
 from pathlib import Path
 
+from .bus import publish_project_os_event_best_effort
 from .state import utc_now, write_json
 
 
@@ -32,6 +33,12 @@ def run_authority_daemon(max_beats: int | None = None) -> int:
         }
         if heartbeat_file is not None:
             write_json(heartbeat_file, payload)
+        publish_project_os_event_best_effort(
+            "system.authority",
+            "authority_heartbeat",
+            source="authority_daemon",
+            payload=payload,
+        )
         print(json.dumps(payload, sort_keys=True), flush=True)
         time.sleep(interval)
     return 0
