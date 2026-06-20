@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from code_puppy.plugins.authority_gateway import anomaly
+from code_puppy.plugins.authority_gateway import anomaly, audit
 from code_puppy.plugins.authority_gateway.audit import revoke_all_leases_with_audit
 from code_puppy.plugins.authority_gateway.lease_store import (
     consume_lease,
@@ -469,6 +469,107 @@ class TestLeaseBinding:
         assert "anomaly_detected" in kinds
         assert "lease_revoked" in kinds
         assert "leases_revoked" in kinds
+
+    def test_quarantine_blocks_follow_up_attempts_after_breaker(
+        self, monkeypatch, tmp_path
+    ):
+        monkeypatch.setenv("PROJECT_OS_EYES_ROOT", str(tmp_path))
+        monkeypatch.setattr(anomaly, "CONSTRAINT_BLOCK_THRESHOLD", 2)
+        monkeypatch.setattr(anomaly, "CONSTRAINT_BLOCK_WINDOW_SECONDS", 60)
+        monkeypatch.setattr(anomaly, "QUARANTINE_WINDOW_SECONDS", 60)
+        _write_lease(
+            tmp_path,
+            _v2_lease(
+                "lease-quarantine",
+                capabilities=["android.intent.send"],
+                constraints={
+                    "intent_actions": ["android.intent.action.VIEW"],
+                    "intent_packages": ["com.brave.browser"],
+                },
+            ),
+        )
+
+        build_pre_tool_response(
+            "android_intent_send",
+            {
+                "action": "android.intent.action.SEND",
+                "package_name": "com.brave.browser",
+                "dry_run": False,
+            },
+        )
+        tripped = build_pre_tool_response(
+            "android_intent_send",
+            {
+                "action": "android.intent.action.SEND",
+                "package_name": "com.brave.browser",
+                "dry_run": False,
+            },
+        )
+        quarantined = build_pre_tool_response(
+            "android_intent_send",
+            {
+                "action": "android.intent.action.VIEW",
+                "package_name": "com.brave.browser",
+                "dry_run": False,
+            },
+        )
+
+        assert tripped is not None
+        assert "Security isolation triggered" in tripped["error_message"]
+        assert quarantined is not None
+        assert quarantined["blocked"] is True
+        assert "Principal is quarantined" in quarantined["error_message"]
+
+        events = [
+            json.loads(path.read_text())
+            for path in sorted((tmp_path / "audit" / "events").glob("*.json"))
+        ]
+        assert events[-1]["event_type"] == "tool_blocked"
+        assert events[-1]["details"]["block_kind"] == "quarantine"
+
+    def test_quarantine_expiry_falls_back_to_normal_policy(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("PROJECT_OS_EYES_ROOT", str(tmp_path))
+        monkeypatch.setattr(anomaly, "CONSTRAINT_BLOCK_THRESHOLD", 1)
+        monkeypatch.setattr(anomaly, "CONSTRAINT_BLOCK_WINDOW_SECONDS", 1)
+        monkeypatch.setattr(anomaly, "QUARANTINE_WINDOW_SECONDS", 1)
+        _write_lease(
+            tmp_path,
+            _v2_lease(
+                "lease-expiry",
+                capabilities=["android.intent.send"],
+                constraints={"intent_actions": ["android.intent.action.VIEW"]},
+            ),
+        )
+
+        triggered = build_pre_tool_response(
+            "android_intent_send",
+            {
+                "action": "android.intent.action.SEND",
+                "package_name": "com.brave.browser",
+                "dry_run": False,
+            },
+        )
+        assert triggered is not None
+        assert "Security isolation triggered" in triggered["error_message"]
+
+        original_time_ns = audit.time.time_ns
+        monkeypatch.setattr(
+            audit.time,
+            "time_ns",
+            lambda: original_time_ns() + 2_000_000_000,
+        )
+
+        after_expiry = build_pre_tool_response(
+            "android_intent_send",
+            {
+                "action": "android.intent.action.VIEW",
+                "package_name": "com.brave.browser",
+                "dry_run": False,
+            },
+        )
+        assert after_expiry is not None
+        assert after_expiry["blocked"] is True
+        assert "active execution lease" in after_expiry["error_message"]
 
 
 class TestLeaseStoreHelpers:

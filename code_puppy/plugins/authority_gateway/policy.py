@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
-from .anomaly import evaluate_runtime_anomalies
+from .anomaly import active_quarantine_reason, evaluate_runtime_anomalies
 from .audit import emit_authority_event
 from .constraints import lease_constraint_failure
 from .lease_store import (
@@ -395,9 +395,27 @@ def build_pre_tool_response(
     tool_name: str, tool_args: dict[str, Any]
 ) -> dict[str, Any] | None:
     principal_id = get_default_principal_id()
-    decision = evaluate_tool_call(tool_name, tool_args)
     tracked = _tracked_tool(tool_name)
     details = {"tool_args": _summarize_tool_args(tool_args)}
+
+    quarantine_reason = active_quarantine_reason(principal_id=principal_id)
+    if tracked and quarantine_reason:
+        _clear_reservation()
+        emit_authority_event(
+            "tool_blocked",
+            principal_id=principal_id,
+            tool_name=tool_name,
+            outcome="blocked",
+            reason=quarantine_reason,
+            details={**details, "block_kind": "quarantine"},
+        )
+        return {
+            "blocked": True,
+            "error_message": quarantine_reason,
+            "reason": quarantine_reason,
+        }
+
+    decision = evaluate_tool_call(tool_name, tool_args)
 
     if decision.blocked:
         _clear_reservation()

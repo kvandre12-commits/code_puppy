@@ -13,6 +13,7 @@ CONSTRAINT_BLOCK_THRESHOLD = 3
 CONSTRAINT_BLOCK_WINDOW_SECONDS = 10
 RUNAWAY_ATTEMPT_THRESHOLD = 20
 RUNAWAY_ATTEMPT_WINDOW_SECONDS = 5
+QUARANTINE_WINDOW_SECONDS = 60
 RUNAWAY_TOOL_NAMES = {"agent_run_shell_command", "android_intent_send"}
 
 
@@ -52,6 +53,21 @@ def _runaway_attempt_events(principal_id: str | None) -> list[dict[str, Any]]:
     return filtered
 
 
+def active_quarantine_reason(*, principal_id: str | None = None) -> str | None:
+    events = read_recent_authority_events(
+        event_types={"anomaly_detected"},
+        window_seconds=QUARANTINE_WINDOW_SECONDS,
+    )
+    for event in reversed(events):
+        if principal_id and event.get("principal_id") not in {None, principal_id}:
+            continue
+        return (
+            "[BLOCKED] Principal is quarantined after a recent security anomaly. "
+            f"Wait {QUARANTINE_WINDOW_SECONDS}s before retrying."
+        )
+    return None
+
+
 def _trip_circuit_breaker(
     *,
     principal_id: str | None,
@@ -63,7 +79,7 @@ def _trip_circuit_breaker(
         principal_id=principal_id,
         outcome="tripped",
         reason=reason,
-        details=details,
+        details={**details, "quarantine_seconds": QUARANTINE_WINDOW_SECONDS},
     )
     revoked = revoke_all_leases_with_audit(
         reason,
