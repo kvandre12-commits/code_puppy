@@ -64,6 +64,29 @@ def read_recent_authority_events(
     return events
 
 
+def list_authority_events(
+    *,
+    limit: int = 20,
+    event_types: set[str] | None = None,
+    principal_id: str | None = None,
+) -> list[dict[str, Any]]:
+    events: list[dict[str, Any]] = []
+    for path in sorted(_audit_events_dir().glob("*.json")):
+        try:
+            payload = _read_json(path)
+        except Exception:
+            continue
+        if event_types and str(payload.get("event_type", "")) not in event_types:
+            continue
+        if principal_id and payload.get("principal_id") != principal_id:
+            continue
+        events.append(payload)
+    events.sort(key=lambda payload: int(payload.get("timestamp_ns", 0) or 0))
+    if limit > 0:
+        return events[-limit:]
+    return events
+
+
 def _read_json(path: Path) -> dict[str, Any]:
     return json.loads(path.read_text())
 
