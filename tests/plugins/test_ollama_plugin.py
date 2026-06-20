@@ -30,13 +30,14 @@ def mock_get_custom_config():
             {"X-Key": "val"},
             None,
             "custom-key",
+            None,
         )
         yield mock
 
 
 @pytest.fixture
 def mock_provider():
-    with patch(f"{MODULE}.OpenAIProvider") as mock:
+    with patch("pydantic_ai.providers.openai.OpenAIProvider") as mock:
         mock.return_value = MagicMock()
         yield mock
 
@@ -183,7 +184,7 @@ def test_api_key_defaults_to_ollama(mock_async_client, mock_provider, monkeypatc
 
 def test_api_key_fallback_when_custom_returns_none(mock_async_client, mock_provider):
     with patch(f"{MODULE}.get_custom_config") as mock_gcc:
-        mock_gcc.return_value = ("http://x/v1", {}, None, None)
+        mock_gcc.return_value = ("http://x/v1", {}, None, None, None)
         create_ollama_model(
             "m",
             {"name": "t", "custom_endpoint": {"url": "http://x/v1"}},

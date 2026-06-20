@@ -771,6 +771,7 @@ class ModelFactory:
             # Ensure cache_control is injected at the Anthropic SDK layer
             patch_anthropic_client_messages(anthropic_client)
 
+            AnthropicModel, _ = _load_anthropic_model_classes()
             provider = make_anthropic_provider(
                 provider_identity, anthropic_client=anthropic_client
             )
