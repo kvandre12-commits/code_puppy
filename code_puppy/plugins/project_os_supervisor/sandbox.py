@@ -85,8 +85,12 @@ def default_rootfs_url() -> str:
 
 
 def _rootfs_is_initialized(rootfs_path: Path) -> bool:
-    markers = [rootfs_path / "bin" / "sh", rootfs_path / "usr" / "bin" / "env"]
-    return any(path.exists() for path in markers)
+    markers = [
+        rootfs_path / "bin" / "sh",
+        rootfs_path / "usr" / "bin" / "env",
+        rootfs_path / "bin" / "busybox",
+    ]
+    return any(path.exists() or path.is_symlink() for path in markers)
 
 
 def _resolve_tarball_path(source: str, *, manifest_path: Path | None = None) -> Path:
@@ -118,7 +122,7 @@ def _safe_extract(tar_path: Path, destination: Path) -> None:
                 raise ValueError(f"unsafe archive member: {member.name}")
         try:
             archive.extractall(destination, filter="data")
-        except TypeError:
+        except (TypeError, tarfile.TarError):
             archive.extractall(destination)
 
 
