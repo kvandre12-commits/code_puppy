@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import builtins
+import contextlib
 import importlib
 import sys
 from collections.abc import Iterable
@@ -29,16 +30,33 @@ def _restore_modules(originals: dict[str, object], module_names: Iterable[str]) 
 
 def _block_imports(blocked_modules: set[str]):
     real_import = builtins.__import__
+    real_import_module = importlib.import_module
 
-    def blocked_import(name, *args, **kwargs):
-        if any(
+    def is_blocked(name: str) -> bool:
+        return any(
             name == blocked_name or name.startswith(f"{blocked_name}.")
             for blocked_name in blocked_modules
-        ):
+        )
+
+    def blocked_import(name, *args, **kwargs):
+        if is_blocked(name):
             raise ModuleNotFoundError(name=name)
         return real_import(name, *args, **kwargs)
 
-    return patch("builtins.__import__", side_effect=blocked_import)
+    def blocked_import_module(name, package=None):
+        if is_blocked(name):
+            raise ModuleNotFoundError(name=name)
+        return real_import_module(name, package)
+
+    @contextlib.contextmanager
+    def blocker():
+        with (
+            patch("builtins.__import__", side_effect=blocked_import),
+            patch("importlib.import_module", side_effect=blocked_import_module),
+        ):
+            yield
+
+    return blocker()
 
 
 def test_model_factory_imports_without_optional_provider_sdks_until_used():

@@ -16,6 +16,15 @@ from . import callbacks
 from .claude_cache_client import ClaudeCacheAsyncClient, patch_anthropic_client_messages
 from .config import EXTRA_MODELS_FILE, get_value, get_yolo_mode
 from .http_utils import create_async_client, get_cert_bundle_path, get_http2
+from .optional_providers import (
+    load_anthropic_model_classes as _load_anthropic_model_classes,
+    load_async_anthropic as _load_async_anthropic,
+    load_async_azure_openai as _load_async_azure_openai,
+    load_cerebras_provider as _load_cerebras_provider,
+    load_openai_model_classes as _load_openai_model_classes,
+    load_openai_model_profile as _load_openai_model_profile,
+    load_openrouter_provider as _load_openrouter_provider,
+)
 from .provider_identity import (
     make_anthropic_provider,
     make_openai_provider,
@@ -24,49 +33,6 @@ from .provider_identity import (
 from .round_robin_model import RoundRobinModel
 
 logger = logging.getLogger(__name__)
-
-
-def _load_async_anthropic():
-    try:
-        from anthropic import AsyncAnthropic
-    except ImportError as exc:  # pragma: no cover - optional extra absent
-        raise RuntimeError(
-            "Anthropic models require the optional anthropic extra. "
-            "Install it with: pip install 'code-puppy[anthropic]'"
-        ) from exc
-    return AsyncAnthropic
-
-
-def _load_anthropic_model_classes():
-    try:
-        from pydantic_ai.models.anthropic import AnthropicModel, AnthropicModelSettings
-    except ImportError as exc:  # pragma: no cover - optional extra absent
-        raise RuntimeError(
-            "Anthropic models require the optional anthropic extra. "
-            "Install it with: pip install 'code-puppy[anthropic]'"
-        ) from exc
-    return AnthropicModel, AnthropicModelSettings
-
-
-def _load_openai_model_classes():
-    try:
-        from pydantic_ai.models.openai import (
-            OpenAIChatModel,
-            OpenAIChatModelSettings,
-            OpenAIResponsesModel,
-            OpenAIResponsesModelSettings,
-        )
-    except ImportError as exc:  # pragma: no cover - optional extra absent
-        raise RuntimeError(
-            "OpenAI-compatible models require the optional openai extra. "
-            "Install it with: pip install 'code-puppy[openai]'"
-        ) from exc
-    return (
-        OpenAIChatModel,
-        OpenAIChatModelSettings,
-        OpenAIResponsesModel,
-        OpenAIResponsesModelSettings,
-    )
 
 
 def _make_openai_chat_settings(settings: dict[str, Any]):
@@ -82,50 +48,6 @@ def _make_openai_responses_settings(settings: dict[str, Any]):
 def _make_anthropic_settings(settings: dict[str, Any]):
     _, AnthropicModelSettings = _load_anthropic_model_classes()
     return AnthropicModelSettings(**settings)
-
-
-def _load_async_azure_openai():
-    try:
-        from openai import AsyncAzureOpenAI
-    except ImportError as exc:  # pragma: no cover - optional extra absent
-        raise RuntimeError(
-            "Azure OpenAI models require the optional azure/openai extras. "
-            "Install with: pip install 'code-puppy[azure,openai]'"
-        ) from exc
-    return AsyncAzureOpenAI
-
-
-def _load_openai_model_profile():
-    try:
-        from pydantic_ai.profiles.openai import OpenAIModelProfile
-    except ImportError as exc:  # pragma: no cover - optional extra absent
-        raise RuntimeError(
-            "OpenAI-compatible profiles require the optional openai extra. "
-            "Install it with: pip install 'code-puppy[openai]'"
-        ) from exc
-    return OpenAIModelProfile
-
-
-def _load_cerebras_provider():
-    try:
-        from pydantic_ai.providers.cerebras import CerebrasProvider
-    except ImportError as exc:  # pragma: no cover - optional extra absent
-        raise RuntimeError(
-            "Cerebras models require the optional openai extra. "
-            "Install it with: pip install 'code-puppy[openai]'"
-        ) from exc
-    return CerebrasProvider
-
-
-def _load_openrouter_provider():
-    try:
-        from pydantic_ai.providers.openrouter import OpenRouterProvider
-    except ImportError as exc:  # pragma: no cover - optional extra absent
-        raise RuntimeError(
-            "OpenRouter models require the optional openai extra. "
-            "Install it with: pip install 'code-puppy[openai]'"
-        ) from exc
-    return OpenRouterProvider
 
 
 def _make_zai_chat_model_class():
