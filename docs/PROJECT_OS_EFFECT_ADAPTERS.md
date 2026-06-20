@@ -332,18 +332,41 @@ No durable memory object may be created, revised, archived, or deleted unless:
 11. A mutation audit event is recorded.
 ```
 
-Lease classes should reflect risk:
+The mutation must be atomic:
 
 ```text
-Recall Lease
-  memory.recall
-  read-only, low-consequence, no kennel mutation
+mutation succeeds completely
+  or
+mutation does not occur
+```
 
-Mutation Lease
+There must be no half-written institutional memory. If the kennel mutation
+succeeds but Project OS cannot consume the lease and write audit evidence, the
+mutation is not acceptable. If Project OS can consume the lease but the kennel
+cannot report the resulting memory object, the mutation is not acceptable.
+Design implementation so Project OS state and kennel state either advance
+together or both remain unchanged.
+
+Memory effect classes should reflect risk:
+
+```text
+Class 1: Recall
+  memory.recall
+  read-only
+  low consequence
+
+Class 2: Knowledge creation or modification
   memory.promote
   memory.distill
+  medium consequence
+  requires source evidence and mutation reason
+
+Class 3: Knowledge removal or correction
   memory.archive
-  durable institutional knowledge mutation
+  memory.delete
+  memory.remedy
+  high consequence
+  requires additional authority or precedent/remedy evidence
 ```
 
 A mutation adapter must not quietly rewrite institutional knowledge while
