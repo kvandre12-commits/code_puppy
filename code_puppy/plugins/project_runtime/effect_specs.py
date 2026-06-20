@@ -36,12 +36,20 @@ ANDROID = EffectSpec(
     description="bounded Android settings activity launch",
 )
 
+MEMORY_RECALL = EffectSpec(
+    name="memory-recall",
+    action_scope="memory.recall",
+    capability_scope="memory.read.project_context",
+    description="bounded read-only kennel recall",
+)
+
 DEFAULT_EFFECT = NOOP.name
 
 _EFFECTS = {
     NOOP.name: NOOP,
     BROWSER.name: BROWSER,
     ANDROID.name: ANDROID,
+    MEMORY_RECALL.name: MEMORY_RECALL,
 }
 
 

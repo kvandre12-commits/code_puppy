@@ -179,9 +179,10 @@ AuthorityGrant
   -> Authority Registry Validation
       -> Lease Issue
           -> Execute No-op
-              -> Execute Android Intent
-                  -> Execute Browser Action
-                      -> Execute Tool Call
+              -> Execute Memory Recall
+                  -> Execute Android Intent
+                      -> Execute Browser Action
+                          -> Execute Tool Call
 ```
 
 Each stage should prove the same thing with a stronger effect:
@@ -216,8 +217,66 @@ No effect may occur unless:
 ```
 
 Different adapters may touch different systems, but they do not get different
-governments. Android intents, browser actions, and tool calls are effect adapters
-behind the same authority substrate.
+governments. Memory recall, Android intents, browser actions, and tool calls are
+effect adapters behind the same authority substrate.
+
+## Memory as an effect domain
+
+Memory is not privileged runtime magic. It is an effect domain.
+
+Traditional agents often treat memory as a special subsystem:
+
+```text
+Memory
+  -> Reasoning
+      -> Action
+```
+
+Project OS treats memory access as a governed capability:
+
+```text
+Authority
+  -> Lease
+      -> Effect Adapter
+          -> memory.recall / memory.promote / memory.distill
+              -> Audit
+```
+
+Read and mutation memory effects must not be collapsed:
+
+```text
+memory.recall
+  reads existing knowledge
+
+memory.promote
+  elevates information to durable status
+
+memory.distill
+  creates durable knowledge derived from existing records
+```
+
+`memory.recall` is a read effect. `memory.promote`, `memory.distill`, and future
+`memory.archive` are durable mutations and should require stronger controls.
+SQLite, FTS5, BM25 ranking, vector indexes, or hybrid retrieval are storage and
+retrieval implementation details. The Project OS law is unchanged:
+
+```text
+Who requested?
+What authority existed?
+What lease authorized it?
+What effect occurred?
+What audit evidence remains?
+```
+
+Milestone split:
+
+```text
+Milestone 1A: Governed Memory Recall
+  AuthorityGrant -> Lease -> memory.recall -> Audit
+
+Milestone 1B: Governed Memory Mutation
+  AuthorityGrant -> Lease -> memory.promote/distill/archive -> Audit
+```
 
 ## Runtime proof versus deployment proof
 
