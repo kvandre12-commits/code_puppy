@@ -3,14 +3,22 @@
 Supports multiple simultaneous instances with unique profile directories.
 """
 
+from __future__ import annotations
+
 import asyncio
 import atexit
 import contextvars
 import os
 from pathlib import Path
-from typing import Callable, Dict, Optional
+from typing import TYPE_CHECKING, Callable, Dict, Optional
 
-from playwright.async_api import Browser, BrowserContext, Page
+if TYPE_CHECKING:
+    from playwright.async_api import Browser, BrowserContext, Page
+
+try:
+    from playwright.async_api import async_playwright
+except ImportError:
+    async_playwright = None
 
 from code_puppy import config
 from code_puppy.messaging import emit_info, emit_success, emit_warning
@@ -18,6 +26,18 @@ from code_puppy.messaging import emit_info, emit_success, emit_warning
 # Registry for custom browser types from plugins (e.g., Camoufox for stealth browsing)
 _CUSTOM_BROWSER_TYPES: Dict[str, Callable] = {}
 _BROWSER_TYPES_LOADED: bool = False
+
+
+def _ensure_playwright_available() -> None:
+    """Raise a friendly error when Playwright isn't installed."""
+    if async_playwright is not None:
+        return
+
+    raise RuntimeError(
+        "Playwright browser tools are unavailable because Playwright is not "
+        'installed. Install the browser extra with `pip install "code-puppy'
+        '[browser]"` or `uv pip install "code-puppy[browser]"`.'
+    )
 
 
 def _load_plugin_browser_types() -> None:
@@ -179,7 +199,7 @@ class BrowserManager:
             return
 
         # Default: use Playwright Chromium
-        from playwright.async_api import async_playwright
+        _ensure_playwright_available()
 
         emit_info(f"Using persistent profile: {self.profile_dir}")
 
