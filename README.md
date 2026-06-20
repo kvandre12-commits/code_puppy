@@ -90,6 +90,27 @@ uv pip install "code-puppy[durable]"
 Then toggle it from inside the app via `/dbos on` (and restart). Use `/dbos status`
 to check, `/dbos off` to disable.
 
+#### Optional integrations and tools
+
+The default install is intentionally lean. Add extras only for the capabilities
+you actually want, for example:
+
+```bash
+uv pip install "code-puppy[openai]"
+uv pip install "code-puppy[anthropic]"
+uv pip install "code-puppy[mcp]"
+uv pip install "code-puppy[browser]"
+uv pip install "code-puppy[search]"
+```
+
+On Android/Termux, install `ripgrep` from the package manager instead of PyPI.
+The `browser` extra is skipped there because Playwright does not ship Android
+wheels:
+
+```bash
+pkg install ripgrep
+```
+
 ## Changelog (By Kittylog!)
 
 [📋 View the full changelog on Kittylog](https://kittylog.app/c/mpfaffenberger/code_puppy)

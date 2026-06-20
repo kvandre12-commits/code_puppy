@@ -45,13 +45,13 @@ classifiers = [
 anthropic = ["anthropic==0.79.0", "pydantic-ai-slim[anthropic]==1.56.0"]
 azure = ["azure-identity>=1.15.0", "openai>=1.99.1", "pydantic-ai-slim[openai]==1.56.0"]
 bedrock = ["anthropic==0.79.0", "boto3>=1.43.9", "pydantic-ai-slim[anthropic]==1.56.0"]
-browser = ["playwright>=1.40.0"]
+browser = ["playwright>=1.40.0; platform_system != 'Android'"]
 durable = ["dbos>=2.11.0"]
 fuzzy = ["rapidfuzz>=3.13.0"]
 images = ["Pillow>=10.0.0"]
 mcp = ["mcp>=1.9.4", "pydantic-ai-slim[mcp]==1.56.0"]
 openai = ["openai>=1.99.1", "pydantic-ai-slim[openai]==1.56.0"]
-search = ["ripgrep==14.1.0"]
+search = ["ripgrep==14.1.0; platform_system != 'Android'"]
 
 [project.urls]
 repository = "https://github.com/mpfaffenberger/code_puppy"
