@@ -78,9 +78,10 @@ Read first:
 
 1. `OWNERSHIP.md`
 2. `docs/REPO_INVENTORY.md`
-3. `DroidPuppy/README.md` if touching Android tooling
-4. `DroidPuppy/contracts/README.md` if touching orchestration contracts
-5. `code_puppy/callbacks.py` only if touching plugin hooks
+3. `docs/CROSS_REPO_WORK_LEDGER.md` before rebuilding familiar systems
+4. `DroidPuppy/README.md` if touching Android tooling
+5. `DroidPuppy/contracts/README.md` if touching orchestration contracts
+6. `code_puppy/callbacks.py` only if touching plugin hooks
 
 Then work only inside Code Puppy/DroidPuppy infrastructure unless the task
 explicitly points to a SharpEdge repo.

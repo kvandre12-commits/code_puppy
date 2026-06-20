@@ -109,7 +109,7 @@ Hey SharpEdge play my fight song
 
 Status:
 
-- Plugin source is currently uncommitted.
+- Plugin source now lives in-repo under `code_puppy/plugins/android_media_router/`.
 - Keep it lean; do not expand into a broad media framework until voice reliability
   is proven.
 
