@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass
 
-from . import authority_grant_create_plan, authority_validator, store
+from . import authority_grant_create_plan, authority_validator, effect_specs, store
 
 
 @dataclass(frozen=True, slots=True)
@@ -25,10 +25,15 @@ def create_authority_grant(
     *,
     confirm_grant_id: str,
     issued_at: str | None = None,
+    effect: str = effect_specs.DEFAULT_EFFECT,
 ) -> AuthorityGrantCreateResult:
     """Create an AuthorityGrant only after a valid plan and exact confirmation."""
     state = store.load_state()
-    plan = authority_grant_create_plan.plan_grant_create(state, issued_at=issued_at)
+    plan = authority_grant_create_plan.plan_grant_create(
+        state,
+        issued_at=issued_at,
+        effect=effect,
+    )
     expected = plan.grant_id
     if not expected or confirm_grant_id != expected:
         return AuthorityGrantCreateResult(

@@ -10,9 +10,12 @@ from . import (
     authority_grant_create_plan,
     authority_grant_draft,
     authority_grants,
+    android_execution,
     authority_validator,
+    browser_execution,
     command_formatters,
     dispatch_plan,
+    effect_specs,
     lease_draft,
     lease_issue,
     noop_execution,
@@ -34,6 +37,10 @@ def _pop_flag(parts: list[str], name: str, default: str = "") -> str:
     return value
 
 
+def _pop_effect(parts: list[str]) -> str:
+    return _pop_flag(parts, "--effect", effect_specs.DEFAULT_EFFECT)
+
+
 def _pop_repeated(parts: list[str], name: str) -> list[str]:
     values: list[str] = []
     while name in parts:
@@ -51,10 +58,10 @@ def help_text() -> str:
             "Project runtime commands:",
             "  /project validate",
             "  /project authority grants",
-            "  /project authority grant-draft",
+            f"  /project authority grant-draft [--effect {effect_specs.choices_text()}]",
             "  /project authority validate",
-            "  /project authority grant-create-plan",
-            "  /project authority grant-create --confirm <grant_id>",
+            f"  /project authority grant-create-plan [--effect {effect_specs.choices_text()}]",
+            f"  /project authority grant-create [--effect {effect_specs.choices_text()}] --confirm <grant_id>",
             "  /project run create [run_id] --project <name> --objective <goal>",
             "      [--work <item>]... [--checkpoint <text>] [--next <text>]",
             "      [--status sleeping|ready|running|blocked|waiting_approval|...]",
@@ -62,10 +69,12 @@ def help_text() -> str:
             "  /project run candidates",
             "  /project run selection",
             "  /project run dispatch-plan",
-            "  /project run lease-draft",
-            "  /project run authority-check",
-            "  /project run lease-issue --confirm <lease_id>",
+            f"  /project run lease-draft [--effect {effect_specs.choices_text()}]",
+            f"  /project run authority-check [--effect {effect_specs.choices_text()}]",
+            f"  /project run lease-issue [--effect {effect_specs.choices_text()}] --confirm <lease_id>",
             "  /project run execute-noop --confirm <lease_id>",
+            "  /project run execute-browser --confirm <lease_id> --url <url>",
+            "  /project run execute-android --confirm <lease_id> --component <component>",
             "  /project run inspect <run_id>",
             "  /project run why <run_id>",
             "  /project run events <run_id>",
@@ -86,29 +95,50 @@ def help_text() -> str:
     )
 
 
+def _authority_usage() -> str:
+    return (
+        "authority usage: /project authority grants | grant-draft | "
+        "validate | grant-create-plan | grant-create --confirm <grant_id>\n"
+        "effect option: grant-draft, grant-create-plan, and grant-create accept "
+        "optional --effect <name>"
+    )
+
+
 def _handle_authority(parts: list[str]) -> str:
     if parts == ["grants"]:
         return authority_grants.format_grants(store.list_authority_grants())
-    if parts == ["grant-draft"]:
-        draft = authority_grant_draft.draft_authority_grant()
+    if parts and parts[0] == "grant-draft":
+        rest = parts[1:]
+        effect = _pop_effect(rest)
+        if rest:
+            raise ValueError(_authority_usage())
+        draft = authority_grant_draft.draft_authority_grant(effect=effect)
         return authority_grant_draft.format_draft(draft)
     if parts == ["validate"]:
         report = authority_validator.validate_authority()
         return authority_validator.format_report(report)
-    if parts == ["grant-create-plan"]:
-        plan = authority_grant_create_plan.plan_grant_create()
+    if parts and parts[0] == "grant-create-plan":
+        rest = parts[1:]
+        effect = _pop_effect(rest)
+        if rest:
+            raise ValueError(_authority_usage())
+        plan = authority_grant_create_plan.plan_grant_create(effect=effect)
         return authority_grant_create_plan.format_plan(plan)
     if parts and parts[0] == "grant-create":
         rest = parts[1:]
+        effect = _pop_effect(rest)
         confirm = _pop_flag(rest, "--confirm")
         if rest or not confirm:
-            raise ValueError("grant-create requires --confirm <grant_id>")
-        result = authority_grant_create.create_authority_grant(confirm_grant_id=confirm)
+            raise ValueError(
+                "grant-create requires --confirm <grant_id> "
+                "and accepts optional --effect <name>"
+            )
+        result = authority_grant_create.create_authority_grant(
+            confirm_grant_id=confirm,
+            effect=effect,
+        )
         return authority_grant_create.format_result(result)
-    raise ValueError(
-        "authority usage: /project authority grants | grant-draft | "
-        "validate | grant-create-plan | grant-create --confirm <grant_id>"
-    )
+    raise ValueError(_authority_usage())
 
 
 def _handle_run_create(parts: list[str]) -> str:
@@ -164,24 +194,34 @@ def _handle_run_dispatch_plan(parts: list[str]) -> str:
 
 
 def _handle_run_lease_draft(parts: list[str]) -> str:
+    effect = _pop_effect(parts)
     if parts:
-        raise ValueError("lease-draft does not accept arguments")
-    draft = lease_draft.draft_lease()
+        raise ValueError(
+            "lease-draft does not accept arguments other than optional --effect"
+        )
+    draft = lease_draft.draft_lease(effect=effect)
     return lease_draft.format_draft(draft)
 
 
 def _handle_run_authority_check(parts: list[str]) -> str:
+    effect = _pop_effect(parts)
     if parts:
-        raise ValueError("authority-check does not accept arguments")
-    check = authority_check.check_authority()
+        raise ValueError(
+            "authority-check does not accept arguments other than optional --effect"
+        )
+    check = authority_check.check_authority(effect=effect)
     return authority_check.format_check(check)
 
 
 def _handle_run_lease_issue(parts: list[str]) -> str:
+    effect = _pop_effect(parts)
     confirm = _pop_flag(parts, "--confirm")
     if parts or not confirm:
-        raise ValueError("lease-issue requires --confirm <lease_id>")
-    result = lease_issue.issue_lease(confirm_lease_id=confirm)
+        raise ValueError(
+            "lease-issue requires --confirm <lease_id> "
+            "and accepts optional --effect <name>"
+        )
+    result = lease_issue.issue_lease(confirm_lease_id=confirm, effect=effect)
     return lease_issue.format_result(result)
 
 
@@ -191,6 +231,29 @@ def _handle_run_execute_noop(parts: list[str]) -> str:
         raise ValueError("execute-noop requires --confirm <lease_id>")
     result = noop_execution.execute_noop(confirm_lease_id=confirm)
     return noop_execution.format_result(result)
+
+
+def _handle_run_execute_browser(parts: list[str]) -> str:
+    confirm = _pop_flag(parts, "--confirm")
+    url = _pop_flag(parts, "--url")
+    if parts or not confirm or not url:
+        raise ValueError("execute-browser requires --confirm <lease_id> --url <url>")
+    result = browser_execution.execute_browser(confirm_lease_id=confirm, url=url)
+    return browser_execution.format_result(result)
+
+
+def _handle_run_execute_android(parts: list[str]) -> str:
+    confirm = _pop_flag(parts, "--confirm")
+    component = _pop_flag(parts, "--component")
+    if parts or not confirm or not component:
+        raise ValueError(
+            "execute-android requires --confirm <lease_id> --component <component>"
+        )
+    result = android_execution.execute_android(
+        confirm_lease_id=confirm,
+        component=component,
+    )
+    return android_execution.format_result(result)
 
 
 def _handle_run_inspect(parts: list[str]) -> str:
@@ -307,6 +370,10 @@ def dispatch(parts: list[str]) -> str:
         return _handle_run_lease_issue(rest)
     if action == "execute-noop":
         return _handle_run_execute_noop(rest)
+    if action == "execute-browser":
+        return _handle_run_execute_browser(rest)
+    if action == "execute-android":
+        return _handle_run_execute_android(rest)
     if action == "inspect":
         return _handle_run_inspect(rest)
     if action == "why":

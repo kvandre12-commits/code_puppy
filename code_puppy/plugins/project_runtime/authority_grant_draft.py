@@ -6,7 +6,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
-from . import lease_draft
+from . import effect_specs, lease_draft
 
 BOUNDARY = "project_run"
 ISSUER = "operator_required"
@@ -53,9 +53,11 @@ def _grant_id(draft: lease_draft.LeaseDraft) -> str:
 
 def draft_authority_grant(
     state: Mapping[str, Any] | None = None,
+    *,
+    effect: str = effect_specs.DEFAULT_EFFECT,
 ) -> AuthorityGrantDraft:
     """Draft authority evidence without creating, granting, leasing, or executing."""
-    draft = lease_draft.draft_lease(state)
+    draft = lease_draft.draft_lease(state, effect=effect)
     if not draft.validation_passed:
         reason = "validator FAIL prevents authority grant drafting"
     elif not draft.run_id:

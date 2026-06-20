@@ -6,11 +6,11 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
-from . import dispatch_plan
+from . import dispatch_plan, effect_specs
 
 REQUESTED_AGENT_IDENTITY = "unassigned_agent"
-REQUESTED_ACTION_SCOPE = "project_run.execute_bounded_step"
-REQUESTED_CAPABILITY_SCOPE = "project_runtime.step"
+REQUESTED_ACTION_SCOPE = effect_specs.NOOP.action_scope
+REQUESTED_CAPABILITY_SCOPE = effect_specs.NOOP.capability_scope
 REQUIRED_AUTHORITY_CHECK = (
     "identity_exists + authority_grants_scope + capability_grants_scope"
 )
@@ -45,8 +45,13 @@ def _dispatch_plan_id(plan: dispatch_plan.DispatchPlan) -> str:
     )
 
 
-def draft_lease(state: Mapping[str, Any] | None = None) -> LeaseDraft:
+def draft_lease(
+    state: Mapping[str, Any] | None = None,
+    *,
+    effect: str = effect_specs.DEFAULT_EFFECT,
+) -> LeaseDraft:
     """Draft a lease request without issuing authority or executing."""
+    spec = effect_specs.get_effect_spec(effect)
     plan = dispatch_plan.plan_dispatch(state)
     selected = plan.selected
 
@@ -62,8 +67,8 @@ def draft_lease(state: Mapping[str, Any] | None = None) -> LeaseDraft:
         dispatch_plan_id=_dispatch_plan_id(plan),
         run_id=selected.run_id if selected else "",
         requested_agent_identity=REQUESTED_AGENT_IDENTITY if selected else "",
-        requested_action_scope=REQUESTED_ACTION_SCOPE if selected else "",
-        requested_capability_scope=REQUESTED_CAPABILITY_SCOPE if selected else "",
+        requested_action_scope=spec.action_scope if selected else "",
+        requested_capability_scope=spec.capability_scope if selected else "",
         required_authority_check=REQUIRED_AUTHORITY_CHECK if selected else "",
         proposed_expiry=PROPOSED_EXPIRY if selected else "",
         reason=reason,
