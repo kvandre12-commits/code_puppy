@@ -32,6 +32,7 @@ def _v2_lease(
     principal_id: str | None = None,
     capabilities: list[str] | None = None,
     allowed_tools: list[str] | None = None,
+    constraints: dict | None = None,
     remaining_uses: int = 1,
     max_uses: int = 1,
     max_tool_calls: int | None = None,
@@ -49,7 +50,7 @@ def _v2_lease(
         "lease_scope": "custom_scope",
         "capabilities": capabilities or ["shell.exec"],
         "allowed_tools": allowed_tools or [],
-        "constraints": {},
+        "constraints": constraints or {},
         "quotas": {
             "max_uses": max_uses,
             "remaining_uses": remaining_uses,
@@ -187,6 +188,30 @@ class TestLeaseBinding:
         assert record is not None
         assert record.lease_id == "lease-cap"
 
+    def test_allowed_tools_becomes_real_restriction(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("PROJECT_OS_EYES_ROOT", str(tmp_path))
+        _write_lease(
+            tmp_path,
+            _v2_lease(
+                "lease-tool-lock",
+                capabilities=["android.browser.open_url"],
+                allowed_tools=["android_browser_open_url"],
+            ),
+        )
+
+        blocked = build_pre_tool_response(
+            "android_open",
+            {"target": "https://example.com", "browser": "brave"},
+        )
+        assert blocked is not None
+        assert blocked["blocked"] is True
+
+        allowed = build_pre_tool_response(
+            "android_browser_open_url",
+            {"url": "https://example.com", "browser": "brave"},
+        )
+        assert allowed is None
+
     def test_failed_result_does_not_consume_reserved_lease(self, monkeypatch, tmp_path):
         monkeypatch.setenv("PROJECT_OS_EYES_ROOT", str(tmp_path))
         lease_path = _write_lease(tmp_path, _v2_lease("lease-stays"))
@@ -218,6 +243,135 @@ class TestLeaseBinding:
         )
         assert result is not None
         assert result["blocked"] is True
+
+    def test_intent_constraints_allow_only_approved_action_and_package(
+        self, monkeypatch, tmp_path
+    ):
+        monkeypatch.setenv("PROJECT_OS_EYES_ROOT", str(tmp_path))
+        _write_lease(
+            tmp_path,
+            _v2_lease(
+                "lease-intent",
+                capabilities=["android.intent.send"],
+                constraints={
+                    "intent_actions": ["android.intent.action.VIEW"],
+                    "intent_packages": ["com.brave.browser"],
+                },
+            ),
+        )
+
+        denied = build_pre_tool_response(
+            "android_intent_send",
+            {
+                "action": "android.intent.action.SEND",
+                "package_name": "com.brave.browser",
+                "dry_run": False,
+            },
+        )
+        assert denied is not None
+        assert denied["blocked"] is True
+        assert "specific Android intent actions" in denied["error_message"]
+
+        allowed = build_pre_tool_response(
+            "android_intent_send",
+            {
+                "action": "android.intent.action.VIEW",
+                "package_name": "com.brave.browser",
+                "data_uri": "https://example.com",
+                "dry_run": False,
+            },
+        )
+        assert allowed is None
+
+    def test_browser_constraint_blocks_wrong_browser(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("PROJECT_OS_EYES_ROOT", str(tmp_path))
+        _write_lease(
+            tmp_path,
+            _v2_lease(
+                "lease-browser",
+                capabilities=["android.browser.open_url"],
+                constraints={"browser_packages": ["chrome"]},
+            ),
+        )
+
+        denied = build_pre_tool_response(
+            "android_browser_open_url",
+            {"url": "https://example.com", "browser": "brave"},
+        )
+        assert denied is not None
+        assert denied["blocked"] is True
+        assert "specific browser packages" in denied["error_message"]
+
+        allowed = build_pre_tool_response(
+            "android_browser_open_url",
+            {"url": "https://example.com", "browser": "chrome"},
+        )
+        assert allowed is None
+
+    def test_path_locked_handoff_only_allows_approved_directory(
+        self, monkeypatch, tmp_path
+    ):
+        monkeypatch.setenv("PROJECT_OS_EYES_ROOT", str(tmp_path))
+        monkeypatch.chdir(tmp_path)
+        allowed_dir = tmp_path / "outputs" / "leases"
+        allowed_dir.mkdir(parents=True, exist_ok=True)
+        allowed_file = allowed_dir / "ok.txt"
+        allowed_file.write_text("hi")
+        denied_file = tmp_path / "outputs" / "other" / "no.txt"
+        denied_file.parent.mkdir(parents=True, exist_ok=True)
+        denied_file.write_text("no")
+
+        _write_lease(
+            tmp_path,
+            _v2_lease(
+                "lease-path",
+                capabilities=["android.handoff.share"],
+                constraints={"allowed_paths": [str(allowed_dir)]},
+            ),
+        )
+
+        denied = build_pre_tool_response(
+            "android_handoff_file",
+            {"file_path": str(denied_file), "dry_run": False},
+        )
+        assert denied is not None
+        assert denied["blocked"] is True
+        assert "approved paths" in denied["error_message"]
+
+        allowed = build_pre_tool_response(
+            "android_handoff_file",
+            {"file_path": str(allowed_file), "dry_run": False},
+        )
+        assert allowed is None
+
+    def test_path_locked_shell_requires_cwd_inside_constraint(
+        self, monkeypatch, tmp_path
+    ):
+        monkeypatch.setenv("PROJECT_OS_EYES_ROOT", str(tmp_path))
+        allowed_dir = tmp_path / "sandbox"
+        allowed_dir.mkdir()
+        _write_lease(
+            tmp_path,
+            _v2_lease(
+                "lease-shell-path",
+                capabilities=["shell.exec"],
+                constraints={"allowed_paths": [str(allowed_dir)]},
+            ),
+        )
+
+        denied = build_pre_tool_response(
+            "agent_run_shell_command",
+            {"command": "npm install", "cwd": str(tmp_path)},
+        )
+        assert denied is not None
+        assert denied["blocked"] is True
+        assert "shell execution within approved paths" in denied["error_message"]
+
+        allowed = build_pre_tool_response(
+            "agent_run_shell_command",
+            {"command": "npm install", "cwd": str(allowed_dir)},
+        )
+        assert allowed is None
 
 
 class TestLeaseStoreHelpers:

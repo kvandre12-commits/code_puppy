@@ -62,6 +62,13 @@ class LeaseRecord:
         return []
 
     @property
+    def constraints(self) -> dict[str, Any]:
+        raw = self.payload.get("constraints")
+        if isinstance(raw, dict):
+            return dict(raw)
+        return {}
+
+    @property
     def quotas(self) -> dict[str, Any]:
         raw = self.payload.get("quotas")
         if isinstance(raw, dict):
@@ -199,8 +206,9 @@ def lease_allows(
     if principal_id and record.principal_id and record.principal_id != principal_id:
         return False
 
-    if tool_name in record.allowed_tools:
-        return True
+    if record.allowed_tools and tool_name not in record.allowed_tools:
+        return False
+
     if capability in record.capabilities:
         return True
 
@@ -212,12 +220,12 @@ def lease_allows(
     return capability in LEGACY_SCOPE_CAPABILITIES.get(lease_scope, set())
 
 
-def find_matching_lease(
+def list_matching_leases(
     *,
     capability: str,
     tool_name: str,
     principal_id: str | None = None,
-) -> LeaseRecord | None:
+) -> list[LeaseRecord]:
     matches = [
         record
         for record in iter_active_leases()
@@ -228,14 +236,26 @@ def find_matching_lease(
             principal_id=principal_id,
         )
     ]
-    if not matches:
-        return None
     matches.sort(
         key=lambda record: (
             record.expires_at or dt.datetime.max.replace(tzinfo=dt.timezone.utc)
         )
     )
-    return matches[0]
+    return matches
+
+
+def find_matching_lease(
+    *,
+    capability: str,
+    tool_name: str,
+    principal_id: str | None = None,
+) -> LeaseRecord | None:
+    matches = list_matching_leases(
+        capability=capability,
+        tool_name=tool_name,
+        principal_id=principal_id,
+    )
+    return matches[0] if matches else None
 
 
 def consume_lease(

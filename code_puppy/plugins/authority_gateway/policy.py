@@ -9,11 +9,12 @@ from typing import Any
 from urllib.parse import urlparse
 
 from .audit import emit_authority_event
+from .constraints import lease_constraint_failure
 from .lease_store import (
     LeaseRecord,
     consume_lease,
-    find_matching_lease,
     get_default_principal_id,
+    list_matching_leases,
 )
 
 _RESERVED_LEASE: contextvars.ContextVar[LeaseRecord | None] = contextvars.ContextVar(
@@ -420,12 +421,12 @@ def build_pre_tool_response(
             )
         return None
 
-    lease = find_matching_lease(
+    leases = list_matching_leases(
         capability=decision.capability,
         tool_name=tool_name,
         principal_id=principal_id,
     )
-    if lease is None:
+    if not leases:
         _clear_reservation()
         reason = (
             "[BLOCKED] This action requires an active execution lease "
@@ -446,6 +447,43 @@ def build_pre_tool_response(
             "reason": decision.reason,
         }
 
+    lease: LeaseRecord | None = None
+    constraint_reason: str | None = None
+    for candidate in leases:
+        constraint_reason = lease_constraint_failure(
+            candidate,
+            tool_name=tool_name,
+            tool_args=tool_args,
+        )
+        if constraint_reason is None:
+            lease = candidate
+            break
+
+    if lease is None:
+        _clear_reservation()
+        reason = constraint_reason or (
+            "[BLOCKED] No active execution lease satisfied the requested runtime "
+            "constraints."
+        )
+        emit_authority_event(
+            "tool_blocked",
+            principal_id=principal_id,
+            lease_id=leases[0].lease_id,
+            capability=decision.capability,
+            tool_name=tool_name,
+            outcome="blocked",
+            reason=reason,
+            details={
+                **details,
+                "lease_constraints": leases[0].constraints,
+            },
+        )
+        return {
+            "blocked": True,
+            "error_message": reason,
+            "reason": decision.reason,
+        }
+
     _reserve_lease(lease, tool_name, decision.capability)
     emit_authority_event(
         "tool_allowed",
@@ -455,7 +493,10 @@ def build_pre_tool_response(
         tool_name=tool_name,
         outcome="leased",
         reason="Tool allowed under an active capability-scoped lease.",
-        details=details,
+        details={
+            **details,
+            "lease_constraints": lease.constraints,
+        },
     )
     return None
 
