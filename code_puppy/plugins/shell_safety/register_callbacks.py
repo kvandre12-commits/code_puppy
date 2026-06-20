@@ -7,11 +7,7 @@ and assesses their safety risk before execution.
 from typing import Any, Dict, Optional
 
 from code_puppy.callbacks import register_callback
-from code_puppy.config import (
-    get_global_model_name,
-    get_safety_permission_level,
-    get_yolo_mode,
-)
+from code_puppy.config import get_safety_permission_level, get_yolo_mode
 from code_puppy.messaging import emit_info
 from code_puppy.plugins.shell_safety.command_cache import (
     cache_assessment,
@@ -19,29 +15,15 @@ from code_puppy.plugins.shell_safety.command_cache import (
 )
 from code_puppy.tools.command_runner import ShellSafetyAssessment
 
-# OAuth model prefixes - these models have their own safety mechanisms
-OAUTH_MODEL_PREFIXES = (
-    "claude-code-",  # Anthropic OAuth
-    "chatgpt-",  # OpenAI OAuth
-    "gemini-oauth",  # Google OAuth
-)
-
 
 def is_oauth_model(model_name: str | None) -> bool:
-    """Check if the model is an OAuth model that should skip safety checks.
+    """Compatibility shim for older tests/importers.
 
-    OAuth models have their own built-in safety mechanisms, so we skip
-    the shell safety callback to avoid redundant checks and potential bugs.
-
-    Args:
-        model_name: The name of the current model
-
-    Returns:
-        True if the model is an OAuth model, False otherwise
+    The local runtime no longer exempts any model family from shell safety.
+    This helper remains import-safe but always returns ``False``.
     """
-    if not model_name:
-        return False
-    return model_name.startswith(OAUTH_MODEL_PREFIXES)
+    del model_name
+    return False
 
 
 # Risk level hierarchy for numeric comparison
@@ -98,11 +80,6 @@ async def shell_safety_callback(
         None if command is safe to proceed
         Dict with rejection info if command should be blocked
     """
-    # Skip safety checks for OAuth models - they have their own safety mechanisms
-    current_model = get_global_model_name()
-    if is_oauth_model(current_model):
-        return None
-
     # Only check safety in yolo_mode - otherwise user is reviewing manually
     yolo_mode = get_yolo_mode()
     if not yolo_mode:

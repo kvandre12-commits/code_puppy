@@ -153,7 +153,7 @@ class TestShellSafetyAgent:
 
 
 # ============================================================
-# shell_safety/register_callbacks.py - line 43 (is_oauth_model with None)
+# shell_safety/register_callbacks.py - compatibility shim coverage
 # ============================================================
 
 from code_puppy.plugins.shell_safety.register_callbacks import (  # noqa: E402
