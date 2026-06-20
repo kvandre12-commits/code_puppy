@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 
+from code_puppy.plugins.android_media_router import __main__ as main_mod
 from code_puppy.plugins.android_media_router import register_callbacks, tooling
 
 
@@ -123,6 +125,78 @@ class TestMediaRouterTooling:
         assert "commands" in doctor
         assert examples["success"] is True
         assert any("favorite song" in str(row).lower() for row in examples["examples"])
+
+
+class TestMediaRouterCli:
+    def test_main_routes_transcript_and_exits_zero(self, monkeypatch, capsys):
+        monkeypatch.setattr(
+            main_mod,
+            "handle_transcript",
+            lambda transcript, dry_run, music_volume: {
+                "success": True,
+                "transcript": transcript,
+                "dry_run": dry_run,
+                "music_volume": music_volume,
+            },
+        )
+        monkeypatch.setattr(
+            sys,
+            "argv",
+            ["sharpedge-media", "--say", "Hey SharpEdge play my favorite song"],
+        )
+
+        try:
+            main_mod.main()
+        except SystemExit as exc:
+            assert exc.code == 0
+
+        output = json.loads(capsys.readouterr().out)
+        assert output["success"] is True
+        assert output["dry_run"] is True
+        assert output["transcript"] == "Hey SharpEdge play my favorite song"
+
+    def test_main_execute_mode_disables_dry_run(self, monkeypatch):
+        captured: dict[str, object] = {}
+
+        def fake_set_favorite(target: str, provider: str, dry_run: bool):
+            captured.update(
+                {"target": target, "provider": provider, "dry_run": dry_run}
+            )
+            return {"success": True}
+
+        monkeypatch.setattr(main_mod, "set_favorite", fake_set_favorite)
+        monkeypatch.setattr(
+            sys,
+            "argv",
+            [
+                "sharpedge-media",
+                "--set-favorite",
+                "fight song",
+                "--provider",
+                "spotify",
+                "--execute",
+            ],
+        )
+
+        try:
+            main_mod.main()
+        except SystemExit as exc:
+            assert exc.code == 0
+
+        assert captured == {
+            "target": "fight song",
+            "provider": "spotify",
+            "dry_run": False,
+        }
+
+    def test_main_loop_exits_with_listen_loop_code(self, monkeypatch):
+        monkeypatch.setattr(main_mod, "listen_loop", lambda **kwargs: 7)
+        monkeypatch.setattr(sys, "argv", ["sharpedge-media", "--loop"])
+
+        try:
+            main_mod.main()
+        except SystemExit as exc:
+            assert exc.code == 7
 
 
 class TestMediaRouterPluginRegistration:
