@@ -14,6 +14,24 @@ from .manager import (
     supervisor_status,
     write_authority_manifest,
 )
+from .templates import (
+    operator_snapshot,
+    start_isolated_job,
+    write_isolated_job_manifest,
+)
+
+
+def _parse_env_assignments(values: list[str] | None) -> dict[str, str]:
+    assignments: dict[str, str] = {}
+    for item in values or []:
+        if "=" not in item:
+            raise SystemExit(f"Invalid --env value: {item!r}; expected KEY=VALUE")
+        key, value = item.split("=", 1)
+        clean_key = key.strip()
+        if not clean_key:
+            raise SystemExit(f"Invalid --env value: {item!r}; key cannot be empty")
+        assignments[clean_key] = value
+    return assignments
 
 
 def main() -> None:
@@ -24,6 +42,29 @@ def main() -> None:
     write_manifest.add_argument(
         "--output", default="outputs/project_os_authority_manifest.json"
     )
+
+    write_job_manifest = subparsers.add_parser("write-isolated-job-manifest")
+    write_job_manifest.add_argument(
+        "--output", default="outputs/project_os_isolated_job_manifest.json"
+    )
+    write_job_manifest.add_argument("--service", default="isolated-job")
+    write_job_manifest.add_argument(
+        "--command", dest="job_command", nargs="+", required=True
+    )
+    write_job_manifest.add_argument(
+        "--runtime",
+        choices=["host", "direct", "proot"],
+        default="proot",
+    )
+    write_job_manifest.add_argument("--sandbox", default="isolated-job")
+    write_job_manifest.add_argument("--rootfs-tarball", default="")
+    write_job_manifest.add_argument("--rootfs-url", default="")
+    write_job_manifest.add_argument("--bind", dest="bind_mounts", action="append")
+    write_job_manifest.add_argument("--cwd", default="")
+    write_job_manifest.add_argument("--env", action="append")
+    write_job_manifest.add_argument("--principal-id", default="")
+    write_job_manifest.add_argument("--without-authority", action="store_true")
+    write_job_manifest.add_argument("--autostart", action="store_true")
 
     init_sandbox = subparsers.add_parser("init-sandbox")
     init_sandbox.add_argument("--manifest", default="")
@@ -47,6 +88,20 @@ def main() -> None:
     status.add_argument("--manifest", default="")
     status.add_argument("--service", default="")
 
+    start_isolated = subparsers.add_parser("start-isolated-job")
+    start_isolated.add_argument("--manifest", required=True)
+    start_isolated.add_argument("--service", default="")
+    start_isolated.add_argument("--tail-seconds", type=float, default=0.5)
+    start_isolated.add_argument("--max-events", type=int, default=10)
+    start_isolated.add_argument("--topic", dest="topics", action="append")
+
+    snapshot = subparsers.add_parser("operator-snapshot")
+    snapshot.add_argument("--manifest", required=True)
+    snapshot.add_argument("--service", default="")
+    snapshot.add_argument("--seconds", type=float, default=0.5)
+    snapshot.add_argument("--max-events", type=int, default=10)
+    snapshot.add_argument("--topic", dest="topics", action="append")
+
     monitor = subparsers.add_parser("run-monitor")
     monitor.add_argument("--manifest", required=True)
     monitor.add_argument("--service", required=True)
@@ -67,6 +122,24 @@ def main() -> None:
         result = write_authority_manifest(args.output)
         print(json.dumps(result, indent=2, sort_keys=True))
         raise SystemExit(0)
+    if args.command == "write-isolated-job-manifest":
+        result = write_isolated_job_manifest(
+            output_path=args.output,
+            service_name=args.service,
+            command=args.job_command,
+            runtime=args.runtime,
+            sandbox_name=args.sandbox,
+            sandbox_rootfs_tarball=args.rootfs_tarball,
+            sandbox_rootfs_url=args.rootfs_url,
+            sandbox_bind_mounts=args.bind_mounts,
+            cwd=args.cwd,
+            env=_parse_env_assignments(args.env),
+            principal_id=args.principal_id,
+            include_authority=not args.without_authority,
+            autostart=args.autostart,
+        )
+        print(json.dumps(result, indent=2, sort_keys=True))
+        raise SystemExit(0 if result.get("success") else 1)
     if args.command == "init-sandbox":
         result = initialize_sandbox(
             manifest_path=args.manifest or None,
@@ -93,6 +166,26 @@ def main() -> None:
         result = supervisor_status(
             manifest_path=args.manifest or None,
             service_name=args.service,
+        )
+        print(json.dumps(result, indent=2, sort_keys=True))
+        raise SystemExit(0 if result.get("success") else 1)
+    if args.command == "start-isolated-job":
+        result = start_isolated_job(
+            manifest_path=args.manifest,
+            service_name=args.service,
+            tail_topics=args.topics,
+            tail_seconds=args.tail_seconds,
+            tail_max_events=args.max_events,
+        )
+        print(json.dumps(result, indent=2, sort_keys=True))
+        raise SystemExit(0 if result.get("success") else 1)
+    if args.command == "operator-snapshot":
+        result = operator_snapshot(
+            manifest_path=args.manifest,
+            service_name=args.service,
+            topics=args.topics,
+            seconds=args.seconds,
+            max_events=args.max_events,
         )
         print(json.dumps(result, indent=2, sort_keys=True))
         raise SystemExit(0 if result.get("success") else 1)

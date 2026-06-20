@@ -4,65 +4,74 @@ import hashlib
 import json
 import os
 import shutil
-import sys
 import tempfile
 import time
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from .manifest_schema import (
+    AUTHORITY_DAEMON_BUILTIN,
+    DEFAULT_HOST_RUNTIME,
+    DEFAULT_LOG_BACKUPS,
+    DEFAULT_LOG_MAX_BYTES,
+    DEFAULT_MANIFEST_VERSION,
+    DEFAULT_MAX_RESTART_ATTEMPTS,
+    DEFAULT_OPERATOR_MAX_EVENTS,
+    DEFAULT_OPERATOR_TAIL_SECONDS,
+    DEFAULT_RESTART_BACKOFF_SECONDS,
+    AuthorityConfig,
+    ManifestDocument,
+    OperatorWorkflow,
+    SandboxConfig,
+    ServiceManifest,
+    TemplateConfig,
+    ToolHints,
+    manifest_document_from_payload,
+)
+
 DEFAULT_SUPERVISOR_ROOT = Path.home() / ".project_os" / "supervisor"
-DEFAULT_LOG_MAX_BYTES = 128 * 1024
-DEFAULT_LOG_BACKUPS = 3
-DEFAULT_RESTART_BACKOFF_SECONDS = 1.0
-DEFAULT_MAX_RESTART_ATTEMPTS = 3
-AUTHORITY_DAEMON_BUILTIN = "authority_daemon"
 EVENT_BUS_BUILTIN = "event_bus"
-DEFAULT_SANDBOX_NAME = "default"
 
-
-@dataclass(frozen=True)
-class ServiceManifest:
-    name: str
-    command: list[str]
-    cwd: str
-    env: dict[str, str]
-    autostart: bool
-    restart_policy: str
-    restart_backoff_seconds: float
-    max_restart_attempts: int
-    heartbeat_timeout_seconds: float
-    heartbeat_interval_seconds: float
-    log_max_bytes: int
-    log_backups: int
-    builtin: str
-    runtime: str
-    sandbox_name: str
-    sandbox_rootfs_tarball: str
-    sandbox_rootfs_url: str
-    sandbox_bind_mounts: list[str]
-
-    def as_dict(self) -> dict[str, Any]:
-        return {
-            "name": self.name,
-            "command": self.command,
-            "cwd": self.cwd,
-            "env": self.env,
-            "autostart": self.autostart,
-            "restart_policy": self.restart_policy,
-            "restart_backoff_seconds": self.restart_backoff_seconds,
-            "max_restart_attempts": self.max_restart_attempts,
-            "heartbeat_timeout_seconds": self.heartbeat_timeout_seconds,
-            "heartbeat_interval_seconds": self.heartbeat_interval_seconds,
-            "log_max_bytes": self.log_max_bytes,
-            "log_backups": self.log_backups,
-            "builtin": self.builtin,
-            "runtime": self.runtime,
-            "sandbox_name": self.sandbox_name,
-            "sandbox_rootfs_tarball": self.sandbox_rootfs_tarball,
-            "sandbox_rootfs_url": self.sandbox_rootfs_url,
-            "sandbox_bind_mounts": self.sandbox_bind_mounts,
-        }
+__all__ = [
+    "AUTHORITY_DAEMON_BUILTIN",
+    "DEFAULT_HOST_RUNTIME",
+    "DEFAULT_LOG_BACKUPS",
+    "DEFAULT_LOG_MAX_BYTES",
+    "DEFAULT_MANIFEST_VERSION",
+    "DEFAULT_MAX_RESTART_ATTEMPTS",
+    "DEFAULT_OPERATOR_MAX_EVENTS",
+    "DEFAULT_OPERATOR_TAIL_SECONDS",
+    "DEFAULT_RESTART_BACKOFF_SECONDS",
+    "AuthorityConfig",
+    "ManifestDocument",
+    "OperatorWorkflow",
+    "SandboxConfig",
+    "ServiceManifest",
+    "TemplateConfig",
+    "ToolHints",
+    "clear_supervisor_state",
+    "event_socket_path",
+    "find_service",
+    "get_supervisor_root",
+    "heartbeat_path",
+    "heartbeat_snapshot",
+    "load_manifest",
+    "load_manifest_document",
+    "load_runtime",
+    "log_path",
+    "pid_alive",
+    "read_json",
+    "runtime_dir",
+    "runtime_path",
+    "runtime_payload",
+    "runtime_status",
+    "stop_path",
+    "utc_now",
+    "write_authority_manifest",
+    "write_json",
+    "write_runtime",
+    "_rotate_log",
+]
 
 
 def utc_now() -> str:
@@ -176,136 +185,65 @@ def _rotate_log(path: Path, *, max_bytes: int, backups: int) -> dict[str, Any]:
     return {"rotated": True, "path": str(path), "size": size}
 
 
-def _normalize_command(raw: Any) -> list[str]:
-    if not isinstance(raw, list):
-        return []
-    return [str(item) for item in raw if str(item).strip()]
-
-
-def _normalize_string_list(raw: Any) -> list[str]:
-    if not isinstance(raw, list):
-        return []
-    return [str(item).strip() for item in raw if str(item).strip()]
-
-
-def _service_from_payload(payload: dict[str, Any]) -> ServiceManifest:
-    name = str(payload.get("name", "")).strip()
-    builtin = str(payload.get("builtin", "")).strip()
-    runtime = str(payload.get("runtime", "direct") or "direct").strip().lower()
-    command = _normalize_command(payload.get("command"))
-    if runtime not in {"direct", "proot"}:
-        raise ValueError(f"service '{name or 'unknown'}' has invalid runtime")
-    if builtin == AUTHORITY_DAEMON_BUILTIN and not command:
-        if runtime == "proot":
-            raise ValueError(
-                f"service '{name or 'unknown'}' must define an explicit guest command when runtime=proot"
-            )
-        command = [
-            sys.executable,
-            "-m",
-            "code_puppy.plugins.project_os_supervisor",
-            "run-authority-daemon",
-        ]
-    if builtin == EVENT_BUS_BUILTIN and not command:
-        if runtime == "proot":
-            raise ValueError(
-                f"service '{name or 'unknown'}' must define an explicit guest command when runtime=proot"
-            )
-        command = [
-            sys.executable,
-            "-m",
-            "code_puppy.plugins.project_os_supervisor",
-            "run-broker",
-        ]
-    if not name:
-        raise ValueError("service name is required")
-    if not command:
-        raise ValueError(f"service '{name}' must define command or builtin")
-    restart_policy = str(payload.get("restart_policy", "on-failure")).strip() or "never"
-    if restart_policy not in {"never", "on-failure", "always"}:
-        raise ValueError(f"service '{name}' has invalid restart_policy")
-    env = payload.get("env") if isinstance(payload.get("env"), dict) else {}
-    return ServiceManifest(
-        name=name,
-        command=command,
-        cwd=str(payload.get("cwd", ".") or "."),
-        env={str(key): str(value) for key, value in env.items()},
-        autostart=bool(payload.get("autostart", True)),
-        restart_policy=restart_policy,
-        restart_backoff_seconds=float(
-            payload.get("restart_backoff_seconds", DEFAULT_RESTART_BACKOFF_SECONDS)
-        ),
-        max_restart_attempts=max(
-            0,
-            int(payload.get("max_restart_attempts", DEFAULT_MAX_RESTART_ATTEMPTS) or 0),
-        ),
-        heartbeat_timeout_seconds=max(
-            0.0, float(payload.get("heartbeat_timeout_seconds", 0) or 0)
-        ),
-        heartbeat_interval_seconds=max(
-            0.1, float(payload.get("heartbeat_interval_seconds", 5) or 5)
-        ),
-        log_max_bytes=max(
-            1024, int(payload.get("log_max_bytes", DEFAULT_LOG_MAX_BYTES) or 0)
-        ),
-        log_backups=max(1, int(payload.get("log_backups", DEFAULT_LOG_BACKUPS) or 0)),
-        builtin=builtin,
-        runtime=runtime,
-        sandbox_name=str(
-            payload.get("sandbox_name", DEFAULT_SANDBOX_NAME) or DEFAULT_SANDBOX_NAME
-        ).strip()
-        or DEFAULT_SANDBOX_NAME,
-        sandbox_rootfs_tarball=str(
-            payload.get("sandbox_rootfs_tarball", "") or ""
-        ).strip(),
-        sandbox_rootfs_url=str(payload.get("sandbox_rootfs_url", "") or "").strip(),
-        sandbox_bind_mounts=_normalize_string_list(payload.get("sandbox_bind_mounts")),
-    )
+def load_manifest_document(manifest_path: str | Path) -> ManifestDocument:
+    path = Path(manifest_path).expanduser().resolve()
+    return manifest_document_from_payload(read_json(path))
 
 
 def load_manifest(manifest_path: str | Path) -> list[ServiceManifest]:
-    path = Path(manifest_path).expanduser().resolve()
-    payload = read_json(path)
-    services = (
-        payload.get("services") if isinstance(payload.get("services"), list) else []
-    )
-    records = [_service_from_payload(service) for service in services]
-    names = [service.name for service in records]
-    if len(names) != len(set(names)):
-        raise ValueError("manifest contains duplicate service names")
-    return records
+    return load_manifest_document(manifest_path).services
 
 
 def write_authority_manifest(output_path: str | Path) -> dict[str, Any]:
     path = Path(output_path).expanduser().resolve()
-    payload = {
-        "manifest_version": "1.0.0",
-        "services": [
-            {
-                "name": "event-bus",
-                "builtin": EVENT_BUS_BUILTIN,
-                "autostart": True,
-                "restart_policy": "always",
-                "restart_backoff_seconds": 1.0,
-                "max_restart_attempts": 5,
-                "heartbeat_timeout_seconds": 0.0,
-                "log_max_bytes": DEFAULT_LOG_MAX_BYTES,
-                "log_backups": DEFAULT_LOG_BACKUPS,
-            },
-            {
-                "name": "authority-daemon",
-                "builtin": AUTHORITY_DAEMON_BUILTIN,
-                "autostart": True,
-                "restart_policy": "always",
-                "restart_backoff_seconds": 1.0,
-                "max_restart_attempts": 5,
-                "heartbeat_interval_seconds": 2.0,
-                "heartbeat_timeout_seconds": 8.0,
-                "log_max_bytes": DEFAULT_LOG_MAX_BYTES,
-                "log_backups": DEFAULT_LOG_BACKUPS,
-            },
+    document = ManifestDocument(
+        manifest_version=DEFAULT_MANIFEST_VERSION,
+        template=TemplateConfig(flavor="authority_stack.v1", strict_validation=False),
+        authority=AuthorityConfig(
+            principal_id="",
+            required=False,
+            enforce_handshake=False,
+        ),
+        operator_workflow=OperatorWorkflow(
+            primary_service="authority-daemon",
+            recommended_tail_topics=["system.authority", "authority.audit"],
+            recommended_tail_seconds=DEFAULT_OPERATOR_TAIL_SECONDS,
+            recommended_max_events=DEFAULT_OPERATOR_MAX_EVENTS,
+            tool_hints=ToolHints(
+                start="project_os_supervisor_start_manifest",
+                snapshot="project_os_supervisor_operator_snapshot",
+            ),
+        ),
+        services=[
+            ServiceManifest(
+                name="event-bus",
+                cwd=".",
+                builtin=EVENT_BUS_BUILTIN,
+                autostart=True,
+                restart_policy="always",
+                restart_backoff_seconds=1.0,
+                max_restart_attempts=5,
+                heartbeat_timeout_seconds=0.0,
+                heartbeat_interval_seconds=5.0,
+                log_max_bytes=DEFAULT_LOG_MAX_BYTES,
+                log_backups=DEFAULT_LOG_BACKUPS,
+            ),
+            ServiceManifest(
+                name="authority-daemon",
+                cwd=".",
+                builtin=AUTHORITY_DAEMON_BUILTIN,
+                autostart=True,
+                restart_policy="always",
+                restart_backoff_seconds=1.0,
+                max_restart_attempts=5,
+                heartbeat_interval_seconds=2.0,
+                heartbeat_timeout_seconds=8.0,
+                log_max_bytes=DEFAULT_LOG_MAX_BYTES,
+                log_backups=DEFAULT_LOG_BACKUPS,
+            ),
         ],
-    }
+    )
+    payload = document.as_dict()
     write_json(path, payload)
     return {"success": True, "manifest_path": str(path), "manifest": payload}
 

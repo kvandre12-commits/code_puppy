@@ -8,12 +8,15 @@ from code_puppy.callbacks import register_callback
 
 from .tooling import (
     project_os_supervisor_init_sandbox as project_os_supervisor_init_sandbox_impl,
+    project_os_supervisor_operator_snapshot as project_os_supervisor_operator_snapshot_impl,
     project_os_supervisor_reset_state as project_os_supervisor_reset_state_impl,
+    project_os_supervisor_start_isolated_job as project_os_supervisor_start_isolated_job_impl,
     project_os_supervisor_start_manifest as project_os_supervisor_start_manifest_impl,
     project_os_supervisor_status as project_os_supervisor_status_impl,
     project_os_supervisor_stop_manifest as project_os_supervisor_stop_manifest_impl,
     project_os_supervisor_stop_service as project_os_supervisor_stop_service_impl,
     project_os_supervisor_write_authority_manifest as project_os_supervisor_write_authority_manifest_impl,
+    project_os_supervisor_write_isolated_job_manifest as project_os_supervisor_write_isolated_job_manifest_impl,
     project_os_tail as project_os_tail_impl,
 )
 
@@ -21,9 +24,12 @@ _STATUS = "project_os_supervisor_status"
 _WRITE_MANIFEST = "project_os_supervisor_write_authority_manifest"
 _INIT_SANDBOX = "project_os_supervisor_init_sandbox"
 _START_MANIFEST = "project_os_supervisor_start_manifest"
+_START_ISOLATED_JOB = "project_os_supervisor_start_isolated_job"
 _STOP_SERVICE = "project_os_supervisor_stop_service"
 _STOP_MANIFEST = "project_os_supervisor_stop_manifest"
 _RESET_STATE = "project_os_supervisor_reset_state"
+_WRITE_ISOLATED_JOB_MANIFEST = "project_os_supervisor_write_isolated_job_manifest"
+_OPERATOR_SNAPSHOT = "project_os_supervisor_operator_snapshot"
 _TAIL = "project_os_tail"
 
 
@@ -87,6 +93,26 @@ def register_project_os_supervisor_start_manifest(agent: Any) -> None:
         )
 
 
+def register_project_os_supervisor_start_isolated_job(agent: Any) -> None:
+    @agent.tool
+    async def project_os_supervisor_start_isolated_job(
+        context: RunContext,
+        manifest_path: str,
+        service_name: str = "",
+        tail_topics: list[str] | None = None,
+        tail_seconds: float = 0.5,
+        tail_max_events: int = 10,
+    ) -> dict[str, Any]:
+        del context
+        return project_os_supervisor_start_isolated_job_impl(
+            manifest_path=manifest_path,
+            service_name=service_name,
+            tail_topics=tail_topics,
+            tail_seconds=tail_seconds,
+            tail_max_events=tail_max_events,
+        )
+
+
 def register_project_os_supervisor_stop_service(agent: Any) -> None:
     @agent.tool
     async def project_os_supervisor_stop_service(
@@ -121,6 +147,62 @@ def register_project_os_supervisor_reset_state(agent: Any) -> None:
         return project_os_supervisor_reset_state_impl(confirm=confirm)
 
 
+def register_project_os_supervisor_write_isolated_job_manifest(agent: Any) -> None:
+    @agent.tool
+    async def project_os_supervisor_write_isolated_job_manifest(
+        context: RunContext,
+        output_path: str = "outputs/project_os_isolated_job_manifest.json",
+        service_name: str = "isolated-job",
+        command: list[str] | None = None,
+        runtime: str = "proot",
+        sandbox_name: str = "isolated-job",
+        sandbox_rootfs_tarball: str = "",
+        sandbox_rootfs_url: str = "",
+        sandbox_bind_mounts: list[str] | None = None,
+        cwd: str = "",
+        env: dict[str, str] | None = None,
+        principal_id: str = "",
+        include_authority: bool = True,
+        autostart: bool = False,
+    ) -> dict[str, Any]:
+        del context
+        return project_os_supervisor_write_isolated_job_manifest_impl(
+            output_path=output_path,
+            service_name=service_name,
+            command=command,
+            runtime=runtime,
+            sandbox_name=sandbox_name,
+            sandbox_rootfs_tarball=sandbox_rootfs_tarball,
+            sandbox_rootfs_url=sandbox_rootfs_url,
+            sandbox_bind_mounts=sandbox_bind_mounts,
+            cwd=cwd,
+            env=env,
+            principal_id=principal_id,
+            include_authority=include_authority,
+            autostart=autostart,
+        )
+
+
+def register_project_os_supervisor_operator_snapshot(agent: Any) -> None:
+    @agent.tool
+    async def project_os_supervisor_operator_snapshot(
+        context: RunContext,
+        manifest_path: str,
+        service_name: str = "",
+        topics: list[str] | None = None,
+        seconds: float = 0.5,
+        max_events: int = 10,
+    ) -> dict[str, Any]:
+        del context
+        return project_os_supervisor_operator_snapshot_impl(
+            manifest_path=manifest_path,
+            service_name=service_name,
+            topics=topics,
+            seconds=seconds,
+            max_events=max_events,
+        )
+
+
 def register_project_os_tail(agent: Any) -> None:
     @agent.tool
     async def project_os_tail(
@@ -153,6 +235,10 @@ def register_tools_callback() -> list[dict[str, Any]]:
             "register_func": register_project_os_supervisor_start_manifest,
         },
         {
+            "name": _START_ISOLATED_JOB,
+            "register_func": register_project_os_supervisor_start_isolated_job,
+        },
+        {
             "name": _STOP_SERVICE,
             "register_func": register_project_os_supervisor_stop_service,
         },
@@ -163,6 +249,14 @@ def register_tools_callback() -> list[dict[str, Any]]:
         {
             "name": _RESET_STATE,
             "register_func": register_project_os_supervisor_reset_state,
+        },
+        {
+            "name": _WRITE_ISOLATED_JOB_MANIFEST,
+            "register_func": register_project_os_supervisor_write_isolated_job_manifest,
+        },
+        {
+            "name": _OPERATOR_SNAPSHOT,
+            "register_func": register_project_os_supervisor_operator_snapshot,
         },
         {"name": _TAIL, "register_func": register_project_os_tail},
     ]
@@ -175,9 +269,12 @@ def _advertise_tools_to_agent(agent_name: str | None = None) -> list[str]:
         _WRITE_MANIFEST,
         _INIT_SANDBOX,
         _START_MANIFEST,
+        _START_ISOLATED_JOB,
         _STOP_SERVICE,
         _STOP_MANIFEST,
         _RESET_STATE,
+        _WRITE_ISOLATED_JOB_MANIFEST,
+        _OPERATOR_SNAPSHOT,
         _TAIL,
     ]
 

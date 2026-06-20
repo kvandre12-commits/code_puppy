@@ -12,6 +12,11 @@ from .manager import (
     supervisor_status,
     write_authority_manifest,
 )
+from .templates import (
+    operator_snapshot,
+    start_isolated_job,
+    write_isolated_job_manifest,
+)
 
 
 def project_os_supervisor_status(
@@ -80,6 +85,74 @@ def project_os_supervisor_reset_state(confirm: bool = False) -> dict[str, Any]:
             "reason": "Set confirm=True to clear supervisor state.",
         }
     return clear_supervisor_state()
+
+
+def project_os_supervisor_write_isolated_job_manifest(
+    output_path: str = "outputs/project_os_isolated_job_manifest.json",
+    service_name: str = "isolated-job",
+    command: list[str] | None = None,
+    runtime: str = "proot",
+    sandbox_name: str = "isolated-job",
+    sandbox_rootfs_tarball: str = "",
+    sandbox_rootfs_url: str = "",
+    sandbox_bind_mounts: list[str] | None = None,
+    cwd: str = "",
+    env: dict[str, str] | None = None,
+    principal_id: str = "",
+    include_authority: bool = True,
+    autostart: bool = False,
+) -> dict[str, Any]:
+    return write_isolated_job_manifest(
+        output_path=output_path,
+        service_name=service_name,
+        command=command,
+        runtime=runtime,
+        sandbox_name=sandbox_name,
+        sandbox_rootfs_tarball=sandbox_rootfs_tarball,
+        sandbox_rootfs_url=sandbox_rootfs_url,
+        sandbox_bind_mounts=sandbox_bind_mounts,
+        cwd=cwd,
+        env=env,
+        principal_id=principal_id,
+        include_authority=include_authority,
+        autostart=autostart,
+    )
+
+
+def project_os_supervisor_start_isolated_job(
+    manifest_path: str,
+    service_name: str = "",
+    tail_topics: list[str] | None = None,
+    tail_seconds: float = 0.5,
+    tail_max_events: int = 10,
+) -> dict[str, Any]:
+    if not manifest_path.strip():
+        return {"success": False, "reason": "manifest_path is required"}
+    return start_isolated_job(
+        manifest_path=manifest_path,
+        service_name=service_name,
+        tail_topics=tail_topics,
+        tail_seconds=tail_seconds,
+        tail_max_events=tail_max_events,
+    )
+
+
+def project_os_supervisor_operator_snapshot(
+    manifest_path: str,
+    service_name: str = "",
+    topics: list[str] | None = None,
+    seconds: float = 0.5,
+    max_events: int = 10,
+) -> dict[str, Any]:
+    if not manifest_path.strip():
+        return {"success": False, "reason": "manifest_path is required"}
+    return operator_snapshot(
+        manifest_path=manifest_path,
+        service_name=service_name,
+        topics=topics,
+        seconds=seconds,
+        max_events=max_events,
+    )
 
 
 def project_os_tail(
