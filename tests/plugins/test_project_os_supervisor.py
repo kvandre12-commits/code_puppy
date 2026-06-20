@@ -38,6 +38,7 @@ class TestProjectOsSupervisorRegistration:
         assert names == {
             "project_os_supervisor_status",
             "project_os_supervisor_write_authority_manifest",
+            "project_os_supervisor_init_sandbox",
             "project_os_supervisor_start_manifest",
             "project_os_supervisor_stop_service",
             "project_os_supervisor_stop_manifest",
@@ -49,6 +50,7 @@ class TestProjectOsSupervisorRegistration:
         assert register_callbacks._advertise_tools_to_agent("code-puppy") == [
             "project_os_supervisor_status",
             "project_os_supervisor_write_authority_manifest",
+            "project_os_supervisor_init_sandbox",
             "project_os_supervisor_start_manifest",
             "project_os_supervisor_stop_service",
             "project_os_supervisor_stop_manifest",

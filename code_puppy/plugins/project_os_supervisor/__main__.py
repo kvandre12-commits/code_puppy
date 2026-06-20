@@ -5,6 +5,7 @@ import json
 
 from .bus import run_event_broker, tail_project_os_events
 from .manager import (
+    initialize_sandbox,
     run_authority_daemon,
     run_monitor,
     start_manifest,
@@ -23,6 +24,13 @@ def main() -> None:
     write_manifest.add_argument(
         "--output", default="outputs/project_os_authority_manifest.json"
     )
+
+    init_sandbox = subparsers.add_parser("init-sandbox")
+    init_sandbox.add_argument("--manifest", default="")
+    init_sandbox.add_argument("--service", default="")
+    init_sandbox.add_argument("--sandbox", default="default")
+    init_sandbox.add_argument("--rootfs-tarball", default="")
+    init_sandbox.add_argument("--rootfs-url", default="")
 
     start = subparsers.add_parser("start")
     start.add_argument("--manifest", required=True)
@@ -59,6 +67,16 @@ def main() -> None:
         result = write_authority_manifest(args.output)
         print(json.dumps(result, indent=2, sort_keys=True))
         raise SystemExit(0)
+    if args.command == "init-sandbox":
+        result = initialize_sandbox(
+            manifest_path=args.manifest or None,
+            service_name=args.service,
+            sandbox_name=args.sandbox,
+            rootfs_tarball=args.rootfs_tarball,
+            rootfs_url=args.rootfs_url,
+        )
+        print(json.dumps(result, indent=2, sort_keys=True))
+        raise SystemExit(0 if result.get("success") else 1)
     if args.command == "start":
         result = start_manifest(args.manifest, service_name=args.service)
         print(json.dumps(result, indent=2, sort_keys=True))

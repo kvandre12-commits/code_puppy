@@ -5,6 +5,7 @@ from typing import Any
 from .bus import tail_project_os_events
 from .manager import (
     clear_supervisor_state,
+    initialize_sandbox,
     start_manifest,
     stop_manifest,
     stop_service,
@@ -27,6 +28,22 @@ def project_os_supervisor_write_authority_manifest(
     output_path: str = "outputs/project_os_authority_manifest.json",
 ) -> dict[str, Any]:
     return write_authority_manifest(output_path)
+
+
+def project_os_supervisor_init_sandbox(
+    manifest_path: str = "",
+    service_name: str = "",
+    sandbox_name: str = "default",
+    rootfs_tarball: str = "",
+    rootfs_url: str = "",
+) -> dict[str, Any]:
+    return initialize_sandbox(
+        manifest_path=manifest_path or None,
+        service_name=service_name,
+        sandbox_name=sandbox_name,
+        rootfs_tarball=rootfs_tarball,
+        rootfs_url=rootfs_url,
+    )
 
 
 def project_os_supervisor_start_manifest(

@@ -18,6 +18,7 @@ DEFAULT_RESTART_BACKOFF_SECONDS = 1.0
 DEFAULT_MAX_RESTART_ATTEMPTS = 3
 AUTHORITY_DAEMON_BUILTIN = "authority_daemon"
 EVENT_BUS_BUILTIN = "event_bus"
+DEFAULT_SANDBOX_NAME = "default"
 
 
 @dataclass(frozen=True)
@@ -35,6 +36,11 @@ class ServiceManifest:
     log_max_bytes: int
     log_backups: int
     builtin: str
+    runtime: str
+    sandbox_name: str
+    sandbox_rootfs_tarball: str
+    sandbox_rootfs_url: str
+    sandbox_bind_mounts: list[str]
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -51,6 +57,11 @@ class ServiceManifest:
             "log_max_bytes": self.log_max_bytes,
             "log_backups": self.log_backups,
             "builtin": self.builtin,
+            "runtime": self.runtime,
+            "sandbox_name": self.sandbox_name,
+            "sandbox_rootfs_tarball": self.sandbox_rootfs_tarball,
+            "sandbox_rootfs_url": self.sandbox_rootfs_url,
+            "sandbox_bind_mounts": self.sandbox_bind_mounts,
         }
 
 
@@ -92,6 +103,9 @@ def bus_dir() -> Path:
 
 
 def event_socket_path() -> Path:
+    explicit = os.environ.get("PROJECT_OS_EVENT_SOCKET_PATH", "").strip()
+    if explicit:
+        return Path(explicit).expanduser().resolve()
     digest = hashlib.sha1(str(get_supervisor_root()).encode("utf-8")).hexdigest()[:16]
     return Path(tempfile.gettempdir()) / f"po-bus-{digest}.sock"
 
@@ -168,11 +182,24 @@ def _normalize_command(raw: Any) -> list[str]:
     return [str(item) for item in raw if str(item).strip()]
 
 
+def _normalize_string_list(raw: Any) -> list[str]:
+    if not isinstance(raw, list):
+        return []
+    return [str(item).strip() for item in raw if str(item).strip()]
+
+
 def _service_from_payload(payload: dict[str, Any]) -> ServiceManifest:
     name = str(payload.get("name", "")).strip()
     builtin = str(payload.get("builtin", "")).strip()
+    runtime = str(payload.get("runtime", "direct") or "direct").strip().lower()
     command = _normalize_command(payload.get("command"))
+    if runtime not in {"direct", "proot"}:
+        raise ValueError(f"service '{name or 'unknown'}' has invalid runtime")
     if builtin == AUTHORITY_DAEMON_BUILTIN and not command:
+        if runtime == "proot":
+            raise ValueError(
+                f"service '{name or 'unknown'}' must define an explicit guest command when runtime=proot"
+            )
         command = [
             sys.executable,
             "-m",
@@ -180,6 +207,10 @@ def _service_from_payload(payload: dict[str, Any]) -> ServiceManifest:
             "run-authority-daemon",
         ]
     if builtin == EVENT_BUS_BUILTIN and not command:
+        if runtime == "proot":
+            raise ValueError(
+                f"service '{name or 'unknown'}' must define an explicit guest command when runtime=proot"
+            )
         command = [
             sys.executable,
             "-m",
@@ -219,6 +250,16 @@ def _service_from_payload(payload: dict[str, Any]) -> ServiceManifest:
         ),
         log_backups=max(1, int(payload.get("log_backups", DEFAULT_LOG_BACKUPS) or 0)),
         builtin=builtin,
+        runtime=runtime,
+        sandbox_name=str(
+            payload.get("sandbox_name", DEFAULT_SANDBOX_NAME) or DEFAULT_SANDBOX_NAME
+        ).strip()
+        or DEFAULT_SANDBOX_NAME,
+        sandbox_rootfs_tarball=str(
+            payload.get("sandbox_rootfs_tarball", "") or ""
+        ).strip(),
+        sandbox_rootfs_url=str(payload.get("sandbox_rootfs_url", "") or "").strip(),
+        sandbox_bind_mounts=_normalize_string_list(payload.get("sandbox_bind_mounts")),
     )
 
 
@@ -285,9 +326,20 @@ def runtime_payload(
         "service_id": _service_id(manifest_path, service.name),
         "service_name": service.name,
         "manifest_path": str(manifest_path),
+        "requested_command": service.command,
         "command": service.command,
-        "cwd": str(Path(service.cwd).expanduser()),
+        "requested_cwd": str(Path(service.cwd).expanduser())
+        if service.runtime != "proot"
+        else service.cwd,
+        "cwd": str(Path(service.cwd).expanduser())
+        if service.runtime != "proot"
+        else service.cwd,
         "restart_policy": service.restart_policy,
+        "runtime": service.runtime,
+        "sandbox_name": service.sandbox_name,
+        "sandbox_rootfs_tarball": service.sandbox_rootfs_tarball,
+        "sandbox_rootfs_url": service.sandbox_rootfs_url,
+        "sandbox_bind_mounts": service.sandbox_bind_mounts,
         "max_restart_attempts": service.max_restart_attempts,
         "heartbeat_timeout_seconds": service.heartbeat_timeout_seconds,
         "heartbeat_interval_seconds": service.heartbeat_interval_seconds,

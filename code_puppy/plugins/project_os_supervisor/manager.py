@@ -9,6 +9,12 @@ from typing import Any
 
 from .bus import publish_project_os_event_best_effort
 from .daemon import run_authority_daemon
+from .sandbox import (
+    LaunchSpec,
+    build_service_launch_spec,
+    initialize_sandbox_rootfs,
+    preflight_service_runtime,
+)
 from .state import (
     AUTHORITY_DAEMON_BUILTIN,
     DEFAULT_LOG_BACKUPS,
@@ -17,6 +23,7 @@ from .state import (
     DEFAULT_RESTART_BACKOFF_SECONDS,
     ServiceManifest,
     clear_supervisor_state,
+    event_socket_path,
     find_service,
     get_supervisor_root,
     heartbeat_path,
@@ -50,6 +57,7 @@ __all__ = [
     "load_manifest",
     "run_authority_daemon",
     "run_monitor",
+    "initialize_sandbox",
     "start_manifest",
     "stop_manifest",
     "stop_service",
@@ -106,7 +114,7 @@ def _should_restart(service: ServiceManifest, exit_code: int | None) -> bool:
 
 def _start_child(
     manifest_path: Path, service: ServiceManifest
-) -> subprocess.Popen[Any]:
+) -> tuple[subprocess.Popen[Any], LaunchSpec]:
     hb_path = heartbeat_path(manifest_path, service.name)
     lg_path = log_path(manifest_path, service.name)
     _rotate_log(lg_path, max_bytes=service.log_max_bytes, backups=service.log_backups)
@@ -121,13 +129,21 @@ def _start_child(
             "PROJECT_OS_HEARTBEAT_INTERVAL_SECONDS": str(
                 service.heartbeat_interval_seconds
             ),
+            "PROJECT_OS_EVENT_SOCKET_PATH": str(event_socket_path()),
+            "PROJECT_OS_SANDBOX_NAME": service.sandbox_name,
         }
     )
-    cwd = Path(service.cwd).expanduser().resolve()
+    launch_spec = build_service_launch_spec(
+        manifest_path=manifest_path,
+        service=service,
+        environment=environment,
+        heartbeat_file=hb_path,
+    )
+    cwd = Path(launch_spec.cwd).expanduser().resolve()
     handle = lg_path.open("a", encoding="utf-8")
     try:
         process = subprocess.Popen(
-            service.command,
+            launch_spec.command,
             cwd=str(cwd),
             env=environment,
             stdout=handle,
@@ -137,7 +153,7 @@ def _start_child(
         )
     finally:
         handle.close()
-    return process
+    return process, launch_spec
 
 
 def run_monitor(manifest_path: str | Path, service_name: str) -> int:
@@ -148,6 +164,7 @@ def run_monitor(manifest_path: str | Path, service_name: str) -> int:
     st_path = stop_path(manifest, service.name)
     restart_count = 0
     child: subprocess.Popen[Any] | None = None
+    launch_updates: dict[str, Any] = {}
 
     try:
         while True:
@@ -167,6 +184,7 @@ def run_monitor(manifest_path: str | Path, service_name: str) -> int:
                         last_exit_code=exit_code,
                         last_exit_at=utc_now(),
                         last_event="stopped_by_operator",
+                        **launch_updates,
                     ),
                 )
                 _publish_service_event(
@@ -180,7 +198,15 @@ def run_monitor(manifest_path: str | Path, service_name: str) -> int:
                 )
                 return 0
 
-            child = _start_child(manifest, service)
+            child, launch_spec = _start_child(manifest, service)
+            launch_updates = {
+                "command": launch_spec.command,
+                "cwd": launch_spec.cwd,
+            }
+            if launch_spec.sandbox_rootfs_path:
+                launch_updates["sandbox_rootfs_path"] = launch_spec.sandbox_rootfs_path
+            if launch_spec.bind_mounts is not None:
+                launch_updates["sandbox_bind_mounts"] = launch_spec.bind_mounts
             runtime = runtime_payload(
                 manifest,
                 service,
@@ -191,13 +217,21 @@ def run_monitor(manifest_path: str | Path, service_name: str) -> int:
                 restart_count=restart_count,
                 started_at=utc_now(),
                 last_event="child_started",
+                **launch_updates,
             )
             write_runtime(rt_path, runtime)
             _publish_service_event(
                 "service_started",
                 manifest_path=manifest,
                 service=service,
-                payload={"child_pid": child.pid, "restart_count": restart_count},
+                payload={
+                    "child_pid": child.pid,
+                    "restart_count": restart_count,
+                    "runtime": service.runtime,
+                    "sandbox_name": service.sandbox_name
+                    if service.runtime == "proot"
+                    else None,
+                },
             )
 
             stale = False
@@ -223,6 +257,7 @@ def run_monitor(manifest_path: str | Path, service_name: str) -> int:
                         "last_event": "heartbeat_observed"
                         if heartbeat_at
                         else current.get("last_event", "child_started"),
+                        **launch_updates,
                     }
                 )
                 write_runtime(rt_path, current)
@@ -265,6 +300,7 @@ def run_monitor(manifest_path: str | Path, service_name: str) -> int:
                         last_exit_code=exit_code,
                         last_exit_at=utc_now(),
                         last_event=event,
+                        **launch_updates,
                     ),
                 )
                 _publish_service_event(
@@ -296,6 +332,7 @@ def run_monitor(manifest_path: str | Path, service_name: str) -> int:
                     last_exit_code=exit_code,
                     last_exit_at=utc_now(),
                     last_event=event,
+                    **launch_updates,
                 ),
             )
             _publish_service_event(
@@ -334,6 +371,78 @@ def _spawn_monitor(manifest_path: Path, service_name: str) -> dict[str, Any]:
         env={**os.environ, "PROJECT_OS_SUPERVISOR_ROOT": str(get_supervisor_root())},
     )
     return {"service_name": service_name, "monitor_pid": process.pid, "started": True}
+
+
+def initialize_sandbox(
+    manifest_path: str | Path | None = None,
+    service_name: str = "",
+    sandbox_name: str = "default",
+    rootfs_tarball: str = "",
+    rootfs_url: str = "",
+) -> dict[str, Any]:
+    if manifest_path:
+        manifest = Path(manifest_path).expanduser().resolve()
+        services = load_manifest(manifest)
+        selected = [
+            service
+            for service in services
+            if service.runtime == "proot"
+            and (not service_name or service.name == service_name)
+        ]
+        if not selected:
+            return {
+                "success": False,
+                "manifest_path": str(manifest),
+                "service_name": service_name or None,
+                "reason": "No runtime=proot services matched the requested selection.",
+            }
+        grouped: dict[tuple[str, str, str], dict[str, Any]] = {}
+        for service in selected:
+            key = (
+                service.sandbox_name,
+                service.sandbox_rootfs_tarball,
+                service.sandbox_rootfs_url,
+            )
+            entry = grouped.setdefault(
+                key,
+                {
+                    "sandbox_name": service.sandbox_name,
+                    "rootfs_tarball": service.sandbox_rootfs_tarball,
+                    "rootfs_url": service.sandbox_rootfs_url,
+                    "services": [],
+                },
+            )
+            entry["services"].append(service.name)
+        results = []
+        for entry in grouped.values():
+            result = initialize_sandbox_rootfs(
+                entry["sandbox_name"],
+                manifest_path=manifest,
+                rootfs_tarball=entry["rootfs_tarball"],
+                rootfs_url=entry["rootfs_url"],
+            )
+            result["services"] = entry["services"]
+            results.append(result)
+        return {
+            "success": True,
+            "manifest_path": str(manifest),
+            "service_name": service_name or None,
+            "count": len(results),
+            "sandboxes": results,
+        }
+
+    result = initialize_sandbox_rootfs(
+        sandbox_name=sandbox_name,
+        rootfs_tarball=rootfs_tarball,
+        rootfs_url=rootfs_url,
+    )
+    return {
+        "success": True,
+        "manifest_path": None,
+        "service_name": None,
+        "count": 1,
+        "sandboxes": [result],
+    }
 
 
 def list_statuses(
@@ -378,12 +487,42 @@ def supervisor_status(
 def start_manifest(manifest_path: str | Path, service_name: str = "") -> dict[str, Any]:
     manifest = Path(manifest_path).expanduser().resolve()
     services = load_manifest(manifest)
+    selected = [
+        service
+        for service in services
+        if (not service_name or service.name == service_name)
+        and (service.autostart or bool(service_name))
+    ]
+    if not selected:
+        return {
+            "success": False,
+            "manifest_path": str(manifest),
+            "service_name": service_name or None,
+            "reason": "No services matched the requested selection.",
+            "started": [],
+        }
+
+    preflight: list[dict[str, Any]] = []
+    try:
+        for service in selected:
+            preflight.append(
+                {
+                    "service_name": service.name,
+                    **preflight_service_runtime(manifest, service),
+                }
+            )
+    except Exception as exc:
+        return {
+            "success": False,
+            "manifest_path": str(manifest),
+            "service_name": service_name or None,
+            "reason": str(exc),
+            "started": [],
+            "preflight": preflight,
+        }
+
     started: list[dict[str, Any]] = []
-    for service in services:
-        if service_name and service.name != service_name:
-            continue
-        if not service.autostart and not service_name:
-            continue
+    for service in selected:
         current = load_runtime(runtime_path(manifest, service.name))
         if current and pid_alive(int(current.get("monitor_pid", 0) or 0)):
             started.append(
@@ -396,7 +535,12 @@ def start_manifest(manifest_path: str | Path, service_name: str = "") -> dict[st
             )
             continue
         started.append(_spawn_monitor(manifest, service.name))
-    return {"success": True, "manifest_path": str(manifest), "started": started}
+    return {
+        "success": True,
+        "manifest_path": str(manifest),
+        "preflight": preflight,
+        "started": started,
+    }
 
 
 def stop_service(manifest_path: str | Path, service_name: str) -> dict[str, Any]:

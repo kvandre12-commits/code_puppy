@@ -7,6 +7,7 @@ from pydantic_ai import RunContext
 from code_puppy.callbacks import register_callback
 
 from .tooling import (
+    project_os_supervisor_init_sandbox as project_os_supervisor_init_sandbox_impl,
     project_os_supervisor_reset_state as project_os_supervisor_reset_state_impl,
     project_os_supervisor_start_manifest as project_os_supervisor_start_manifest_impl,
     project_os_supervisor_status as project_os_supervisor_status_impl,
@@ -18,6 +19,7 @@ from .tooling import (
 
 _STATUS = "project_os_supervisor_status"
 _WRITE_MANIFEST = "project_os_supervisor_write_authority_manifest"
+_INIT_SANDBOX = "project_os_supervisor_init_sandbox"
 _START_MANIFEST = "project_os_supervisor_start_manifest"
 _STOP_SERVICE = "project_os_supervisor_stop_service"
 _STOP_MANIFEST = "project_os_supervisor_stop_manifest"
@@ -48,6 +50,26 @@ def register_project_os_supervisor_write_authority_manifest(agent: Any) -> None:
         del context
         return project_os_supervisor_write_authority_manifest_impl(
             output_path=output_path,
+        )
+
+
+def register_project_os_supervisor_init_sandbox(agent: Any) -> None:
+    @agent.tool
+    async def project_os_supervisor_init_sandbox(
+        context: RunContext,
+        manifest_path: str = "",
+        service_name: str = "",
+        sandbox_name: str = "default",
+        rootfs_tarball: str = "",
+        rootfs_url: str = "",
+    ) -> dict[str, Any]:
+        del context
+        return project_os_supervisor_init_sandbox_impl(
+            manifest_path=manifest_path,
+            service_name=service_name,
+            sandbox_name=sandbox_name,
+            rootfs_tarball=rootfs_tarball,
+            rootfs_url=rootfs_url,
         )
 
 
@@ -123,6 +145,10 @@ def register_tools_callback() -> list[dict[str, Any]]:
             "register_func": register_project_os_supervisor_write_authority_manifest,
         },
         {
+            "name": _INIT_SANDBOX,
+            "register_func": register_project_os_supervisor_init_sandbox,
+        },
+        {
             "name": _START_MANIFEST,
             "register_func": register_project_os_supervisor_start_manifest,
         },
@@ -147,6 +173,7 @@ def _advertise_tools_to_agent(agent_name: str | None = None) -> list[str]:
     return [
         _STATUS,
         _WRITE_MANIFEST,
+        _INIT_SANDBOX,
         _START_MANIFEST,
         _STOP_SERVICE,
         _STOP_MANIFEST,
