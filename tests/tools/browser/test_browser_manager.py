@@ -83,8 +83,9 @@ class TestBrowserManagerMultiInstance(TestBrowserManagerBase):
 class TestBrowserManagerInitialization(TestBrowserManagerBase):
     """Test BrowserManager initialization and configuration."""
 
-    def test_default_settings(self):
+    def test_default_settings(self, monkeypatch):
         """Test default browser settings."""
+        monkeypatch.delenv("BROWSER_HEADLESS", raising=False)
         manager = BrowserManager()
 
         assert manager.headless is True
