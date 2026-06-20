@@ -18,6 +18,7 @@ from . import (
     effect_specs,
     lease_draft,
     lease_issue,
+    memory_recall_execution,
     noop_execution,
     runtime_candidates,
     selection_policy,
@@ -39,6 +40,13 @@ def _pop_flag(parts: list[str], name: str, default: str = "") -> str:
 
 def _pop_effect(parts: list[str]) -> str:
     return _pop_flag(parts, "--effect", effect_specs.DEFAULT_EFFECT)
+
+
+def _parse_int(value: str, *, name: str) -> int:
+    try:
+        return int(value)
+    except ValueError as exc:
+        raise ValueError(f"{name} requires an integer") from exc
 
 
 def _pop_repeated(parts: list[str], name: str) -> list[str]:
@@ -75,6 +83,8 @@ def help_text() -> str:
             "  /project run execute-noop --confirm <lease_id>",
             "  /project run execute-browser --confirm <lease_id> --url <url>",
             "  /project run execute-android --confirm <lease_id> --component <component>",
+            "  /project run execute-memory-recall --confirm <lease_id> --query <text>",
+            "      [--wing <wing>] [--limit <n>]",
             "  /project run inspect <run_id>",
             "  /project run why <run_id>",
             "  /project run events <run_id>",
@@ -256,6 +266,26 @@ def _handle_run_execute_android(parts: list[str]) -> str:
     return android_execution.format_result(result)
 
 
+def _handle_run_execute_memory_recall(parts: list[str]) -> str:
+    confirm = _pop_flag(parts, "--confirm")
+    query = _pop_flag(parts, "--query")
+    wing = _pop_flag(parts, "--wing")
+    limit_raw = _pop_flag(parts, "--limit", str(memory_recall_execution.DEFAULT_LIMIT))
+    limit = _parse_int(limit_raw, name="--limit")
+    if parts or not confirm or not query:
+        raise ValueError(
+            "execute-memory-recall requires --confirm <lease_id> --query <text> "
+            "and accepts optional --wing <wing> --limit <n>"
+        )
+    result = memory_recall_execution.execute_memory_recall(
+        confirm_lease_id=confirm,
+        query=query,
+        wing=wing,
+        limit=limit,
+    )
+    return memory_recall_execution.format_result(result)
+
+
 def _handle_run_inspect(parts: list[str]) -> str:
     if len(parts) != 1:
         raise ValueError("inspect requires exactly one run_id")
@@ -374,6 +404,8 @@ def dispatch(parts: list[str]) -> str:
         return _handle_run_execute_browser(rest)
     if action == "execute-android":
         return _handle_run_execute_android(rest)
+    if action == "execute-memory-recall":
+        return _handle_run_execute_memory_recall(rest)
     if action == "inspect":
         return _handle_run_inspect(rest)
     if action == "why":
