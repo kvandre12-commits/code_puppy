@@ -11,6 +11,59 @@ Authority -> Lease -> One bounded Effect -> Audit
 Project OS v0.1 proves that a bounded effect can be governed by authority and a
 one-shot lease, then recorded as audit evidence.
 
+This moves the project from an agent framework toward a governed capability
+operating system. Lease issuance, lease consumption, authority validation, and
+audit records are OS-like primitives: process permissions and capability security
+for AI agents instead of human users.
+
+A normal agent framework asks:
+
+```text
+How do agents talk?
+How do agents call tools?
+How do agents coordinate?
+```
+
+A governed capability operating system asks:
+
+```text
+Who is allowed?
+Why are they allowed?
+What effect may occur?
+How many times may it occur?
+What evidence exists afterward?
+```
+
+## Governance objects versus runtime objects
+
+Keep governance concerns and runtime concerns separate.
+
+Governance objects answer whether an effect may occur:
+
+```text
+Identity
+AuthorityGrant
+LeaseRecord
+AuditEvent
+Precedent
+Remedy
+```
+
+Runtime objects carry out and coordinate work:
+
+```text
+ProjectRun
+Scheduler
+Agent
+EffectAdapter
+ExecutionRequest
+ExecutionResult
+```
+
+Do not stuff runtime orchestration policy into AuthorityGrant, and do not let
+EffectAdapters invent authority. Governance decides whether an effect may occur;
+runtime executes one bounded effect only after the governance path allows it.
+
 ## Evidence
 
 - No-op effect implemented and tested.

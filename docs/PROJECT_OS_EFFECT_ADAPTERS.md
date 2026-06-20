@@ -167,6 +167,58 @@ acting; duty-state gates prove the context/state under which they are acting.
 Adapters must not perform a state-changing action, such as employment clock-in,
 merely to unlock broader downstream capabilities.
 
+## Capability OS milestone ladder
+
+Project OS has moved beyond a generic agent framework. It is becoming a governed
+capability operating system for agents.
+
+The next technical milestone should prove a staged capability ladder:
+
+```text
+AuthorityGrant
+  -> Authority Registry Validation
+      -> Lease Issue
+          -> Execute No-op
+              -> Execute Android Intent
+                  -> Execute Browser Action
+                      -> Execute Tool Call
+```
+
+Each stage should prove the same thing with a stronger effect:
+
+```text
+governance controls the effect
+without skipping Authority
+without skipping validation
+without skipping Lease issue
+without skipping Lease consumption
+without skipping Audit
+```
+
+This is the Project OS equivalent of process permissions and capability security,
+but for AI agents instead of human users. The lease is the revocable execution
+permission. Lease consumption is the one-shot capability boundary. The audit
+trail is the operating-system record of what happened.
+
+The test is not whether an agent can do the thing. The test is whether the agent
+can do the thing only through the governed path.
+
+No effect may occur unless:
+
+```text
+1. Authority is registered.
+2. Authority validates.
+3. Lease is issued.
+4. Lease is unexpired.
+5. Lease is unconsumed.
+6. Execution succeeds.
+7. Audit event is recorded.
+```
+
+Different adapters may touch different systems, but they do not get different
+governments. Android intents, browser actions, and tool calls are effect adapters
+behind the same authority substrate.
+
 ## Adapter implementation rule
 
 An adapter may:
