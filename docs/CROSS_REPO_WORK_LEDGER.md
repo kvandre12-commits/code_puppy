@@ -1,6 +1,6 @@
 # Cross-Repo Work Ledger
 
-_Last updated: 2026-06-19_
+_Last updated: 2026-06-20_
 
 Purpose: stop rebuilding the same systems in the wrong repo.
 
@@ -72,12 +72,16 @@ Does not own:
 | 2026-06-20 | DroidPuppy | `4cb1a7f` | Extended review-gate minting/CLI to preserve constrained lease payloads. |
 | 2026-06-20 | Code Puppy | `4663aa0` | Added anomaly-triggered auto-revoke circuit breaker for repeated constraint hits and runaway shell/intent loops. |
 | 2026-06-20 | DroidPuppy | `a45b723` | Updated v2 audit contract to allow `anomaly_detected` events. |
+| 2026-06-20 | Code Puppy | `73bd737` | Added principal quarantine cooldown after breaker trips so post-revoke hammering is blocked before lease evaluation. |
+| 2026-06-20 | DroidPuppy | `4d95f41` | Restored valid JSON for the v2 audit schema so root-side authority audit validation/writes work again. |
 
 What this means in practice:
 
 - Android effects now run behind explicit, principal-bound, capability-scoped leases.
 - Leases can be further narrowed to exact tools, paths, browsers, intent actions, and target packages.
 - Suspicious repeated violations or runaway low-level loops can zero out active lease authority automatically.
+- After the breaker trips, the affected principal enters a short quarantine cooldown window; tracked tool calls are blocked before lease lookup so the system remembers that it just contained something sketchy.
+- The containment stack depends on a valid shared audit contract: the root authority gateway validates against `DroidPuppy/contracts/v2/eyes_audit_event.schema.json`, so schema correctness is operational, not cosmetic.
 - Full-repo Ruff sweep was brought back to green after the gateway/anomaly work, so the milestone is not just architectural poetry — it is validated source state.
 
 ## Current promoted prototypes

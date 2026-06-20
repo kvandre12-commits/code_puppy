@@ -66,6 +66,25 @@ DroidPuppy helps with **how Android actions/observations can be performed**.
 SharpEdge-Android owns the primary viewer. DroidPuppy/Brave/CDP is optional debug
 or execution tooling, not the foundation for rendering the Trade Gate.
 
+## Active containment boundary
+
+This checkout now contains an active execution-containment layer for Android and
+other high-effect tooling:
+
+- effectful actions require explicit execution leases
+- leases can be narrowed to exact tools, paths, browsers, intent actions, and
+  Android packages
+- repeated constraint violations or runaway shell/intent loops can trip a
+  circuit breaker that revokes active leases
+- after a breaker trip, the principal enters a short quarantine cooldown window
+  so immediate re-hammering is blocked before lease evaluation
+- authority audit events in root Code Puppy depend on the shared DroidPuppy v2
+  audit schema being valid JSON and contract-correct
+
+Treat this as infrastructure owned by this checkout, not as a speculative demo.
+If you touch the gateway, update both root runtime behavior and the shared
+DroidPuppy contract/docs when needed.
+
 ## Tests
 
 Use the repo's configured Python test tooling. For Android-specific changes,
