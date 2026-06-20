@@ -18,6 +18,7 @@ from . import (
     effect_specs,
     lease_draft,
     lease_issue,
+    memory_mutation_coordinator,
     memory_recall_execution,
     noop_execution,
     runtime_candidates,
@@ -85,6 +86,9 @@ def help_text() -> str:
             "  /project run execute-android --confirm <lease_id> --component <component>",
             "  /project run execute-memory-recall --confirm <lease_id> --query <text>",
             "      [--wing <wing>] [--limit <n>]",
+            "  /project run execute-memory-promote --confirm <lease_id>",
+            "      --source-evidence <text> --reason <text> --after <text>",
+            "      [--before <text>] [--wing <wing>] [--agent <name>]",
             "  /project run inspect <run_id>",
             "  /project run why <run_id>",
             "  /project run events <run_id>",
@@ -286,6 +290,32 @@ def _handle_run_execute_memory_recall(parts: list[str]) -> str:
     return memory_recall_execution.format_result(result)
 
 
+def _handle_run_execute_memory_promote(parts: list[str]) -> str:
+    confirm = _pop_flag(parts, "--confirm")
+    source_evidence = _pop_flag(parts, "--source-evidence")
+    mutation_reason = _pop_flag(parts, "--reason")
+    after_object = _pop_flag(parts, "--after")
+    before_object = _pop_flag(parts, "--before")
+    wing = _pop_flag(parts, "--wing")
+    agent = _pop_flag(parts, "--agent")
+    if parts or not confirm:
+        raise ValueError(
+            "execute-memory-promote requires --confirm <lease_id> "
+            "and accepts --source-evidence <text> --reason <text> --after <text> "
+            "[--before <text>] [--wing <wing>] [--agent <name>]"
+        )
+    result = memory_mutation_coordinator.coordinate_memory_promote(
+        confirm_lease_id=confirm,
+        source_evidence=source_evidence,
+        mutation_reason=mutation_reason,
+        proposed_after_object=after_object,
+        before_object=before_object,
+        project_wing=wing,
+        requesting_agent=agent,
+    )
+    return memory_mutation_coordinator.format_result(result)
+
+
 def _handle_run_inspect(parts: list[str]) -> str:
     if len(parts) != 1:
         raise ValueError("inspect requires exactly one run_id")
@@ -406,6 +436,8 @@ def dispatch(parts: list[str]) -> str:
         return _handle_run_execute_android(rest)
     if action == "execute-memory-recall":
         return _handle_run_execute_memory_recall(rest)
+    if action == "execute-memory-promote":
+        return _handle_run_execute_memory_promote(rest)
     if action == "inspect":
         return _handle_run_inspect(rest)
     if action == "why":

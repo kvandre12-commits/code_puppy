@@ -43,6 +43,13 @@ MEMORY_RECALL = EffectSpec(
     description="bounded read-only kennel recall",
 )
 
+MEMORY_PROMOTE = EffectSpec(
+    name="memory-promote",
+    action_scope="memory.promote",
+    capability_scope="memory.write.project_context",
+    description="durable memory promotion request guarded by atomicity proof",
+)
+
 DEFAULT_EFFECT = NOOP.name
 
 _EFFECTS = {
@@ -50,6 +57,7 @@ _EFFECTS = {
     BROWSER.name: BROWSER,
     ANDROID.name: ANDROID,
     MEMORY_RECALL.name: MEMORY_RECALL,
+    MEMORY_PROMOTE.name: MEMORY_PROMOTE,
 }
 
 

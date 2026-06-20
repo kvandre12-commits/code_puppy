@@ -410,6 +410,19 @@ lease unconsumed
 audit absent
 ```
 
+Rollback and compensation are not the same thing:
+
+```text
+Rollback is a seatbelt.
+Compensation is an ambulance.
+```
+
+If Governance State and Knowledge State live in the same transactional store,
+rollback can literally undo the incomplete mutation. If they later live in
+separate stores, the doctrine may require a compensating remedy event instead.
+That is acceptable only if the system names it honestly and does not claim true
+rollback semantics.
+
 Required proof matrix before claiming Governed Memory Mutation Proven:
 
 ```text
