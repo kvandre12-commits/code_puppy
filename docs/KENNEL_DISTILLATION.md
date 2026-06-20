@@ -348,6 +348,18 @@ Archive, delete, and remedy operations are higher-risk than creation because
 they remove or correct institutional knowledge; they should require additional
 authority or precedent/remedy evidence.
 
+Nothing is deleted because it is old. Knowledge is archived, deleted, or remedied
+only because authority, precedent, or remedy justifies changing what future
+agents should see by default. History should remain explainable:
+
+```text
+Who changed this?
+Why?
+What authority existed?
+What evidence justified it?
+What was the previous state?
+```
+
 ## Productivity versus activity
 
 Yield metrics are not merely memory metrics. They are productivity metrics.

@@ -347,6 +347,81 @@ cannot report the resulting memory object, the mutation is not acceptable.
 Design implementation so Project OS state and kennel state either advance
 together or both remain unchanged.
 
+This is a two-domain transaction:
+
+```text
+Governance State
+  Authority
+  Lease
+  Audit
+  Precedent
+  Remedy
+
+Knowledge State
+  Memory Objects
+  FTS Records
+  Distillations
+  Promotions
+  Archives
+```
+
+The implementation proof is not:
+
+```text
+Can memory be mutated?
+```
+
+The implementation proof is:
+
+```text
+Can a durable knowledge mutation be governed, audited, and atomic?
+```
+
+Target transaction shape:
+
+```text
+Authority
+  -> Lease
+      -> Mutation Request
+          -> BEGIN
+              -> Write Memory
+              -> Write Audit
+              -> Consume Lease
+          -> COMMIT
+```
+
+Failure shape:
+
+```text
+Authority
+  -> Lease
+      -> Mutation Request
+          -> BEGIN
+              -> Write Memory
+              -> Audit Failure
+          -> ROLLBACK
+```
+
+After rollback:
+
+```text
+memory unchanged
+lease unconsumed
+audit absent
+```
+
+Required proof matrix before claiming Governed Memory Mutation Proven:
+
+```text
+valid authority + valid lease + valid evidence -> mutation succeeds
+missing authority                             -> refused, no mutation
+missing evidence                              -> refused, no mutation
+expired lease                                 -> refused, no mutation
+consumed lease                                -> refused, no mutation
+audit failure                                 -> rollback, no mutation
+memory write failure                          -> rollback, no lease consumption
+```
+
 Memory effect classes should reflect risk:
 
 ```text
