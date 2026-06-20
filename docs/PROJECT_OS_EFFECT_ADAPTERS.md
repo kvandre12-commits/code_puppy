@@ -278,6 +278,80 @@ Milestone 1B: Governed Memory Mutation
   AuthorityGrant -> Lease -> memory.promote/distill/archive -> Audit
 ```
 
+## Governed memory mutation contract
+
+Memory mutation is a different security class from recall. Recall reads existing
+institutional knowledge. Promote, distill, archive, revise, or delete changes
+what future agents may treat as durable truth.
+
+A memory mutation adapter must not merely prove that a lease existed. It must
+produce enough evidence to reconstruct what changed and why.
+
+Required mutation audit fields:
+
+```text
+requesting_identity
+requesting_agent
+lease_id
+authority_grant_id or authority evidence reference
+mutation_type
+source_evidence
+mutation_reason
+before_object
+proposed_after_object
+resulting_memory_id
+resulting_memory_type
+project_id or project wing
+objective_id or objective label
+work_item_id or work item label, when applicable
+precedent_id, when applicable
+remedy_id, when applicable
+```
+
+For `memory.promote`, source evidence should point to the quarantine drawer,
+conversation excerpt, event, artifact, or operator statement being promoted. For
+`memory.distill`, source evidence should list the input drawers or artifacts that
+were compressed into the durable record. For `memory.archive`, `before_object`
+must identify what was archived and `mutation_reason` must explain why it should
+stop guiding default recall.
+
+The minimum mutation invariant is:
+
+```text
+No durable memory object may be created, revised, archived, or deleted unless:
+1. Authority is registered for the exact mutation class.
+2. Authority validates.
+3. A mutation lease is issued.
+4. The lease is unexpired.
+5. The lease is unconsumed.
+6. Source evidence is recorded.
+7. Mutation reason is recorded.
+8. Before/after or input/output object evidence is recorded.
+9. The memory backend reports the resulting memory id or refusal reason.
+10. The lease is consumed once.
+11. A mutation audit event is recorded.
+```
+
+Lease classes should reflect risk:
+
+```text
+Recall Lease
+  memory.recall
+  read-only, low-consequence, no kennel mutation
+
+Mutation Lease
+  memory.promote
+  memory.distill
+  memory.archive
+  durable institutional knowledge mutation
+```
+
+A mutation adapter must not quietly rewrite institutional knowledge while
+technically following the generic effect rules. If the adapter cannot produce
+source evidence, mutation reason, and before/after or input/output object
+evidence, it must refuse the mutation and leave both Project OS state and kennel
+state unchanged.
+
 ## Runtime proof versus deployment proof
 
 Project OS is not the Android app.

@@ -309,6 +309,30 @@ Promote a drawer only if it is one of these:
 
 Otherwise leave it in quarantine and prune later.
 
+## Governed mutation evidence
+
+Promotion and distillation are durable knowledge mutations. They must be governed
+like other Project OS effects, not treated as harmless memory helper calls.
+
+A promoted or distilled drawer must carry enough evidence for a future agent or
+operator to reconstruct the mutation:
+
+```text
+source_evidence      -> quarantine drawer, event, artifact, or operator statement
+mutation_reason      -> why this deserves durable status
+before_object        -> previous durable object, if revising/archive applies
+after_object         -> durable object that now exists or changed
+requesting_agent     -> who requested the mutation
+lease_id             -> which Project OS lease authorized it
+resulting_memory_id  -> drawer/object id created or changed
+memory_type          -> project/objective/work_item/principle/fact/decision/...
+```
+
+If that evidence is missing, the mutation should refuse and leave durable memory
+unchanged. Searchable recall can be broad; durable mutation must be narrow,
+evidenced, and auditable. This prevents an agent from quietly rewriting
+institutional knowledge while technically following the generic effect path.
+
 ## Productivity versus activity
 
 Yield metrics are not merely memory metrics. They are productivity metrics.
