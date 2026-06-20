@@ -35,7 +35,6 @@ def _eval_json_on_target(ws_url: str, expression: str) -> Any:
     return value
 
 
-
 def android_browser_click_link_by_text(
     text: str,
     target_id: str = "",
@@ -93,7 +92,6 @@ JSON.stringify((() => {{
     }
 
 
-
 def android_browser_click_selector(
     selector: str,
     target_id: str = "",
@@ -141,7 +139,6 @@ JSON.stringify((() => {{
         "click": payload,
         "page_after": page,
     }
-
 
 
 def android_browser_fill_input(
@@ -198,7 +195,6 @@ JSON.stringify((() => {{
         },
         "fill": payload,
     }
-
 
 
 def android_browser_take_screenshot(

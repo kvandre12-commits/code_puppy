@@ -19,13 +19,11 @@ _HIERARCHY = "android_ui_dump_hierarchy"
 _FIND = "android_ui_dump_find"
 
 
-
 def register_android_ui_dump_doctor(agent: Any) -> None:
     @agent.tool
     async def android_ui_dump_doctor(context: RunContext) -> dict[str, Any]:
         del context
         return android_ui_dump_doctor_impl()
-
 
 
 def register_android_ui_dump_hierarchy(agent: Any) -> None:
@@ -42,7 +40,6 @@ def register_android_ui_dump_hierarchy(agent: Any) -> None:
             include_xml=include_xml,
             max_xml_chars=max_xml_chars,
         )
-
 
 
 def register_android_ui_dump_find(agent: Any) -> None:
@@ -65,14 +62,12 @@ def register_android_ui_dump_find(agent: Any) -> None:
         )
 
 
-
 def register_tools_callback() -> list[dict[str, Any]]:
     return [
         {"name": _DOCTOR, "register_func": register_android_ui_dump_doctor},
         {"name": _HIERARCHY, "register_func": register_android_ui_dump_hierarchy},
         {"name": _FIND, "register_func": register_android_ui_dump_find},
     ]
-
 
 
 def _advertise_tools_to_agent(agent_name: str | None = None) -> list[str]:

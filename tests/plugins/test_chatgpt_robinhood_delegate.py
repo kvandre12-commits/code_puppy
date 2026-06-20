@@ -68,7 +68,10 @@ def test_write_delegation_artifacts_creates_json_and_text_files(tmp_path):
 
     assert json_path.exists()
     assert text_path.exists()
-    assert json.loads(json_path.read_text(encoding="utf-8"))["objective"] == "Do the thing."
+    assert (
+        json.loads(json_path.read_text(encoding="utf-8"))["objective"]
+        == "Do the thing."
+    )
     assert "Do the thing." in text_path.read_text(encoding="utf-8")
 
 

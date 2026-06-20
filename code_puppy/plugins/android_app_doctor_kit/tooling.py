@@ -19,13 +19,21 @@ from typing import Any
 
 from .knowledge import ANR_DIAG, NATIVE_DIAG, diagnose
 
-_EXC_RE = re.compile(
-    r"^([a-zA-Z][\w.$]*(?:Exception|Error|Throwable))(?::\s*(.*))?$"
-)
+_EXC_RE = re.compile(r"^([a-zA-Z][\w.$]*(?:Exception|Error|Throwable))(?::\s*(.*))?$")
 _PROC_RE = re.compile(r"Process:\s*([\w.]+)")
 _FRAME_RE = re.compile(r"^at\s+([\w.$]+)\.([\w$<>]+)\(([^)]*)\)")
-_FRAMEWORK = ("android.", "java.", "javax.", "kotlin.", "kotlinx.",
-              "androidx.", "com.android.", "dalvik.", "libcore.", "sun.")
+_FRAMEWORK = (
+    "android.",
+    "java.",
+    "javax.",
+    "kotlin.",
+    "kotlinx.",
+    "androidx.",
+    "com.android.",
+    "dalvik.",
+    "libcore.",
+    "sun.",
+)
 
 
 def _pull_logcat(lines: int, use_adb: bool, package: str) -> dict[str, Any]:
@@ -40,10 +48,16 @@ def _pull_logcat(lines: int, use_adb: bool, package: str) -> dict[str, Any]:
     try:
         res = subprocess.run(
             cmd + ["-d", "-v", "threadtime", "-t", str(lines)],
-            capture_output=True, text=True, timeout=40, check=False,
+            capture_output=True,
+            text=True,
+            timeout=40,
+            check=False,
         )
-        return {"ok": res.returncode == 0, "text": res.stdout,
-                "error": res.stderr.strip()}
+        return {
+            "ok": res.returncode == 0,
+            "text": res.stdout,
+            "error": res.stderr.strip(),
+        }
     except Exception as exc:  # noqa: BLE001 - fail soft
         return {"ok": False, "text": "", "error": str(exc)}
 
@@ -53,7 +67,7 @@ def _payload(line: str) -> str:
     # e.g. '06-14 20:58:34.522 1234 1234 E AndroidRuntime: <payload>'
     idx = line.find("AndroidRuntime:")
     if idx != -1:
-        return line[idx + len("AndroidRuntime:"):].strip()
+        return line[idx + len("AndroidRuntime:") :].strip()
     # generic: take after the last ': ' that follows a tag
     m = re.search(r"\b[EWIDV]\s+[\w.$]+:\s?(.*)$", line)
     return m.group(1).strip() if m else line.strip()
@@ -92,7 +106,7 @@ def _parse_block(payloads: list[str]) -> dict[str, Any]:
         if pm and not package:
             package = pm.group(1)
         if p.startswith("Caused by:"):
-            caused_by.append(p[len("Caused by:"):].strip())
+            caused_by.append(p[len("Caused by:") :].strip())
         em = _EXC_RE.match(p)
         if em and exc_type is None:
             exc_type = em.group(1)
@@ -132,31 +146,34 @@ def parse_anrs(log_text: str) -> list[dict[str, Any]]:
         m = re.search(r"ANR in ([\w.]+)", line)
         if m:
             what, fix, why = ANR_DIAG
-            out.append({
-                "kind": "anr",
-                "package": m.group(1),
-                "exception": "ANR (Application Not Responding)",
-                "message": line.strip()[-200:],
-                "offending_line": None,
-                "diagnosis": {"what": what, "fix": fix, "why": why},
-            })
+            out.append(
+                {
+                    "kind": "anr",
+                    "package": m.group(1),
+                    "exception": "ANR (Application Not Responding)",
+                    "message": line.strip()[-200:],
+                    "offending_line": None,
+                    "diagnosis": {"what": what, "fix": fix, "why": why},
+                }
+            )
     return out
 
 
 def parse_native(log_text: str) -> list[dict[str, Any]]:
     out = []
     for line in log_text.splitlines():
-        if "F DEBUG" in line and ("signal" in line.lower()
-                                  or "Fatal signal" in line):
+        if "F DEBUG" in line and ("signal" in line.lower() or "Fatal signal" in line):
             what, fix, why = NATIVE_DIAG
-            out.append({
-                "kind": "native",
-                "package": None,
-                "exception": "Native fatal signal",
-                "message": line.strip()[-200:],
-                "offending_line": None,
-                "diagnosis": {"what": what, "fix": fix, "why": why},
-            })
+            out.append(
+                {
+                    "kind": "native",
+                    "package": None,
+                    "exception": "Native fatal signal",
+                    "message": line.strip()[-200:],
+                    "offending_line": None,
+                    "diagnosis": {"what": what, "fix": fix, "why": why},
+                }
+            )
     return out
 
 
@@ -175,8 +192,11 @@ def android_app_doctor(
     if not log_text.strip():
         pulled = _pull_logcat(lines, use_adb, package)
         if not pulled["ok"] and not pulled["text"]:
-            return {"success": False, "error": pulled.get("error", "logcat failed"),
-                    "incidents": []}
+            return {
+                "success": False,
+                "error": pulled.get("error", "logcat failed"),
+                "incidents": [],
+            }
         log_text = pulled["text"]
         source = "logcat"
 
@@ -186,14 +206,16 @@ def android_app_doctor(
     else:
         wanted = ""
 
-    incidents = (parse_java_crashes(log_text)
-                 + parse_anrs(log_text)
-                 + parse_native(log_text))
+    incidents = (
+        parse_java_crashes(log_text) + parse_anrs(log_text) + parse_native(log_text)
+    )
 
     if wanted:
         incidents = [
-            inc for inc in incidents
-            if (inc.get("package") or "") == wanted or wanted in (inc.get("message") or "")
+            inc
+            for inc in incidents
+            if (inc.get("package") or "") == wanted
+            or wanted in (inc.get("message") or "")
         ]
 
     return {
@@ -202,6 +224,9 @@ def android_app_doctor(
         "package_filter": wanted or None,
         "incident_count": len(incidents),
         "incidents": incidents,
-        "note": ("No crashes/ANRs found - the apps are behaving." if not incidents
-                 else f"Found {len(incidents)} incident(s). Each has what/fix/why."),
+        "note": (
+            "No crashes/ANRs found - the apps are behaving."
+            if not incidents
+            else f"Found {len(incidents)} incident(s). Each has what/fix/why."
+        ),
     }

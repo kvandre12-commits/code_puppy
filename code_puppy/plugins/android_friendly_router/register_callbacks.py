@@ -8,11 +8,13 @@ from pydantic_ai import RunContext
 
 from code_puppy.callbacks import register_callback
 
-from .tooling import android_list_shortcuts as android_list_shortcuts_impl, android_open as android_open_impl
+from .tooling import (
+    android_list_shortcuts as android_list_shortcuts_impl,
+    android_open as android_open_impl,
+)
 
 _OPEN_TOOL = "android_open"
 _LIST_TOOL = "android_list_shortcuts"
-
 
 
 def register_android_open(agent: Any) -> None:
@@ -28,7 +30,6 @@ def register_android_open(agent: Any) -> None:
         return android_open_impl(target=target, browser=browser, dry_run=dry_run)
 
 
-
 def register_android_list_shortcuts(agent: Any) -> None:
     @agent.tool
     async def android_list_shortcuts(context: RunContext) -> dict[str, Any]:
@@ -37,13 +38,11 @@ def register_android_list_shortcuts(agent: Any) -> None:
         return android_list_shortcuts_impl()
 
 
-
 def register_tools_callback() -> list[dict[str, Any]]:
     return [
         {"name": _OPEN_TOOL, "register_func": register_android_open},
         {"name": _LIST_TOOL, "register_func": register_android_list_shortcuts},
     ]
-
 
 
 def _advertise_tools_to_agent(agent_name: str | None = None) -> list[str]:

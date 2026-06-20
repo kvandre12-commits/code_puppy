@@ -19,13 +19,11 @@ _SCREENSHOT = "android_capture_screenshot"
 _RECORD = "android_record_screen"
 
 
-
 def register_android_screen_capture_doctor(agent: Any) -> None:
     @agent.tool
     async def android_screen_capture_doctor(context: RunContext) -> dict[str, Any]:
         del context
         return android_screen_capture_doctor_impl()
-
 
 
 def register_android_capture_screenshot(agent: Any) -> None:
@@ -40,7 +38,6 @@ def register_android_capture_screenshot(agent: Any) -> None:
             artifact_name=artifact_name,
             dry_run=dry_run,
         )
-
 
 
 def register_android_record_screen(agent: Any) -> None:
@@ -59,14 +56,12 @@ def register_android_record_screen(agent: Any) -> None:
         )
 
 
-
 def register_tools_callback() -> list[dict[str, Any]]:
     return [
         {"name": _DOCTOR, "register_func": register_android_screen_capture_doctor},
         {"name": _SCREENSHOT, "register_func": register_android_capture_screenshot},
         {"name": _RECORD, "register_func": register_android_record_screen},
     ]
-
 
 
 def _advertise_tools_to_agent(agent_name: str | None = None) -> list[str]:

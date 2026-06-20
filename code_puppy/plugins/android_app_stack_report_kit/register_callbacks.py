@@ -19,13 +19,11 @@ _GENERATE = "android_app_stack_report_generate"
 _EXAMPLES = "android_app_stack_report_examples"
 
 
-
 def register_android_app_stack_report_doctor(agent: Any) -> None:
     @agent.tool
     async def android_app_stack_report_doctor(context: RunContext) -> dict[str, Any]:
         del context
         return android_app_stack_report_doctor_impl()
-
 
 
 def register_android_app_stack_report_generate(agent: Any) -> None:
@@ -48,7 +46,6 @@ def register_android_app_stack_report_generate(agent: Any) -> None:
         )
 
 
-
 def register_android_app_stack_report_examples(agent: Any) -> None:
     @agent.tool
     async def android_app_stack_report_examples(context: RunContext) -> dict[str, Any]:
@@ -56,14 +53,18 @@ def register_android_app_stack_report_examples(agent: Any) -> None:
         return android_app_stack_report_examples_impl()
 
 
-
 def register_tools_callback() -> list[dict[str, Any]]:
     return [
         {"name": _DOCTOR, "register_func": register_android_app_stack_report_doctor},
-        {"name": _GENERATE, "register_func": register_android_app_stack_report_generate},
-        {"name": _EXAMPLES, "register_func": register_android_app_stack_report_examples},
+        {
+            "name": _GENERATE,
+            "register_func": register_android_app_stack_report_generate,
+        },
+        {
+            "name": _EXAMPLES,
+            "register_func": register_android_app_stack_report_examples,
+        },
     ]
-
 
 
 def _advertise_tools_to_agent(agent_name: str | None = None) -> list[str]:

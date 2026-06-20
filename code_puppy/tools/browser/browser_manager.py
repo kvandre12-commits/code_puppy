@@ -12,6 +12,9 @@ import types
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Dict, Optional
 
+from code_puppy import config
+from code_puppy.messaging import emit_info, emit_success, emit_warning
+
 if TYPE_CHECKING:
     from playwright.async_api import Browser, BrowserContext, Page
 else:
@@ -55,9 +58,6 @@ try:
     import playwright.async_api as _playwright_async_api  # noqa: F401
 except ImportError:
     _install_playwright_stub()
-
-from code_puppy import config
-from code_puppy.messaging import emit_info, emit_success, emit_warning
 
 # Registry for custom browser types from plugins (e.g., Camoufox for stealth browsing)
 _CUSTOM_BROWSER_TYPES: Dict[str, Callable] = {}

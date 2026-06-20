@@ -19,13 +19,11 @@ _RECENT = "android_logcat_recent"
 _CLEAR = "android_logcat_clear"
 
 
-
 def register_android_logcat_doctor(agent: Any) -> None:
     @agent.tool
     async def android_logcat_doctor(context: RunContext) -> dict[str, Any]:
         del context
         return android_logcat_doctor_impl()
-
 
 
 def register_android_logcat_recent(agent: Any) -> None:
@@ -50,7 +48,6 @@ def register_android_logcat_recent(agent: Any) -> None:
         )
 
 
-
 def register_android_logcat_clear(agent: Any) -> None:
     @agent.tool
     async def android_logcat_clear(
@@ -61,14 +58,12 @@ def register_android_logcat_clear(agent: Any) -> None:
         return android_logcat_clear_impl(use_adb=use_adb)
 
 
-
 def register_tools_callback() -> list[dict[str, Any]]:
     return [
         {"name": _DOCTOR, "register_func": register_android_logcat_doctor},
         {"name": _RECENT, "register_func": register_android_logcat_recent},
         {"name": _CLEAR, "register_func": register_android_logcat_clear},
     ]
-
 
 
 def _advertise_tools_to_agent(agent_name: str | None = None) -> list[str]:

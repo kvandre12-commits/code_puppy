@@ -13,15 +13,14 @@ from ..android_workflow_feasibility_kit.tooling import (
 OUTPUT_DIR = Path("outputs")
 
 
-
 def _timestamp() -> str:
     return datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
 
 
-
 def _find_apps(assessment: dict[str, Any], mode: str) -> list[dict[str, Any]]:
-    return [app for app in assessment.get("apps", []) if app.get("interaction_mode") == mode]
-
+    return [
+        app for app in assessment.get("apps", []) if app.get("interaction_mode") == mode
+    ]
 
 
 def _preferred_entry_app(assessment: dict[str, Any]) -> str | None:
@@ -36,8 +35,9 @@ def _preferred_entry_app(assessment: dict[str, Any]) -> str | None:
     return apps[0].get("package_name") if apps else None
 
 
-
-def _pilot_workflows(assessment: dict[str, Any], business_goal: str) -> list[dict[str, Any]]:
+def _pilot_workflows(
+    assessment: dict[str, Any], business_goal: str
+) -> list[dict[str, Any]]:
     direct = _find_apps(assessment, "direct_handoff")
     ui = _find_apps(assessment, "ui_steering")
     reactivate = _find_apps(assessment, "reactivation_or_restore")
@@ -118,7 +118,6 @@ def _pilot_workflows(assessment: dict[str, Any], business_goal: str) -> list[dic
     return pilots
 
 
-
 def _risk_register(assessment: dict[str, Any]) -> list[dict[str, Any]]:
     risks: list[dict[str, Any]] = []
     for app in assessment.get("apps", []):
@@ -157,7 +156,6 @@ def _risk_register(assessment: dict[str, Any]) -> list[dict[str, Any]]:
             }
         )
     return risks
-
 
 
 def _rollout_phases(assessment: dict[str, Any]) -> list[dict[str, Any]]:
@@ -229,7 +227,6 @@ def _rollout_phases(assessment: dict[str, Any]) -> list[dict[str, Any]]:
     return phases
 
 
-
 def _recommended_tools(assessment: dict[str, Any]) -> list[str]:
     tools = [
         "android_workflow_feasibility_assess",
@@ -239,15 +236,22 @@ def _recommended_tools(assessment: dict[str, Any]) -> list[str]:
         "android_support_share_wizard",
     ]
     if _find_apps(assessment, "direct_handoff"):
-        tools.extend(["android_handoff_url", "android_handoff_text", "android_intent_send"])
+        tools.extend(
+            ["android_handoff_url", "android_handoff_text", "android_intent_send"]
+        )
     if _find_apps(assessment, "ui_steering"):
-        tools.extend(["android_ui_dump_hierarchy", "android_ui_dump_find", "android_ui_tap_match"])
+        tools.extend(
+            [
+                "android_ui_dump_hierarchy",
+                "android_ui_dump_find",
+                "android_ui_tap_match",
+            ]
+        )
     deduped: list[str] = []
     for tool in tools:
         if tool not in deduped:
             deduped.append(tool)
     return deduped
-
 
 
 def _render_markdown(plan: dict[str, Any]) -> str:
@@ -268,18 +272,21 @@ def _render_markdown(plan: dict[str, Any]) -> str:
         "## Rollout Phases",
     ]
     for phase in plan.get("rollout_phases", []):
-        lines.append(f"- Phase {phase.get('phase')}: **{phase.get('name')}** — {phase.get('focus')}")
+        lines.append(
+            f"- Phase {phase.get('phase')}: **{phase.get('name')}** — {phase.get('focus')}"
+        )
     lines.extend(["", "## Pilot Workflows"])
     for pilot in plan.get("pilot_workflows", []):
         lines.append(f"- **{pilot.get('name')}** — {pilot.get('summary')}")
     lines.extend(["", "## Risks"])
     for risk in plan.get("risk_register", []):
-        lines.append(f"- **{risk.get('severity')}** `{risk.get('package_name')}` — {risk.get('risk')}")
+        lines.append(
+            f"- **{risk.get('severity')}** `{risk.get('package_name')}` — {risk.get('risk')}"
+        )
     lines.extend(["", "## Recommended Tools"])
     for tool in plan.get("recommended_tools", []):
         lines.append(f"- `{tool}`")
     return "\n".join(lines) + "\n"
-
 
 
 def android_orchestration_blueprint_doctor() -> dict[str, Any]:
@@ -293,7 +300,6 @@ def android_orchestration_blueprint_doctor() -> dict[str, Any]:
             "Use dry_run first if you only want to inspect the plan without writing artifacts.",
         ],
     }
-
 
 
 def android_orchestration_blueprint_plan(
@@ -347,7 +353,6 @@ def android_orchestration_blueprint_plan(
         "dry_run": False,
         "artifact_paths": [str(json_path), str(md_path)],
     }
-
 
 
 def android_orchestration_blueprint_examples() -> dict[str, Any]:

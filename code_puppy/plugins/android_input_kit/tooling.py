@@ -42,7 +42,6 @@ def _run_command(args: list[str], timeout: int = 20) -> dict[str, Any]:
         }
 
 
-
 def _adb() -> str:
     adb = shutil.which("adb")
     if not adb:
@@ -50,11 +49,12 @@ def _adb() -> str:
     return adb
 
 
-
 def android_input_doctor() -> dict[str, Any]:
     adb = shutil.which("adb")
     devices = _run_command([adb, "devices", "-l"], timeout=20) if adb else None
-    input_probe = _run_command([adb, "shell", "input", "--help"], timeout=20) if adb else None
+    input_probe = (
+        _run_command([adb, "shell", "input", "--help"], timeout=20) if adb else None
+    )
     return {
         "success": True,
         "commands": {"adb": adb},
@@ -66,7 +66,6 @@ def android_input_doctor() -> dict[str, Any]:
             "Keep the phone awake and unlocked during input automation.",
         ],
     }
-
 
 
 def _exec_or_dry_run(command: list[str], dry_run: bool) -> dict[str, Any]:
@@ -85,11 +84,9 @@ def _exec_or_dry_run(command: list[str], dry_run: bool) -> dict[str, Any]:
     }
 
 
-
 def android_input_tap(x: int, y: int, dry_run: bool = True) -> dict[str, Any]:
     command = [_adb(), "shell", "input", "tap", str(int(x)), str(int(y))]
     return _exec_or_dry_run(command, dry_run=dry_run)
-
 
 
 def _parse_bounds(bounds: str) -> tuple[int, int, int, int]:
@@ -100,7 +97,6 @@ def _parse_bounds(bounds: str) -> tuple[int, int, int, int]:
     return x1, y1, x2, y2
 
 
-
 def android_input_tap_bounds(bounds: str, dry_run: bool = True) -> dict[str, Any]:
     x1, y1, x2, y2 = _parse_bounds(bounds)
     center_x = (x1 + x2) // 2
@@ -109,7 +105,6 @@ def android_input_tap_bounds(bounds: str, dry_run: bool = True) -> dict[str, Any
     result["bounds"] = bounds
     result["center"] = {"x": center_x, "y": center_y}
     return result
-
 
 
 def android_input_swipe(
@@ -134,13 +129,11 @@ def android_input_swipe(
     return _exec_or_dry_run(command, dry_run=dry_run)
 
 
-
 def android_input_text(text: str, dry_run: bool = True) -> dict[str, Any]:
     if not text:
         raise ValueError("text is required")
     command = [_adb(), "shell", "input", "text", text]
     return _exec_or_dry_run(command, dry_run=dry_run)
-
 
 
 def android_input_keyevent(keycode: str, dry_run: bool = True) -> dict[str, Any]:

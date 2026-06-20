@@ -29,7 +29,6 @@ WORKFLOWS = {
 }
 
 
-
 def _latest_matching(pattern: str) -> Path | None:
     if not OUTPUT_DIR.exists():
         return None
@@ -38,7 +37,6 @@ def _latest_matching(pattern: str) -> Path | None:
         return None
     matches.sort(key=lambda p: p.stat().st_mtime, reverse=True)
     return matches[0]
-
 
 
 def android_app_workflow_doctor() -> dict[str, Any]:
@@ -67,7 +65,6 @@ def android_app_workflow_doctor() -> dict[str, Any]:
     }
 
 
-
 def android_app_workflow_list() -> dict[str, Any]:
     return {
         "success": True,
@@ -83,7 +80,6 @@ def android_app_workflow_list() -> dict[str, Any]:
             "android_app_workflow_run(name='latest_screenshot_share', dry_run=True)",
         ],
     }
-
 
 
 def _workflow_open_repo_in_brave(repo_url: str, dry_run: bool) -> dict[str, Any]:
@@ -102,7 +98,6 @@ def _workflow_open_repo_in_brave(repo_url: str, dry_run: bool) -> dict[str, Any]
     }
 
 
-
 def _workflow_share_repo_link(repo_url: str, dry_run: bool) -> dict[str, Any]:
     return {
         "workflow": "share_repo_link",
@@ -117,7 +112,6 @@ def _workflow_share_repo_link(repo_url: str, dry_run: bool) -> dict[str, Any]:
             }
         ],
     }
-
 
 
 def _workflow_latest_screenshot_share(dry_run: bool) -> dict[str, Any]:
@@ -138,7 +132,6 @@ def _workflow_latest_screenshot_share(dry_run: bool) -> dict[str, Any]:
             }
         ],
     }
-
 
 
 def _workflow_support_bundle_collect_and_share(
@@ -177,7 +170,6 @@ def _workflow_support_bundle_collect_and_share(
     }
 
 
-
 def _workflow_support_issue_draft_and_share(dry_run: bool) -> dict[str, Any]:
     draft_result = android_support_issue_draft()
     share_result = android_handoff_text(
@@ -192,7 +184,6 @@ def _workflow_support_issue_draft_and_share(dry_run: bool) -> dict[str, Any]:
             {"name": "share_issue_text", "result": share_result},
         ],
     }
-
 
 
 def _workflow_open_wifi_and_wireless_debugging(dry_run: bool) -> dict[str, Any]:
@@ -212,7 +203,6 @@ def _workflow_open_wifi_and_wireless_debugging(dry_run: bool) -> dict[str, Any]:
         ],
         "note": "On a live run, Android will show the last launched settings screen. This still gives the user a guided path.",
     }
-
 
 
 def android_app_workflow_run(

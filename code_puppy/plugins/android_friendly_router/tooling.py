@@ -36,16 +36,15 @@ SETTINGS_ALIASES = {
 }
 
 
-
 def _normalize(value: str) -> str:
-    return " ".join((value or "").strip().lower().replace("_", " ").replace("-", " ").split())
-
+    return " ".join(
+        (value or "").strip().lower().replace("_", " ").replace("-", " ").split()
+    )
 
 
 def _looks_like_url(value: str) -> bool:
     parsed = urlparse(value)
     return parsed.scheme in {"http", "https"} and bool(parsed.netloc)
-
 
 
 def android_list_shortcuts() -> dict[str, Any]:
@@ -71,7 +70,6 @@ def android_list_shortcuts() -> dict[str, Any]:
             "open https://example.com",
         ],
     }
-
 
 
 def android_open(
@@ -137,7 +135,11 @@ def android_open(
             "result": result,
         }
 
-    partial_matches = [pkg for pkg in installed if normalized.replace(" ", "") in pkg.lower().replace(".", "")]
+    partial_matches = [
+        pkg
+        for pkg in installed
+        if normalized.replace(" ", "") in pkg.lower().replace(".", "")
+    ]
     if len(partial_matches) == 1:
         result = android_launch_app(package_name=partial_matches[0])
         return {

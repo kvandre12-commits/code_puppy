@@ -23,13 +23,11 @@ _FILE = "android_handoff_file"
 _EXAMPLES = "android_handoff_examples"
 
 
-
 def register_android_handoff_doctor(agent: Any) -> None:
     @agent.tool
     async def android_handoff_doctor(context: RunContext) -> dict[str, Any]:
         del context
         return android_handoff_doctor_impl()
-
 
 
 def register_android_handoff_text(agent: Any) -> None:
@@ -52,7 +50,6 @@ def register_android_handoff_text(agent: Any) -> None:
         )
 
 
-
 def register_android_handoff_url(agent: Any) -> None:
     @agent.tool
     async def android_handoff_url(
@@ -69,7 +66,6 @@ def register_android_handoff_url(agent: Any) -> None:
             chooser_title=chooser_title,
             dry_run=dry_run,
         )
-
 
 
 def register_android_handoff_file(agent: Any) -> None:
@@ -92,13 +88,11 @@ def register_android_handoff_file(agent: Any) -> None:
         )
 
 
-
 def register_android_handoff_examples(agent: Any) -> None:
     @agent.tool
     async def android_handoff_examples(context: RunContext) -> dict[str, Any]:
         del context
         return android_handoff_examples_impl()
-
 
 
 def register_tools_callback() -> list[dict[str, Any]]:
@@ -109,7 +103,6 @@ def register_tools_callback() -> list[dict[str, Any]]:
         {"name": _FILE, "register_func": register_android_handoff_file},
         {"name": _EXAMPLES, "register_func": register_android_handoff_examples},
     ]
-
 
 
 def _advertise_tools_to_agent(agent_name: str | None = None) -> list[str]:

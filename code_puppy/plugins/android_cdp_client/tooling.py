@@ -159,12 +159,10 @@ class SimpleWebSocketClient:
         return opcode, payload
 
 
-
 def _http_get_json(url: str, timeout: int = DEFAULT_TIMEOUT) -> Any:
     request = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
     with urllib.request.urlopen(request, timeout=timeout) as response:
         return json.loads(response.read().decode("utf-8", errors="replace"))
-
 
 
 def _ensure_cdp_ready(local_port: int = DEFAULT_PORT) -> dict[str, Any]:
@@ -177,14 +175,12 @@ def _ensure_cdp_ready(local_port: int = DEFAULT_PORT) -> dict[str, Any]:
     return probe
 
 
-
 def _list_targets_raw(local_port: int = DEFAULT_PORT) -> list[dict[str, Any]]:
     _ensure_cdp_ready(local_port=local_port)
     data = _http_get_json(f"http://127.0.0.1:{local_port}/json/list")
     if not isinstance(data, list):
         raise CDPError("Unexpected /json/list response")
     return data
-
 
 
 def _pick_target(
@@ -211,8 +207,9 @@ def _pick_target(
     return filtered[0]
 
 
-
-def _cdp_call(ws_url: str, method: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
+def _cdp_call(
+    ws_url: str, method: str, params: dict[str, Any] | None = None
+) -> dict[str, Any]:
     request_id = random.randint(1000, 999999)
     payload = {"id": request_id, "method": method, "params": params or {}}
     with SimpleWebSocketClient(ws_url) as ws:
@@ -226,7 +223,6 @@ def _cdp_call(ws_url: str, method: str, params: dict[str, Any] | None = None) ->
                 raise CDPError(str(message["error"]))
             return message.get("result", {})
     raise CDPError(f"Timed out waiting for CDP response to {method}")
-
 
 
 def android_cdp_list_targets(local_port: int = DEFAULT_PORT) -> dict[str, Any]:
@@ -247,7 +243,6 @@ def android_cdp_list_targets(local_port: int = DEFAULT_PORT) -> dict[str, Any]:
         "target_count": len(slim),
         "targets": slim,
     }
-
 
 
 def android_cdp_get_page_info(
@@ -277,7 +272,7 @@ def android_cdp_get_page_info(
             "awaitPromise": False,
         },
     )
-    value = (((eval_result.get("result") or {}).get("value")) or "{}")
+    value = ((eval_result.get("result") or {}).get("value")) or "{}"
     parsed_value = json.loads(value) if isinstance(value, str) else value
     return {
         "success": True,
@@ -288,7 +283,6 @@ def android_cdp_get_page_info(
         },
         "page_info": parsed_value,
     }
-
 
 
 def android_cdp_navigate(
@@ -316,7 +310,9 @@ def android_cdp_navigate(
     _cdp_call(ws_url, "Page.enable")
     result = _cdp_call(ws_url, "Page.navigate", {"url": url})
     time.sleep(1.0)
-    info = android_cdp_get_page_info(target_id=str(target.get("id")), local_port=local_port)
+    info = android_cdp_get_page_info(
+        target_id=str(target.get("id")), local_port=local_port
+    )
     return {
         "success": True,
         "frameId": result.get("frameId"),
@@ -324,7 +320,6 @@ def android_cdp_navigate(
         "target": info.get("target"),
         "page_info": info.get("page_info"),
     }
-
 
 
 def android_cdp_eval_js(

@@ -25,13 +25,11 @@ _TEXT = "android_input_text"
 _KEYEVENT = "android_input_keyevent"
 
 
-
 def register_android_input_doctor(agent: Any) -> None:
     @agent.tool
     async def android_input_doctor(context: RunContext) -> dict[str, Any]:
         del context
         return android_input_doctor_impl()
-
 
 
 def register_android_input_tap(agent: Any) -> None:
@@ -46,7 +44,6 @@ def register_android_input_tap(agent: Any) -> None:
         return android_input_tap_impl(x=x, y=y, dry_run=dry_run)
 
 
-
 def register_android_input_tap_bounds(agent: Any) -> None:
     @agent.tool
     async def android_input_tap_bounds(
@@ -56,7 +53,6 @@ def register_android_input_tap_bounds(agent: Any) -> None:
     ) -> dict[str, Any]:
         del context
         return android_input_tap_bounds_impl(bounds=bounds, dry_run=dry_run)
-
 
 
 def register_android_input_swipe(agent: Any) -> None:
@@ -81,7 +77,6 @@ def register_android_input_swipe(agent: Any) -> None:
         )
 
 
-
 def register_android_input_text(agent: Any) -> None:
     @agent.tool
     async def android_input_text(
@@ -91,7 +86,6 @@ def register_android_input_text(agent: Any) -> None:
     ) -> dict[str, Any]:
         del context
         return android_input_text_impl(text=text, dry_run=dry_run)
-
 
 
 def register_android_input_keyevent(agent: Any) -> None:
@@ -105,7 +99,6 @@ def register_android_input_keyevent(agent: Any) -> None:
         return android_input_keyevent_impl(keycode=keycode, dry_run=dry_run)
 
 
-
 def register_tools_callback() -> list[dict[str, Any]]:
     return [
         {"name": _DOCTOR, "register_func": register_android_input_doctor},
@@ -115,7 +108,6 @@ def register_tools_callback() -> list[dict[str, Any]]:
         {"name": _TEXT, "register_func": register_android_input_text},
         {"name": _KEYEVENT, "register_func": register_android_input_keyevent},
     ]
-
 
 
 def _advertise_tools_to_agent(agent_name: str | None = None) -> list[str]:

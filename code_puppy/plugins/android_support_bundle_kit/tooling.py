@@ -5,11 +5,20 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from ..android_bugreport_kit.tooling import android_bugreport_collect, android_bugreport_doctor
-from ..android_dumpsys_kit.tooling import android_dumpsys_doctor, android_dumpsys_snapshot
+from ..android_bugreport_kit.tooling import (
+    android_bugreport_collect,
+    android_bugreport_doctor,
+)
+from ..android_dumpsys_kit.tooling import (
+    android_dumpsys_doctor,
+    android_dumpsys_snapshot,
+)
 from ..android_logcat_kit.tooling import android_logcat_doctor, android_logcat_recent
 from ..android_reconnect_helper.tooling import android_reconnect_doctor
-from ..android_screen_capture_kit.tooling import android_capture_screenshot, android_screen_capture_doctor
+from ..android_screen_capture_kit.tooling import (
+    android_capture_screenshot,
+    android_screen_capture_doctor,
+)
 from ..android_setup_helper.tooling import android_setup_doctor
 from ..android_workflow_macro_kit.tooling import android_workflow_doctor
 
@@ -18,7 +27,6 @@ OUTPUT_DIR = Path("outputs")
 
 def _timestamp() -> str:
     return datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
-
 
 
 def _device_count_from_block(block: dict[str, Any] | None) -> int:
@@ -34,14 +42,12 @@ def _device_count_from_block(block: dict[str, Any] | None) -> int:
     return count
 
 
-
 def _safe(label: str, func, *args, **kwargs) -> dict[str, Any]:
     try:
         value = func(*args, **kwargs)
         return {"success": True, "label": label, "value": value}
     except Exception as exc:
         return {"success": False, "label": label, "error": str(exc)}
-
 
 
 def android_support_bundle_doctor() -> dict[str, Any]:
@@ -51,7 +57,9 @@ def android_support_bundle_doctor() -> dict[str, Any]:
     dumpsys = android_dumpsys_doctor()
     screen = android_screen_capture_doctor()
     bugreport = android_bugreport_doctor()
-    adb_devices = (reconnect.get("adb_devices") or {}) if isinstance(reconnect, dict) else {}
+    adb_devices = (
+        (reconnect.get("adb_devices") or {}) if isinstance(reconnect, dict) else {}
+    )
     return {
         "success": True,
         "summary": {
@@ -76,8 +84,9 @@ def android_support_bundle_doctor() -> dict[str, Any]:
     }
 
 
-
-def android_support_bundle_plan(artifact_name: str = "droidpuppy_support_bundle") -> dict[str, Any]:
+def android_support_bundle_plan(
+    artifact_name: str = "droidpuppy_support_bundle",
+) -> dict[str, Any]:
     stamp = _timestamp()
     return {
         "success": True,
@@ -98,7 +107,6 @@ def android_support_bundle_plan(artifact_name: str = "droidpuppy_support_bundle"
             "Bugreport collection remains a separate step but its plan is included in the bundle.",
         ],
     }
-
 
 
 def android_support_bundle_collect(
@@ -133,7 +141,7 @@ def android_support_bundle_collect(
 
     adb_devices_block = {}
     if reconnect.get("success"):
-        adb_devices_block = ((reconnect.get("value") or {}).get("adb_devices") or {})
+        adb_devices_block = (reconnect.get("value") or {}).get("adb_devices") or {}
     connected = _device_count_from_block(adb_devices_block)
 
     logcat = None
@@ -150,7 +158,6 @@ def android_support_bundle_collect(
                 max_chars=10000,
             )
         if include_dumpsys:
-            logcat_dummy = None
             dumpsys = _safe(
                 "dumpsys_snapshot",
                 android_dumpsys_snapshot,

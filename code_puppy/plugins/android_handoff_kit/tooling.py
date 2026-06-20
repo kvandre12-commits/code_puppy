@@ -10,7 +10,6 @@ from ..android_intent_kit.tooling import android_intent_send
 from ..android_utility_kit.tooling import android_share_text
 
 
-
 def _run_command(args: list[str], timeout: int = 30) -> dict[str, Any]:
     try:
         completed = subprocess.run(
@@ -47,10 +46,8 @@ def _run_command(args: list[str], timeout: int = 30) -> dict[str, Any]:
         }
 
 
-
 def _which(name: str) -> str | None:
     return shutil.which(name)
-
 
 
 def android_handoff_doctor() -> dict[str, Any]:
@@ -72,7 +69,6 @@ def android_handoff_doctor() -> dict[str, Any]:
             "Use android_handoff_file for files when termux-open is available.",
         ],
     }
-
 
 
 def android_handoff_text(
@@ -123,7 +119,6 @@ def android_handoff_text(
     }
 
 
-
 def android_handoff_url(
     url: str,
     package_name: str = "",
@@ -147,7 +142,6 @@ def android_handoff_url(
     }
 
 
-
 def android_handoff_file(
     file_path: str,
     send: bool = True,
@@ -166,7 +160,9 @@ def android_handoff_file(
     if not path.exists():
         raise FileNotFoundError(f"File not found: {file_path}")
 
-    resolved_type = content_type.strip() or (mimetypes.guess_type(str(path))[0] or "application/octet-stream")
+    resolved_type = content_type.strip() or (
+        mimetypes.guess_type(str(path))[0] or "application/octet-stream"
+    )
 
     command = [termux_open]
     command.append("--send" if send else "--view")
@@ -196,7 +192,6 @@ def android_handoff_file(
         "content_type": resolved_type,
         "launcher_result": result,
     }
-
 
 
 def android_handoff_examples() -> dict[str, Any]:

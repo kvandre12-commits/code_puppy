@@ -43,13 +43,11 @@ def _run_command(args: list[str], timeout: int = 30) -> dict[str, Any]:
         }
 
 
-
 def _adb() -> str:
     adb = shutil.which("adb")
     if not adb:
         raise RuntimeError("adb is required for android_ui_dump_kit")
     return adb
-
 
 
 def _dump_ui_xml() -> str:
@@ -71,12 +69,19 @@ def _dump_ui_xml() -> str:
                     return xml_text
                 last_error = "uiautomator dump did not return valid XML"
             else:
-                last_error = read_step.get("stderr") or read_step.get("stdout") or "failed to read window_dump.xml"
+                last_error = (
+                    read_step.get("stderr")
+                    or read_step.get("stdout")
+                    or "failed to read window_dump.xml"
+                )
         else:
-            last_error = dump_step.get("stderr") or dump_step.get("stdout") or "uiautomator dump failed"
+            last_error = (
+                dump_step.get("stderr")
+                or dump_step.get("stdout")
+                or "uiautomator dump failed"
+            )
         time.sleep(0.5 * (attempt + 1))
     raise RuntimeError(last_error)
-
 
 
 def _parse_nodes(xml_text: str) -> list[dict[str, Any]]:
@@ -103,11 +108,14 @@ def _parse_nodes(xml_text: str) -> list[dict[str, Any]]:
     return nodes
 
 
-
 def android_ui_dump_doctor() -> dict[str, Any]:
     adb = shutil.which("adb")
     devices = _run_command([adb, "devices", "-l"], timeout=20) if adb else None
-    probe = _run_command([adb, "shell", "uiautomator", "--help"], timeout=20) if adb else None
+    probe = (
+        _run_command([adb, "shell", "uiautomator", "--help"], timeout=20)
+        if adb
+        else None
+    )
     return {
         "success": True,
         "commands": {"adb": adb},
@@ -119,7 +127,6 @@ def android_ui_dump_doctor() -> dict[str, Any]:
             "Use android_ui_dump_find to search for visible text, resource IDs, or classes.",
         ],
     }
-
 
 
 def android_ui_dump_hierarchy(
@@ -138,7 +145,6 @@ def android_ui_dump_hierarchy(
         "xml": xml_text[:max_xml_chars] if include_xml else "",
         "xml_truncated": include_xml and len(xml_text) > max_xml_chars,
     }
-
 
 
 def android_ui_dump_find(
@@ -169,7 +175,10 @@ def android_ui_dump_find(
             ).lower()
             if query_norm not in hay:
                 continue
-        if resource_norm and resource_norm not in str(node.get("resource_id", "")).lower():
+        if (
+            resource_norm
+            and resource_norm not in str(node.get("resource_id", "")).lower()
+        ):
             continue
         if class_norm and class_norm not in str(node.get("class_name", "")).lower():
             continue

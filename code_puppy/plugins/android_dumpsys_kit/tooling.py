@@ -50,7 +50,6 @@ def _run_command(args: list[str], timeout: int = 25) -> dict[str, Any]:
         }
 
 
-
 def android_dumpsys_doctor() -> dict[str, Any]:
     adb = shutil.which("adb")
     devices = _run_command([adb, "devices", "-l"], timeout=20) if adb else None
@@ -66,13 +65,11 @@ def android_dumpsys_doctor() -> dict[str, Any]:
     }
 
 
-
 def _dumpsys_command(service: str) -> list[str]:
     adb = shutil.which("adb")
     if not adb:
         raise RuntimeError("adb is required for dumpsys kit")
     return [adb, "shell", "dumpsys", service]
-
 
 
 def android_dumpsys_service(
@@ -100,11 +97,12 @@ def android_dumpsys_service(
     }
 
 
-
 def android_dumpsys_snapshot(max_chars_per_service: int = 4000) -> dict[str, Any]:
     snapshot: dict[str, Any] = {}
     for service in DEFAULT_SERVICES:
-        result = android_dumpsys_service(service=service, max_chars=max_chars_per_service)
+        result = android_dumpsys_service(
+            service=service, max_chars=max_chars_per_service
+        )
         snapshot[service] = {
             "success": result.get("success"),
             "truncated": result.get("truncated"),

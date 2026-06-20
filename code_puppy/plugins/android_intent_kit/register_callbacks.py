@@ -21,13 +21,11 @@ _SEND = "android_intent_send"
 _EXAMPLES = "android_intent_examples"
 
 
-
 def register_android_intent_doctor(agent: Any) -> None:
     @agent.tool
     async def android_intent_doctor(context: RunContext) -> dict[str, Any]:
         del context
         return android_intent_doctor_impl()
-
 
 
 def register_android_intent_build(agent: Any) -> None:
@@ -66,7 +64,6 @@ def register_android_intent_build(agent: Any) -> None:
             chooser_title=chooser_title,
             dispatch_mode=dispatch_mode,
         )
-
 
 
 def register_android_intent_send(agent: Any) -> None:
@@ -109,13 +106,11 @@ def register_android_intent_send(agent: Any) -> None:
         )
 
 
-
 def register_android_intent_examples(agent: Any) -> None:
     @agent.tool
     async def android_intent_examples(context: RunContext) -> dict[str, Any]:
         del context
         return android_intent_examples_impl()
-
 
 
 def register_tools_callback() -> list[dict[str, Any]]:
@@ -125,7 +120,6 @@ def register_tools_callback() -> list[dict[str, Any]]:
         {"name": _SEND, "register_func": register_android_intent_send},
         {"name": _EXAMPLES, "register_func": register_android_intent_examples},
     ]
-
 
 
 def _advertise_tools_to_agent(agent_name: str | None = None) -> list[str]:

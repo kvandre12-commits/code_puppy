@@ -2,7 +2,10 @@ from __future__ import annotations
 
 from typing import Any
 
-from ..android_app_inventory_kit.tooling import android_app_inventory_doctor, android_app_profile
+from ..android_app_inventory_kit.tooling import (
+    android_app_inventory_doctor,
+    android_app_profile,
+)
 
 COMMON_SURFACES = {
     "launcher": {
@@ -109,17 +112,20 @@ def _run_command(args: list[str], timeout: int = 30) -> dict[str, Any]:
         }
 
 
-
 def _parse_component_lines(text: str) -> list[str]:
     found: list[str] = []
     for line in text.splitlines():
         line = line.strip()
-        if not line or line.startswith("priority=") or line.startswith("Activity #") or line.endswith("activities found:"):
+        if (
+            not line
+            or line.startswith("priority=")
+            or line.startswith("Activity #")
+            or line.endswith("activities found:")
+        ):
             continue
         if "/" in line and not line.startswith("Exception"):
             found.append(line)
     return found
-
 
 
 def _query_surface(package_name: str, surface_name: str, user: str) -> dict[str, Any]:
@@ -139,11 +145,9 @@ def _query_surface(package_name: str, surface_name: str, user: str) -> dict[str,
     }
 
 
-
 def _surface_summary(audit: dict[str, Any]) -> dict[str, bool]:
     surfaces = audit.get("surfaces") or {}
     return {name: bool(info.get("supported")) for name, info in surfaces.items()}
-
 
 
 def _surface_notes(summary: dict[str, bool]) -> list[str]:
@@ -167,16 +171,18 @@ def _surface_notes(summary: dict[str, bool]) -> list[str]:
     return notes
 
 
-
 def _recommended_pattern(summary: dict[str, bool]) -> str:
     if summary.get("view_https") and summary.get("send_text"):
         return "direct_handoff_first"
-    if summary.get("send_text") or summary.get("send_image") or summary.get("send_multiple"):
+    if (
+        summary.get("send_text")
+        or summary.get("send_image")
+        or summary.get("send_multiple")
+    ):
         return "share_flow_first"
     if summary.get("launcher"):
         return "launch_then_ui_steer"
     return "unknown_or_brittle"
-
 
 
 def android_intent_audit_doctor() -> dict[str, Any]:
@@ -191,7 +197,6 @@ def android_intent_audit_doctor() -> dict[str, Any]:
             "This layer focuses on common orchestration surfaces like launch, URL handoff, and share flows.",
         ],
     }
-
 
 
 def android_intent_audit_app(
@@ -225,7 +230,6 @@ def android_intent_audit_app(
     }
 
 
-
 def android_intent_audit_stack(
     package_names: list[str],
     surfaces: list[str] | None = None,
@@ -239,7 +243,10 @@ def android_intent_audit_stack(
     if not cleaned_packages:
         raise ValueError("package_names must contain at least one package")
 
-    audits = [android_intent_audit_app(name, surfaces=surfaces, user=user) for name in cleaned_packages]
+    audits = [
+        android_intent_audit_app(name, surfaces=surfaces, user=user)
+        for name in cleaned_packages
+    ]
     patterns: dict[str, list[str]] = {}
     for audit in audits:
         pattern = audit.get("recommended_pattern", "unknown_or_brittle")
@@ -258,7 +265,6 @@ def android_intent_audit_stack(
             "launch_then_ui_steer apps likely need UI-based automation after entry.",
         ],
     }
-
 
 
 def android_intent_audit_examples() -> dict[str, Any]:

@@ -19,7 +19,6 @@ _LIST = "android_app_workflow_list"
 _RUN = "android_app_workflow_run"
 
 
-
 def register_android_app_workflow_doctor(agent: Any) -> None:
     @agent.tool
     async def android_app_workflow_doctor(context: RunContext) -> dict[str, Any]:
@@ -27,13 +26,11 @@ def register_android_app_workflow_doctor(agent: Any) -> None:
         return android_app_workflow_doctor_impl()
 
 
-
 def register_android_app_workflow_list(agent: Any) -> None:
     @agent.tool
     async def android_app_workflow_list(context: RunContext) -> dict[str, Any]:
         del context
         return android_app_workflow_list_impl()
-
 
 
 def register_android_app_workflow_run(agent: Any) -> None:
@@ -56,14 +53,12 @@ def register_android_app_workflow_run(agent: Any) -> None:
         )
 
 
-
 def register_tools_callback() -> list[dict[str, Any]]:
     return [
         {"name": _DOCTOR, "register_func": register_android_app_workflow_doctor},
         {"name": _LIST, "register_func": register_android_app_workflow_list},
         {"name": _RUN, "register_func": register_android_app_workflow_run},
     ]
-
 
 
 def _advertise_tools_to_agent(agent_name: str | None = None) -> list[str]:

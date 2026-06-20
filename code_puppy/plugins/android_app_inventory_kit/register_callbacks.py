@@ -19,13 +19,11 @@ _LIST = "android_app_inventory_list"
 _PROFILE = "android_app_profile"
 
 
-
 def register_android_app_inventory_doctor(agent: Any) -> None:
     @agent.tool
     async def android_app_inventory_doctor(context: RunContext) -> dict[str, Any]:
         del context
         return android_app_inventory_doctor_impl()
-
 
 
 def register_android_app_inventory_list(agent: Any) -> None:
@@ -44,7 +42,6 @@ def register_android_app_inventory_list(agent: Any) -> None:
         )
 
 
-
 def register_android_app_profile(agent: Any) -> None:
     @agent.tool
     async def android_app_profile(
@@ -56,14 +53,12 @@ def register_android_app_profile(agent: Any) -> None:
         return android_app_profile_impl(package_name=package_name, user=user)
 
 
-
 def register_tools_callback() -> list[dict[str, Any]]:
     return [
         {"name": _DOCTOR, "register_func": register_android_app_inventory_doctor},
         {"name": _LIST, "register_func": register_android_app_inventory_list},
         {"name": _PROFILE, "register_func": register_android_app_profile},
     ]
-
 
 
 def _advertise_tools_to_agent(agent_name: str | None = None) -> list[str]:

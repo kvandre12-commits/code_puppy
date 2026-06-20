@@ -10,23 +10,18 @@ from ..android_utility_kit.tooling import android_share_text
 OUTPUT_DIR = Path("outputs")
 
 
-
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
-
 
 
 def _bundle_candidates() -> list[Path]:
     if not OUTPUT_DIR.exists():
         return []
     candidates = [
-        path
-        for path in OUTPUT_DIR.glob("*support_bundle*.json")
-        if path.is_file()
+        path for path in OUTPUT_DIR.glob("*support_bundle*.json") if path.is_file()
     ]
     candidates.sort(key=lambda p: p.stat().st_mtime, reverse=True)
     return candidates
-
 
 
 def _resolve_bundle_path(bundle_path: str = "") -> Path:
@@ -41,7 +36,6 @@ def _resolve_bundle_path(bundle_path: str = "") -> Path:
     return candidates[0]
 
 
-
 def _load_bundle(bundle_path: str = "") -> tuple[Path, dict[str, Any]]:
     path = _resolve_bundle_path(bundle_path)
     data = json.loads(path.read_text(encoding="utf-8"))
@@ -50,10 +44,8 @@ def _load_bundle(bundle_path: str = "") -> tuple[Path, dict[str, Any]]:
     return path, data
 
 
-
 def _section_present(bundle: dict[str, Any], key: str) -> bool:
     return (bundle.get("sections") or {}).get(key) is not None
-
 
 
 def _extract_setup_summary(bundle: dict[str, Any]) -> dict[str, Any]:
@@ -61,11 +53,9 @@ def _extract_setup_summary(bundle: dict[str, Any]) -> dict[str, Any]:
     return (setup.get("summary") or {}) if isinstance(setup, dict) else {}
 
 
-
 def _extract_workflow_summary(bundle: dict[str, Any]) -> dict[str, Any]:
     workflow = ((bundle.get("sections") or {}).get("workflow") or {}).get("value") or {}
     return (workflow.get("summary") or {}) if isinstance(workflow, dict) else {}
-
 
 
 def _derive_health_notes(bundle: dict[str, Any]) -> list[str]:
@@ -80,13 +70,19 @@ def _derive_health_notes(bundle: dict[str, Any]) -> list[str]:
         notes.append(f"ADB was connected with {connected} device(s) during collection.")
 
     if setup.get("notification_command_installed") is False:
-        notes.append("Direct Termux notification posting is not installed yet; fallback behavior may be in use.")
+        notes.append(
+            "Direct Termux notification posting is not installed yet; fallback behavior may be in use."
+        )
 
     if workflow.get("brave_installed"):
-        notes.append("Brave is installed and available for browser-oriented DroidPuppy flows.")
+        notes.append(
+            "Brave is installed and available for browser-oriented DroidPuppy flows."
+        )
 
     if _section_present(bundle, "screenshot"):
-        notes.append("A screenshot artifact was captured as part of the support bundle.")
+        notes.append(
+            "A screenshot artifact was captured as part of the support bundle."
+        )
     else:
         notes.append("No screenshot was included in this bundle.")
 
@@ -103,18 +99,20 @@ def _derive_health_notes(bundle: dict[str, Any]) -> list[str]:
     return notes
 
 
-
 def _issue_title(bundle: dict[str, Any], path: Path) -> str:
     connected = int(bundle.get("connected_adb_devices") or 0)
     return f"Support bundle review: {path.stem} (adb_devices={connected})"
 
 
-
-def _render_share_message(path: Path, bundle: dict[str, Any], recipient_hint: str = "") -> str:
+def _render_share_message(
+    path: Path, bundle: dict[str, Any], recipient_hint: str = ""
+) -> str:
     setup = _extract_setup_summary(bundle)
     workflow = _extract_workflow_summary(bundle)
     included = [
-        key for key, value in (bundle.get("sections") or {}).items() if value is not None
+        key
+        for key, value in (bundle.get("sections") or {}).items()
+        if value is not None
     ]
     lines = [
         "DroidPuppy support bundle ready.",
@@ -135,14 +133,17 @@ def _render_share_message(path: Path, bundle: dict[str, Any], recipient_hint: st
     lines.append("Notes:")
     for note in _derive_health_notes(bundle):
         lines.append(f"- {note}")
-    lines.append("Next step: review the bundle JSON and decide whether a fresh reconnect + richer capture is needed.")
+    lines.append(
+        "Next step: review the bundle JSON and decide whether a fresh reconnect + richer capture is needed."
+    )
     return "\n".join(lines)
-
 
 
 def _render_issue_body(path: Path, bundle: dict[str, Any]) -> str:
     included = [
-        key for key, value in (bundle.get("sections") or {}).items() if value is not None
+        key
+        for key, value in (bundle.get("sections") or {}).items()
+        if value is not None
     ]
     notes = _derive_health_notes(bundle)
     lines = [
@@ -160,20 +161,23 @@ def _render_issue_body(path: Path, bundle: dict[str, Any]) -> str:
         lines.append(f"- `{name}`")
     if not included:
         lines.append("- none")
-    lines.extend([
-        "",
-        "## Notes",
-    ])
+    lines.extend(
+        [
+            "",
+            "## Notes",
+        ]
+    )
     for note in notes:
         lines.append(f"- {note}")
-    lines.extend([
-        "",
-        "## Requested Review",
-        "- Confirm whether the current bundle is enough to diagnose the issue.",
-        "- If not, advise whether we should reconnect ADB and re-run with screenshot/logcat/dumpsys enabled.",
-    ])
+    lines.extend(
+        [
+            "",
+            "## Requested Review",
+            "- Confirm whether the current bundle is enough to diagnose the issue.",
+            "- If not, advise whether we should reconnect ADB and re-run with screenshot/logcat/dumpsys enabled.",
+        ]
+    )
     return "\n".join(lines)
-
 
 
 def android_support_bundle_list(max_results: int = 10) -> dict[str, Any]:
@@ -192,11 +196,12 @@ def android_support_bundle_list(max_results: int = 10) -> dict[str, Any]:
     }
 
 
-
 def android_support_bundle_summarize(bundle_path: str = "") -> dict[str, Any]:
     path, bundle = _load_bundle(bundle_path)
     included = [
-        key for key, value in (bundle.get("sections") or {}).items() if value is not None
+        key
+        for key, value in (bundle.get("sections") or {}).items()
+        if value is not None
     ]
     return {
         "success": True,
@@ -207,7 +212,6 @@ def android_support_bundle_summarize(bundle_path: str = "") -> dict[str, Any]:
         "included_sections": included,
         "notes": _derive_health_notes(bundle),
     }
-
 
 
 def android_support_issue_draft(
@@ -228,7 +232,6 @@ def android_support_issue_draft(
         "draft_path": str(out_path),
         "created_at": _now_iso(),
     }
-
 
 
 def android_support_share_wizard(

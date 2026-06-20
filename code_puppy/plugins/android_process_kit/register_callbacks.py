@@ -19,13 +19,11 @@ _LIST = "android_process_list"
 _TOP = "android_top_snapshot"
 
 
-
 def register_android_process_doctor(agent: Any) -> None:
     @agent.tool
     async def android_process_doctor(context: RunContext) -> dict[str, Any]:
         del context
         return android_process_doctor_impl()
-
 
 
 def register_android_process_list(agent: Any) -> None:
@@ -39,7 +37,6 @@ def register_android_process_list(agent: Any) -> None:
         return android_process_list_impl(query=query, max_results=max_results)
 
 
-
 def register_android_top_snapshot(agent: Any) -> None:
     @agent.tool
     async def android_top_snapshot(
@@ -51,14 +48,12 @@ def register_android_top_snapshot(agent: Any) -> None:
         return android_top_snapshot_impl(query=query, max_lines=max_lines)
 
 
-
 def register_tools_callback() -> list[dict[str, Any]]:
     return [
         {"name": _DOCTOR, "register_func": register_android_process_doctor},
         {"name": _LIST, "register_func": register_android_process_list},
         {"name": _TOP, "register_func": register_android_top_snapshot},
     ]
-
 
 
 def _advertise_tools_to_agent(agent_name: str | None = None) -> list[str]:

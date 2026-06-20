@@ -8,7 +8,6 @@ from typing import Any
 DISPATCH_MODES = {"start", "broadcast"}
 
 
-
 def _run_command(args: list[str], timeout: int = 20) -> dict[str, Any]:
     try:
         completed = subprocess.run(
@@ -45,10 +44,8 @@ def _run_command(args: list[str], timeout: int = 20) -> dict[str, Any]:
         }
 
 
-
 def _command_path(name: str) -> str | None:
     return shutil.which(name)
-
 
 
 def _normalize_list(values: list[str] | None) -> list[str]:
@@ -64,7 +61,6 @@ def _normalize_list(values: list[str] | None) -> list[str]:
     return cleaned
 
 
-
 def _intent_base_command(dispatch_mode: str) -> list[str]:
     mode = (dispatch_mode or "start").strip().lower()
     if mode not in DISPATCH_MODES:
@@ -76,8 +72,9 @@ def _intent_base_command(dispatch_mode: str) -> list[str]:
     return ["am", "broadcast"]
 
 
-
-def _append_component(command: list[str], package_name: str, activity_name: str) -> None:
+def _append_component(
+    command: list[str], package_name: str, activity_name: str
+) -> None:
     pkg = (package_name or "").strip()
     activity = (activity_name or "").strip()
     if pkg and activity:
@@ -90,7 +87,6 @@ def _append_component(command: list[str], package_name: str, activity_name: str)
         command.extend(["-n", component])
     elif pkg:
         command.extend(["-p", pkg])
-
 
 
 def _append_extras(
@@ -111,7 +107,6 @@ def _append_extras(
         command.extend(["--el", str(key), str(int(value))])
     for key, value in (float_extras or {}).items():
         command.extend(["--ef", str(key), str(float(value))])
-
 
 
 def _build_intent_command(
@@ -165,14 +160,19 @@ def _build_intent_command(
     return command
 
 
-
 def android_intent_doctor() -> dict[str, Any]:
     am = _command_path("am")
     cmd = _command_path("cmd")
     pm = _command_path("pm")
     getprop = _command_path("getprop")
-    platform_release = _run_command(["getprop", "ro.build.version.release"], timeout=10) if getprop else None
-    platform_model = _run_command(["getprop", "ro.product.model"], timeout=10) if getprop else None
+    platform_release = (
+        _run_command(["getprop", "ro.build.version.release"], timeout=10)
+        if getprop
+        else None
+    )
+    platform_model = (
+        _run_command(["getprop", "ro.product.model"], timeout=10) if getprop else None
+    )
     return {
         "success": True,
         "commands": {
@@ -192,7 +192,6 @@ def android_intent_doctor() -> dict[str, Any]:
             "Use explicit package/activity targeting when you need predictable app behavior.",
         ],
     }
-
 
 
 def android_intent_build(
@@ -249,7 +248,6 @@ def android_intent_build(
     }
 
 
-
 def android_intent_send(
     action: str = "",
     data_uri: str = "",
@@ -301,7 +299,6 @@ def android_intent_send(
         "intent": built["intent"],
         "launcher_result": result,
     }
-
 
 
 def android_intent_examples() -> dict[str, Any]:

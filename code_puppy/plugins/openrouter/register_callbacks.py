@@ -61,7 +61,9 @@ def _slugify_alias(alias: str) -> str:
     return cleaned.strip("-")
 
 
-def _model_entry(model_id: str, context_length: int, description: str) -> dict[str, Any]:
+def _model_entry(
+    model_id: str, context_length: int, description: str
+) -> dict[str, Any]:
     return {
         "type": "openrouter",
         "provider": "openrouter",
@@ -152,7 +154,8 @@ def _load_openrouter_models_config() -> dict[str, Any]:
             "models": cycle_members,
             "rotate_every": max(1, rotate_every),
             "context_length": max(
-                int(models[name].get("context_length", 128_000)) for name in cycle_members
+                int(models[name].get("context_length", 128_000))
+                for name in cycle_members
             ),
             "description": "Round-robin cycle across configured OpenRouter model aliases using one OPENROUTER_API_KEY.",
         }
@@ -191,7 +194,9 @@ def _openrouter_status() -> None:
 
 
 def _custom_help() -> list[tuple[str, str]]:
-    return [("openrouter-status", "Show OpenRouter key status and configured model aliases")]
+    return [
+        ("openrouter-status", "Show OpenRouter key status and configured model aliases")
+    ]
 
 
 def _handle_custom_command(command: str, name: str) -> bool | str | None:

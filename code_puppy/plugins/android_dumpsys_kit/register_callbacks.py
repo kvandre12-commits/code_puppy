@@ -19,13 +19,11 @@ _SERVICE = "android_dumpsys_service"
 _SNAPSHOT = "android_dumpsys_snapshot"
 
 
-
 def register_android_dumpsys_doctor(agent: Any) -> None:
     @agent.tool
     async def android_dumpsys_doctor(context: RunContext) -> dict[str, Any]:
         del context
         return android_dumpsys_doctor_impl()
-
 
 
 def register_android_dumpsys_service(agent: Any) -> None:
@@ -44,7 +42,6 @@ def register_android_dumpsys_service(agent: Any) -> None:
         )
 
 
-
 def register_android_dumpsys_snapshot(agent: Any) -> None:
     @agent.tool
     async def android_dumpsys_snapshot(
@@ -52,8 +49,9 @@ def register_android_dumpsys_snapshot(agent: Any) -> None:
         max_chars_per_service: int = 4000,
     ) -> dict[str, Any]:
         del context
-        return android_dumpsys_snapshot_impl(max_chars_per_service=max_chars_per_service)
-
+        return android_dumpsys_snapshot_impl(
+            max_chars_per_service=max_chars_per_service
+        )
 
 
 def register_tools_callback() -> list[dict[str, Any]]:
@@ -62,7 +60,6 @@ def register_tools_callback() -> list[dict[str, Any]]:
         {"name": _SERVICE, "register_func": register_android_dumpsys_service},
         {"name": _SNAPSHOT, "register_func": register_android_dumpsys_snapshot},
     ]
-
 
 
 def _advertise_tools_to_agent(agent_name: str | None = None) -> list[str]:

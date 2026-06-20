@@ -42,10 +42,8 @@ def _run_command(args: list[str], timeout: int = 20) -> dict[str, Any]:
         }
 
 
-
 def _adb() -> str | None:
     return shutil.which("adb")
-
 
 
 def _socket_probe(host: str, port: int, timeout: float = 3.0) -> dict[str, Any]:
@@ -58,7 +56,6 @@ def _socket_probe(host: str, port: int, timeout: float = 3.0) -> dict[str, Any]:
         return {"open": False, "host": host, "port": int(port), "error": str(exc)}
     finally:
         sock.close()
-
 
 
 def android_reconnect_doctor(host: str = "", connect_port: int = 0) -> dict[str, Any]:
@@ -78,7 +75,6 @@ def android_reconnect_doctor(host: str = "", connect_port: int = 0) -> dict[str,
             "Keep the phone awake, unlocked, and on the same Wi-Fi while reconnecting.",
         ],
     }
-
 
 
 def android_reconnect_plan(
@@ -111,7 +107,6 @@ def android_reconnect_plan(
     }
 
 
-
 def android_reconnect_quick(
     host: str,
     connect_port: int,
@@ -140,7 +135,6 @@ def android_reconnect_quick(
         "connect_result": connect_result,
         "adb_devices": devices,
     }
-
 
 
 def android_reconnect_full(

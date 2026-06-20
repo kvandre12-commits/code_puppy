@@ -19,13 +19,11 @@ _NEXT = "android_setup_next_steps"
 _TOUR = "android_first_run_tour"
 
 
-
 def register_android_setup_doctor(agent: Any) -> None:
     @agent.tool
     async def android_setup_doctor(context: RunContext) -> dict[str, Any]:
         del context
         return android_setup_doctor_impl()
-
 
 
 def register_android_setup_next_steps(agent: Any) -> None:
@@ -38,7 +36,6 @@ def register_android_setup_next_steps(agent: Any) -> None:
         return android_setup_next_steps_impl(goal=goal)
 
 
-
 def register_android_first_run_tour(agent: Any) -> None:
     @agent.tool
     async def android_first_run_tour(
@@ -49,14 +46,12 @@ def register_android_first_run_tour(agent: Any) -> None:
         return android_first_run_tour_impl(topic=topic)
 
 
-
 def register_tools_callback() -> list[dict[str, Any]]:
     return [
         {"name": _DOCTOR, "register_func": register_android_setup_doctor},
         {"name": _NEXT, "register_func": register_android_setup_next_steps},
         {"name": _TOUR, "register_func": register_android_first_run_tour},
     ]
-
 
 
 def _advertise_tools_to_agent(agent_name: str | None = None) -> list[str]:

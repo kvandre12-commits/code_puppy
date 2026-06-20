@@ -14,7 +14,6 @@ _STATUS_TOOL = "android_brave_status"
 _OPEN_TOOL = "android_browser_open_url"
 
 
-
 def register_android_brave_status(agent: Any) -> None:
     @agent.tool
     async def android_brave_status(context: RunContext) -> dict[str, Any]:
@@ -25,7 +24,6 @@ def register_android_brave_status(agent: Any) -> None:
         """
         del context
         return get_android_browser_status()
-
 
 
 def register_android_browser_open_url(agent: Any) -> None:
@@ -49,13 +47,11 @@ def register_android_browser_open_url(agent: Any) -> None:
         return open_android_url(url=url, browser=browser, dry_run=dry_run)
 
 
-
 def register_tools_callback() -> list[dict[str, Any]]:
     return [
         {"name": _STATUS_TOOL, "register_func": register_android_brave_status},
         {"name": _OPEN_TOOL, "register_func": register_android_browser_open_url},
     ]
-
 
 
 def _advertise_tools_to_agent(agent_name: str | None = None) -> list[str]:

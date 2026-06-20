@@ -41,7 +41,6 @@ def _run_command(args: list[str], timeout: int = 30) -> dict[str, Any]:
         }
 
 
-
 def _adb() -> str:
     adb = shutil.which("adb")
     if not adb:
@@ -49,12 +48,15 @@ def _adb() -> str:
     return adb
 
 
-
 def android_process_doctor() -> dict[str, Any]:
     adb = shutil.which("adb")
     devices = _run_command([adb, "devices", "-l"], timeout=20) if adb else None
     ps_probe = _run_command([adb, "shell", "ps", "-A"], timeout=20) if adb else None
-    top_probe = _run_command([adb, "shell", "top", "-n", "1", "-b"], timeout=25) if adb else None
+    top_probe = (
+        _run_command([adb, "shell", "top", "-n", "1", "-b"], timeout=25)
+        if adb
+        else None
+    )
     return {
         "success": True,
         "commands": {"adb": adb},
@@ -66,7 +68,6 @@ def android_process_doctor() -> dict[str, Any]:
             "Use android_top_snapshot for a lightweight live process view.",
         ],
     }
-
 
 
 def android_process_list(query: str = "", max_results: int = 100) -> dict[str, Any]:
@@ -84,7 +85,6 @@ def android_process_list(query: str = "", max_results: int = 100) -> dict[str, A
         "truncated": len(rows) > max_results,
         "stderr": result.get("stderr", ""),
     }
-
 
 
 def android_top_snapshot(query: str = "", max_lines: int = 80) -> dict[str, Any]:

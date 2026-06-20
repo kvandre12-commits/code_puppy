@@ -19,14 +19,12 @@ _WIRELESS_TOOL = "android_adb_wireless_helper"
 _PROBE_TOOL = "android_cdp_probe"
 
 
-
 def register_android_cdp_doctor(agent: Any) -> None:
     @agent.tool
     async def android_cdp_doctor(context: RunContext) -> dict[str, Any]:
         """Inspect Android/Termux ADB/CDP readiness for on-device browser control."""
         del context
         return android_cdp_doctor_impl()
-
 
 
 def register_android_adb_wireless_helper(agent: Any) -> None:
@@ -56,7 +54,6 @@ def register_android_adb_wireless_helper(agent: Any) -> None:
         )
 
 
-
 def register_android_cdp_probe(agent: Any) -> None:
     @agent.tool
     async def android_cdp_probe(
@@ -78,7 +75,6 @@ def register_android_cdp_probe(agent: Any) -> None:
         )
 
 
-
 def register_tools_callback() -> list[dict[str, Any]]:
     return [
         {"name": _DOCTOR_TOOL, "register_func": register_android_cdp_doctor},
@@ -88,7 +84,6 @@ def register_tools_callback() -> list[dict[str, Any]]:
         },
         {"name": _PROBE_TOOL, "register_func": register_android_cdp_probe},
     ]
-
 
 
 def _advertise_tools_to_agent(agent_name: str | None = None) -> list[str]:

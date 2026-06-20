@@ -19,13 +19,11 @@ _TAP_MATCH = "android_ui_tap_match"
 _TEXT_MATCH = "android_ui_text_into_match"
 
 
-
 def register_android_ui_action_doctor(agent: Any) -> None:
     @agent.tool
     async def android_ui_action_doctor(context: RunContext) -> dict[str, Any]:
         del context
         return android_ui_action_doctor_impl()
-
 
 
 def register_android_ui_tap_match(agent: Any) -> None:
@@ -48,7 +46,6 @@ def register_android_ui_tap_match(agent: Any) -> None:
             match_index=match_index,
             dry_run=dry_run,
         )
-
 
 
 def register_android_ui_text_into_match(agent: Any) -> None:
@@ -77,14 +74,12 @@ def register_android_ui_text_into_match(agent: Any) -> None:
         )
 
 
-
 def register_tools_callback() -> list[dict[str, Any]]:
     return [
         {"name": _DOCTOR, "register_func": register_android_ui_action_doctor},
         {"name": _TAP_MATCH, "register_func": register_android_ui_tap_match},
         {"name": _TEXT_MATCH, "register_func": register_android_ui_text_into_match},
     ]
-
 
 
 def _advertise_tools_to_agent(agent_name: str | None = None) -> list[str]:

@@ -39,9 +39,9 @@ def _run_command(args: list[str], timeout: int = 60) -> dict[str, Any]:
             "args": args,
             "exit_code": None,
             "stdout_bytes": exc.stdout or b"",
-            "stderr_text": (exc.stderr or b"").decode("utf-8", errors="replace") or f"command timed out after {timeout}s",
+            "stderr_text": (exc.stderr or b"").decode("utf-8", errors="replace")
+            or f"command timed out after {timeout}s",
         }
-
 
 
 def _adb() -> str:
@@ -51,10 +51,8 @@ def _adb() -> str:
     return adb
 
 
-
 def _timestamp() -> str:
     return datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
-
 
 
 def android_screen_capture_doctor() -> dict[str, Any]:
@@ -66,7 +64,11 @@ def android_screen_capture_doctor() -> dict[str, Any]:
         "adb_devices": {
             "exit_code": devices.get("exit_code") if devices else None,
             "stderr": devices.get("stderr_text") if devices else None,
-            "stdout": (devices.get("stdout_bytes") or b"").decode("utf-8", errors="replace") if devices else None,
+            "stdout": (devices.get("stdout_bytes") or b"").decode(
+                "utf-8", errors="replace"
+            )
+            if devices
+            else None,
         },
         "guidance": [
             "Use android_capture_screenshot for fast still captures.",
@@ -74,7 +76,6 @@ def android_screen_capture_doctor() -> dict[str, Any]:
             "Keep the phone awake and unlocked during capture operations.",
         ],
     }
-
 
 
 def android_capture_screenshot(
@@ -118,7 +119,6 @@ def android_capture_screenshot(
     }
 
 
-
 def android_record_screen(
     seconds: int = 10,
     artifact_name: str = "android_screen_recording",
@@ -128,7 +128,14 @@ def android_record_screen(
     duration = max(1, min(int(seconds), 180))
     remote_path = f"/sdcard/{artifact_name}_{_timestamp()}.mp4"
     local_path = OUTPUT_DIR / Path(remote_path).name
-    record_command = [adb, "shell", "screenrecord", "--time-limit", str(duration), remote_path]
+    record_command = [
+        adb,
+        "shell",
+        "screenrecord",
+        "--time-limit",
+        str(duration),
+        remote_path,
+    ]
     pull_command = [adb, "pull", remote_path, str(local_path)]
     cleanup_command = [adb, "shell", "rm", "-f", remote_path]
     if dry_run:

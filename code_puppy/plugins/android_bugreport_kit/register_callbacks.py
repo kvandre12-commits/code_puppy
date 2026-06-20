@@ -17,13 +17,11 @@ _DOCTOR = "android_bugreport_doctor"
 _COLLECT = "android_bugreport_collect"
 
 
-
 def register_android_bugreport_doctor(agent: Any) -> None:
     @agent.tool
     async def android_bugreport_doctor(context: RunContext) -> dict[str, Any]:
         del context
         return android_bugreport_doctor_impl()
-
 
 
 def register_android_bugreport_collect(agent: Any) -> None:
@@ -42,13 +40,11 @@ def register_android_bugreport_collect(agent: Any) -> None:
         )
 
 
-
 def register_tools_callback() -> list[dict[str, Any]]:
     return [
         {"name": _DOCTOR, "register_func": register_android_bugreport_doctor},
         {"name": _COLLECT, "register_func": register_android_bugreport_collect},
     ]
-
 
 
 def _advertise_tools_to_agent(agent_name: str | None = None) -> list[str]:

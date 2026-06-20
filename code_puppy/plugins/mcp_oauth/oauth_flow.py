@@ -42,7 +42,9 @@ class _CallbackHandler(BaseHTTPRequestHandler):
         if parsed.path != self.server.callback_path:
             self._write_response(
                 404,
-                oauth_failure_html("MCP OAuth", "Wrong callback path. OAuth gremlins win."),
+                oauth_failure_html(
+                    "MCP OAuth", "Wrong callback path. OAuth gremlins win."
+                ),
             )
             return
 
@@ -112,16 +114,13 @@ class BrowserOAuthSession:
         return self.settings.callback_port_range[0]
 
     def _build_redirect_uri(self, port: int) -> str:
-        return (
-            f"{self.settings.redirect_host}:{port}"
-            f"{self.settings.callback_path}"
-        )
+        return f"{self.settings.redirect_host}:{port}{self.settings.callback_path}"
 
     async def redirect_handler(self, authorization_url: str) -> None:
+        emit_info(f"OAuth needed for MCP server '{self.settings.server_name}'.")
         emit_info(
-            f"OAuth needed for MCP server '{self.settings.server_name}'."
+            f"Open this URL if your browser does not launch automatically:\n{authorization_url}"
         )
-        emit_info(f"Open this URL if your browser does not launch automatically:\n{authorization_url}")
         try:
             import webbrowser
 
@@ -190,9 +189,7 @@ class BrowserOAuthSession:
         emit_info(
             "If the browser lands on a broken localhost page, that's fine — copy the full callback URL."
         )
-        prompt = (
-            "Paste the full callback URL, or '<code> <state>' if you extracted them manually: "
-        )
+        prompt = "Paste the full callback URL, or '<code> <state>' if you extracted them manually: "
         raw = await asyncio.to_thread(input, prompt)
         code, state = parse_callback_input(raw)
         if not code:
@@ -287,8 +284,12 @@ async def ensure_access_token(
         server_url=settings.server_url,
         client_metadata=client_metadata,
         storage=storage,
-        redirect_handler=browser_session.redirect_handler if allow_interactive else None,
-        callback_handler=browser_session.callback_handler if allow_interactive else None,
+        redirect_handler=browser_session.redirect_handler
+        if allow_interactive
+        else None,
+        callback_handler=browser_session.callback_handler
+        if allow_interactive
+        else None,
         timeout=float(settings.callback_timeout),
         client_metadata_url=settings.client_metadata_url,
     )

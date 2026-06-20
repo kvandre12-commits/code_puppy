@@ -21,7 +21,6 @@ _NAV_TOOL = "android_cdp_navigate"
 _EVAL_TOOL = "android_cdp_eval_js"
 
 
-
 def register_android_cdp_list_targets(agent: Any) -> None:
     @agent.tool
     async def android_cdp_list_targets(
@@ -31,7 +30,6 @@ def register_android_cdp_list_targets(agent: Any) -> None:
         """List live CDP targets/tabs reachable through the Android CDP bridge."""
         del context
         return android_cdp_list_targets_impl(local_port=local_port)
-
 
 
 def register_android_cdp_get_page_info(agent: Any) -> None:
@@ -53,7 +51,6 @@ def register_android_cdp_get_page_info(agent: Any) -> None:
         )
 
 
-
 def register_android_cdp_navigate(agent: Any) -> None:
     @agent.tool
     async def android_cdp_navigate(
@@ -73,7 +70,6 @@ def register_android_cdp_navigate(agent: Any) -> None:
             title_contains=title_contains,
             local_port=local_port,
         )
-
 
 
 def register_android_cdp_eval_js(agent: Any) -> None:
@@ -99,7 +95,6 @@ def register_android_cdp_eval_js(agent: Any) -> None:
         )
 
 
-
 def register_tools_callback() -> list[dict[str, Any]]:
     return [
         {"name": _LIST_TOOL, "register_func": register_android_cdp_list_targets},
@@ -107,7 +102,6 @@ def register_tools_callback() -> list[dict[str, Any]]:
         {"name": _NAV_TOOL, "register_func": register_android_cdp_navigate},
         {"name": _EVAL_TOOL, "register_func": register_android_cdp_eval_js},
     ]
-
 
 
 def _advertise_tools_to_agent(agent_name: str | None = None) -> list[str]:

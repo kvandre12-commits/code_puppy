@@ -26,7 +26,6 @@ def android_ui_action_doctor() -> dict[str, Any]:
     }
 
 
-
 def _pick_match(
     query: str = "",
     resource_id: str = "",
@@ -51,7 +50,6 @@ def _pick_match(
     return matches[match_index]
 
 
-
 def android_ui_tap_match(
     query: str = "",
     resource_id: str = "",
@@ -74,7 +72,6 @@ def android_ui_tap_match(
         "match": match,
         "tap": tap_result,
     }
-
 
 
 def android_ui_text_into_match(
@@ -102,7 +99,8 @@ def android_ui_text_into_match(
     if submit:
         submit_result = android_input_keyevent("KEYCODE_ENTER", dry_run=dry_run)
     return {
-        "success": tap_result.get("success", False) and text_result.get("success", False),
+        "success": tap_result.get("success", False)
+        and text_result.get("success", False),
         "dry_run": dry_run,
         "match": match,
         "tap": tap_result,

@@ -58,10 +58,8 @@ def _run_command(args: list[str], timeout: int = 20) -> dict[str, Any]:
         }
 
 
-
 def _adb_path() -> str | None:
     return shutil.which("adb")
-
 
 
 def _http_get_json(url: str, timeout: int = DEFAULT_HTTP_TIMEOUT) -> dict[str, Any]:
@@ -96,7 +94,6 @@ def _http_get_json(url: str, timeout: int = DEFAULT_HTTP_TIMEOUT) -> dict[str, A
         }
 
 
-
 def _command_help() -> dict[str, str]:
     return {
         "install_adb_termux": "pkg install android-tools",
@@ -106,7 +103,6 @@ def _command_help() -> dict[str, str]:
             f"adb forward tcp:{DEFAULT_CDP_PORT} localabstract:chrome_devtools_remote"
         ),
     }
-
 
 
 def android_cdp_doctor() -> dict[str, Any]:
@@ -146,7 +142,6 @@ def android_cdp_doctor() -> dict[str, Any]:
         "commands": _command_help(),
         "guidance": guidance,
     }
-
 
 
 def android_adb_wireless_helper(
@@ -211,7 +206,9 @@ def android_adb_wireless_helper(
         result = _run_command(command)
         results.append(result)
 
-    success = all(result.get("exit_code") == 0 for result in results) if results else False
+    success = (
+        all(result.get("exit_code") == 0 for result in results) if results else False
+    )
     return {
         "success": success,
         "adb_installed": True,
@@ -220,7 +217,6 @@ def android_adb_wireless_helper(
         "results": results,
         "warnings": warnings,
     }
-
 
 
 def android_cdp_probe(
@@ -244,13 +240,13 @@ def android_cdp_probe(
         forward_result = _run_command(
             [adb, "forward", f"tcp:{local_port}", f"localabstract:{socket_name}"]
         )
-        version_result = _http_get_json(
-            f"http://127.0.0.1:{local_port}/json/version"
-        )
+        version_result = _http_get_json(f"http://127.0.0.1:{local_port}/json/version")
         list_result = _http_get_json(f"http://127.0.0.1:{local_port}/json/list")
         remove_after = None
         if cleanup_forward:
-            remove_after = _run_command([adb, "forward", "--remove", f"tcp:{local_port}"])
+            remove_after = _run_command(
+                [adb, "forward", "--remove", f"tcp:{local_port}"]
+            )
 
         success = (
             forward_result.get("exit_code") == 0
@@ -272,9 +268,9 @@ def android_cdp_probe(
                 "matched_socket": socket_name,
                 "local_port": local_port,
                 "attempts": attempts,
-                "websocket_debugger_url": (
-                    version_result.get("json", {}) or {}
-                ).get("webSocketDebuggerUrl"),
+                "websocket_debugger_url": (version_result.get("json", {}) or {}).get(
+                    "webSocketDebuggerUrl"
+                ),
                 "browser": (version_result.get("json", {}) or {}).get("Browser"),
                 "protocol_version": (version_result.get("json", {}) or {}).get(
                     "Protocol-Version"

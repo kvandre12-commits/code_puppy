@@ -32,7 +32,6 @@ def _resolve_target(
     return target, ws_url
 
 
-
 def _eval_json(
     expression: str,
     *,
@@ -65,7 +64,6 @@ def _eval_json(
         except Exception:
             pass
     return target, value
-
 
 
 def android_browser_read_page(
@@ -111,7 +109,6 @@ JSON.stringify((() => {{
         },
         "page": payload,
     }
-
 
 
 def android_browser_get_html(
@@ -163,7 +160,6 @@ JSON.stringify((() => {{
     }
 
 
-
 def android_browser_list_links(
     target_id: str = "",
     url_contains: str = "",
@@ -204,7 +200,6 @@ JSON.stringify((() => {{
         },
         "links": payload,
     }
-
 
 
 def android_browser_get_text_by_selector(

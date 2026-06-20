@@ -128,10 +128,17 @@ def android_edge_test_element(
     try:
         parsed = json.loads(raw) if isinstance(raw, str) else raw
     except json.JSONDecodeError:
-        return {"success": False, "error": "could not parse inspection result", "raw": raw}
+        return {
+            "success": False,
+            "error": "could not parse inspection result",
+            "raw": raw,
+        }
 
     if parsed.get("selectorError"):
-        return {"success": False, "error": f"invalid selector: {parsed['selectorError']}"}
+        return {
+            "success": False,
+            "error": f"invalid selector: {parsed['selectorError']}",
+        }
 
     return {
         "success": True,

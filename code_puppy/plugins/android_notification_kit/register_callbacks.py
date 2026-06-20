@@ -21,13 +21,11 @@ _SETUP = "android_notification_setup_guide"
 _SEND = "android_notification_send"
 
 
-
 def register_android_notification_doctor(agent: Any) -> None:
     @agent.tool
     async def android_notification_doctor(context: RunContext) -> dict[str, Any]:
         del context
         return android_notification_doctor_impl()
-
 
 
 def register_android_open_notification_settings(agent: Any) -> None:
@@ -37,13 +35,11 @@ def register_android_open_notification_settings(agent: Any) -> None:
         return android_open_notification_settings_impl()
 
 
-
 def register_android_notification_setup_guide(agent: Any) -> None:
     @agent.tool
     async def android_notification_setup_guide(context: RunContext) -> dict[str, Any]:
         del context
         return android_notification_setup_guide_impl()
-
 
 
 def register_android_notification_send(agent: Any) -> None:
@@ -64,15 +60,16 @@ def register_android_notification_send(agent: Any) -> None:
         )
 
 
-
 def register_tools_callback() -> list[dict[str, Any]]:
     return [
         {"name": _DOCTOR, "register_func": register_android_notification_doctor},
-        {"name": _SETTINGS, "register_func": register_android_open_notification_settings},
+        {
+            "name": _SETTINGS,
+            "register_func": register_android_open_notification_settings,
+        },
         {"name": _SETUP, "register_func": register_android_notification_setup_guide},
         {"name": _SEND, "register_func": register_android_notification_send},
     ]
-
 
 
 def _advertise_tools_to_agent(agent_name: str | None = None) -> list[str]:

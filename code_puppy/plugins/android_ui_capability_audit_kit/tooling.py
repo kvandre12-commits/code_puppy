@@ -2,11 +2,13 @@ from __future__ import annotations
 
 from typing import Any
 
-from ..android_app_inventory_kit.tooling import android_app_inventory_doctor, android_app_profile
+from ..android_app_inventory_kit.tooling import (
+    android_app_inventory_doctor,
+    android_app_profile,
+)
 from ..android_input_kit.tooling import android_input_doctor
 from ..android_screen_capture_kit.tooling import android_screen_capture_doctor
 from ..android_ui_dump_kit.tooling import android_ui_dump_doctor
-
 
 
 def _device_count_from_block(block: dict[str, Any] | None) -> int:
@@ -22,18 +24,21 @@ def _device_count_from_block(block: dict[str, Any] | None) -> int:
     return count
 
 
-
 def _global_readiness() -> dict[str, Any]:
     inventory = android_app_inventory_doctor()
     ui_dump = android_ui_dump_doctor()
     input_doctor = android_input_doctor()
     screen = android_screen_capture_doctor()
 
-    adb_devices = (ui_dump.get("adb_devices") or {}) if isinstance(ui_dump, dict) else {}
+    adb_devices = (
+        (ui_dump.get("adb_devices") or {}) if isinstance(ui_dump, dict) else {}
+    )
     connected = _device_count_from_block(adb_devices)
     ui_probe = ui_dump.get("uiautomator_probe") or {}
     input_probe = input_doctor.get("input_probe") or {}
-    screen_devices = (screen.get("adb_devices") or {}) if isinstance(screen, dict) else {}
+    screen_devices = (
+        (screen.get("adb_devices") or {}) if isinstance(screen, dict) else {}
+    )
 
     return {
         "inventory": inventory,
@@ -44,14 +49,15 @@ def _global_readiness() -> dict[str, Any]:
             "adb_connected_devices": connected,
             "ui_dump_ready": bool(connected > 0 and ui_probe.get("exit_code") == 0),
             "input_ready": bool(connected > 0 and input_probe.get("exit_code") == 0),
-            "screen_capture_ready": bool(connected > 0 and screen_devices.get("exit_code") == 0),
+            "screen_capture_ready": bool(
+                connected > 0 and screen_devices.get("exit_code") == 0
+            ),
         },
     }
 
 
-
 def _interaction_mode(profile: dict[str, Any]) -> str:
-    launcher_components = ((profile.get("launcher") or {}).get("components") or [])
+    launcher_components = (profile.get("launcher") or {}).get("components") or []
     if not profile.get("installed"):
         return "missing"
     if any("ReactivateActivity" in component for component in launcher_components):
@@ -61,7 +67,6 @@ def _interaction_mode(profile: dict[str, Any]) -> str:
     if profile.get("launchable"):
         return "launch_then_ui_steer"
     return "unknown"
-
 
 
 def _ui_pattern(profile: dict[str, Any], global_state: dict[str, Any]) -> str:
@@ -80,7 +85,6 @@ def _ui_pattern(profile: dict[str, Any], global_state: dict[str, Any]) -> str:
     return "unknown"
 
 
-
 def _ui_score(profile: dict[str, Any], global_state: dict[str, Any]) -> int:
     summary = global_state.get("summary") or {}
     if not profile.get("installed"):
@@ -96,11 +100,10 @@ def _ui_score(profile: dict[str, Any], global_state: dict[str, Any]) -> int:
         score += 10
     if profile.get("url_view_capable") or profile.get("text_share_capable"):
         score += 5
-    launcher_components = ((profile.get("launcher") or {}).get("components") or [])
+    launcher_components = (profile.get("launcher") or {}).get("components") or []
     if any("ReactivateActivity" in component for component in launcher_components):
         score -= 35
     return max(0, min(100, score))
-
 
 
 def _band(score: int) -> str:
@@ -111,7 +114,6 @@ def _band(score: int) -> str:
     return "low"
 
 
-
 def _notes(profile: dict[str, Any], global_state: dict[str, Any]) -> list[str]:
     notes: list[str] = []
     summary = global_state.get("summary") or {}
@@ -120,20 +122,31 @@ def _notes(profile: dict[str, Any], global_state: dict[str, Any]) -> list[str]:
     if profile.get("launchable"):
         notes.append("App has a launchable entry point.")
     if profile.get("url_view_capable") or profile.get("text_share_capable"):
-        notes.append("Structured handoff exists, so UI steering may be a fallback rather than the first move.")
+        notes.append(
+            "Structured handoff exists, so UI steering may be a fallback rather than the first move."
+        )
     else:
-        notes.append("Little structured handoff surface was detected; screen driving may be necessary after launch.")
+        notes.append(
+            "Little structured handoff surface was detected; screen driving may be necessary after launch."
+        )
     if not summary.get("ui_dump_ready"):
-        notes.append("Live UI dump is not currently ready; reconnect ADB before promising screen-driven workflows.")
+        notes.append(
+            "Live UI dump is not currently ready; reconnect ADB before promising screen-driven workflows."
+        )
     if not summary.get("input_ready"):
-        notes.append("Live input automation is not currently ready; reconnect ADB before taps/swipes/text entry.")
+        notes.append(
+            "Live input automation is not currently ready; reconnect ADB before taps/swipes/text entry."
+        )
     if not summary.get("screen_capture_ready"):
-        notes.append("Live screen capture is not currently ready; visual debugging will be limited until ADB reconnects.")
-    launcher_components = ((profile.get("launcher") or {}).get("components") or [])
+        notes.append(
+            "Live screen capture is not currently ready; visual debugging will be limited until ADB reconnects."
+        )
+    launcher_components = (profile.get("launcher") or {}).get("components") or []
     if any("ReactivateActivity" in component for component in launcher_components):
-        notes.append("Launcher points to a reactivation/archive screen; stabilize the app before UI automation work.")
+        notes.append(
+            "Launcher points to a reactivation/archive screen; stabilize the app before UI automation work."
+        )
     return notes
-
 
 
 def android_ui_capability_audit_doctor() -> dict[str, Any]:
@@ -149,8 +162,9 @@ def android_ui_capability_audit_doctor() -> dict[str, Any]:
     }
 
 
-
-def android_ui_capability_audit_app(package_name: str, user: str = "0") -> dict[str, Any]:
+def android_ui_capability_audit_app(
+    package_name: str, user: str = "0"
+) -> dict[str, Any]:
     pkg = (package_name or "").strip()
     if not pkg:
         raise ValueError("package_name is required")
@@ -171,8 +185,9 @@ def android_ui_capability_audit_app(package_name: str, user: str = "0") -> dict[
     }
 
 
-
-def android_ui_capability_audit_stack(package_names: list[str], user: str = "0") -> dict[str, Any]:
+def android_ui_capability_audit_stack(
+    package_names: list[str], user: str = "0"
+) -> dict[str, Any]:
     cleaned: list[str] = []
     for package_name in package_names or []:
         text = str(package_name).strip()
@@ -200,7 +215,6 @@ def android_ui_capability_audit_stack(package_names: list[str], user: str = "0")
             "repair_before_ui means stabilize or reinstall the app before promising business workflows around it.",
         ],
     }
-
 
 
 def android_ui_capability_audit_examples() -> dict[str, Any]:

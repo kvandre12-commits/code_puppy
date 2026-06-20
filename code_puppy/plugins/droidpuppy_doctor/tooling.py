@@ -56,9 +56,19 @@ def _run_command(args: list[str], timeout: int = 15) -> dict[str, Any]:
             "stderr": completed.stderr.strip(),
         }
     except FileNotFoundError as exc:
-        return {"ok": False, "args": args, "exit_code": None, "error": f"command not found: {exc}"}
+        return {
+            "ok": False,
+            "args": args,
+            "exit_code": None,
+            "error": f"command not found: {exc}",
+        }
     except subprocess.TimeoutExpired:
-        return {"ok": False, "args": args, "exit_code": None, "error": f"timed out after {timeout}s"}
+        return {
+            "ok": False,
+            "args": args,
+            "exit_code": None,
+            "error": f"timed out after {timeout}s",
+        }
 
 
 def _getprop(name: str) -> str:
@@ -91,13 +101,17 @@ def _check_platform() -> list[dict[str, Any]]:
             PASS if android else FAIL,
             f"android={android} version={_getprop('ro.build.version.release') or 'unknown'} "
             f"model={_getprop('ro.product.model') or 'unknown'}",
-            "" if android else "Not running on Android; DroidPuppy tools will be no-ops here.",
+            ""
+            if android
+            else "Not running on Android; DroidPuppy tools will be no-ops here.",
         ),
         _check(
             "termux_environment",
             PASS if termux else WARN,
             f"termux={termux} prefix={os.environ.get('PREFIX', 'unset')}",
-            "" if termux else "Termux not detected; some launch paths assume a Termux PREFIX.",
+            ""
+            if termux
+            else "Termux not detected; some launch paths assume a Termux PREFIX.",
         ),
     ]
     return rows
@@ -111,7 +125,9 @@ def _check_commands() -> list[dict[str, Any]]:
             "core_android_commands",
             PASS if not missing_core else FAIL,
             f"required={CORE_COMMANDS} missing={missing_core or 'none'}",
-            "" if not missing_core else "Core layer (apps/settings/intents) won't work without am/pm/cmd.",
+            ""
+            if not missing_core
+            else "Core layer (apps/settings/intents) won't work without am/pm/cmd.",
         )
     )
 
@@ -121,7 +137,9 @@ def _check_commands() -> list[dict[str, Any]]:
             "adb",
             PASS if adb else WARN,
             f"path={adb or 'not found'}",
-            "" if adb else "Install with: pkg install android-tools (needed for CDP browser control).",
+            ""
+            if adb
+            else "Install with: pkg install android-tools (needed for CDP browser control).",
         )
     )
 
@@ -131,7 +149,9 @@ def _check_commands() -> list[dict[str, Any]]:
             "termux_helpers",
             PASS if not missing_nice else WARN,
             f"missing={missing_nice or 'none'}",
-            "" if not missing_nice else "Optional: install termux-api for richer share/clipboard flows.",
+            ""
+            if not missing_nice
+            else "Optional: install termux-api for richer share/clipboard flows.",
         )
     )
     return rows
@@ -169,7 +189,9 @@ def _check_browsers() -> list[dict[str, Any]]:
             "browsers",
             status,
             f"installed={list(found) or 'none of brave/chrome/firefox'}",
-            "" if found else "No known browser detected; install Brave or Chrome for browser tools.",
+            ""
+            if found
+            else "No known browser detected; install Brave or Chrome for browser tools.",
         )
     ]
 
@@ -211,7 +233,11 @@ def _inventory_plugins() -> dict[str, Any]:
     plugins_dir = Path(__file__).resolve().parent.parent
     plugins: list[dict[str, Any]] = []
     for entry in sorted(plugins_dir.iterdir()):
-        if not entry.is_dir() or entry.name.startswith("_") or entry.name.startswith("."):
+        if (
+            not entry.is_dir()
+            or entry.name.startswith("_")
+            or entry.name.startswith(".")
+        ):
             continue
         has_register = (entry / "register_callbacks.py").is_file()
         has_tooling = (entry / "tooling.py").is_file()
@@ -280,7 +306,11 @@ def droidpuppy_doctor(deep: bool = False, local_port: int = 9222) -> dict[str, A
         )
     else:
         checks.append(
-            _check("plugin_inventory", PASS, f"{inventory['plugin_count']} plugins look wired up")
+            _check(
+                "plugin_inventory",
+                PASS,
+                f"{inventory['plugin_count']} plugins look wired up",
+            )
         )
 
     summary = {

@@ -146,7 +146,10 @@ class _FakeManagedServer:
         self._pydantic_server = SimpleNamespace(is_running=self.running)
 
     def get_status(self):
-        return {"server_available": self.running, "state": "running" if self.running else "stopped"}
+        return {
+            "server_available": self.running,
+            "state": "running" if self.running else "stopped",
+        }
 
 
 class _FakeManager:
@@ -196,6 +199,7 @@ def test_pre_mcp_autostart_injects_runtime_bearer(monkeypatch):
         "code_puppy.plugins.mcp_oauth.register_callbacks.get_server_settings",
         lambda name: fake_settings if name == "robinhood" else None,
     )
+
     async def _fake_ensure_access_token(settings, allow_interactive, force_reauth):
         del settings, allow_interactive, force_reauth
         return "token-xyz"
@@ -212,7 +216,10 @@ def test_pre_mcp_autostart_injects_runtime_bearer(monkeypatch):
     asyncio.run(_pre_mcp_autostart("main-agent", ["robinhood"]))
 
     assert fake_manager.managed.create_calls == 1
-    assert fake_manager.managed.config.config["headers"]["Authorization"] == "Bearer token-xyz"
+    assert (
+        fake_manager.managed.config.config["headers"]["Authorization"]
+        == "Bearer token-xyz"
+    )
     assert fake_manager.managed.config.config["headers"]["X-Test"] == "1"
 
 

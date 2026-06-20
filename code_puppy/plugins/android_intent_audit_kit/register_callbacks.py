@@ -21,13 +21,11 @@ _STACK = "android_intent_audit_stack"
 _EXAMPLES = "android_intent_audit_examples"
 
 
-
 def register_android_intent_audit_doctor(agent: Any) -> None:
     @agent.tool
     async def android_intent_audit_doctor(context: RunContext) -> dict[str, Any]:
         del context
         return android_intent_audit_doctor_impl()
-
 
 
 def register_android_intent_audit_app(agent: Any) -> None:
@@ -46,7 +44,6 @@ def register_android_intent_audit_app(agent: Any) -> None:
         )
 
 
-
 def register_android_intent_audit_stack(agent: Any) -> None:
     @agent.tool
     async def android_intent_audit_stack(
@@ -63,13 +60,11 @@ def register_android_intent_audit_stack(agent: Any) -> None:
         )
 
 
-
 def register_android_intent_audit_examples(agent: Any) -> None:
     @agent.tool
     async def android_intent_audit_examples(context: RunContext) -> dict[str, Any]:
         del context
         return android_intent_audit_examples_impl()
-
 
 
 def register_tools_callback() -> list[dict[str, Any]]:
@@ -79,7 +74,6 @@ def register_tools_callback() -> list[dict[str, Any]]:
         {"name": _STACK, "register_func": register_android_intent_audit_stack},
         {"name": _EXAMPLES, "register_func": register_android_intent_audit_examples},
     ]
-
 
 
 def _advertise_tools_to_agent(agent_name: str | None = None) -> list[str]:

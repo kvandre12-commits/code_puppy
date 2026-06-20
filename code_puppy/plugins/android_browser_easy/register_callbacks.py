@@ -21,7 +21,6 @@ _LINKS_TOOL = "android_browser_list_links"
 _SELECTOR_TOOL = "android_browser_get_text_by_selector"
 
 
-
 def register_android_browser_read_page(agent: Any) -> None:
     @agent.tool
     async def android_browser_read_page(
@@ -43,7 +42,6 @@ def register_android_browser_read_page(agent: Any) -> None:
             max_text_chars=max_text_chars,
             max_headings=max_headings,
         )
-
 
 
 def register_android_browser_get_html(agent: Any) -> None:
@@ -69,7 +67,6 @@ def register_android_browser_get_html(agent: Any) -> None:
         )
 
 
-
 def register_android_browser_list_links(agent: Any) -> None:
     @agent.tool
     async def android_browser_list_links(
@@ -93,7 +90,6 @@ def register_android_browser_list_links(agent: Any) -> None:
         )
 
 
-
 def register_android_browser_get_text_by_selector(agent: Any) -> None:
     @agent.tool
     async def android_browser_get_text_by_selector(
@@ -115,15 +111,16 @@ def register_android_browser_get_text_by_selector(agent: Any) -> None:
         )
 
 
-
 def register_tools_callback() -> list[dict[str, Any]]:
     return [
         {"name": _READ_TOOL, "register_func": register_android_browser_read_page},
         {"name": _HTML_TOOL, "register_func": register_android_browser_get_html},
         {"name": _LINKS_TOOL, "register_func": register_android_browser_list_links},
-        {"name": _SELECTOR_TOOL, "register_func": register_android_browser_get_text_by_selector},
+        {
+            "name": _SELECTOR_TOOL,
+            "register_func": register_android_browser_get_text_by_selector,
+        },
     ]
-
 
 
 def _advertise_tools_to_agent(agent_name: str | None = None) -> list[str]:

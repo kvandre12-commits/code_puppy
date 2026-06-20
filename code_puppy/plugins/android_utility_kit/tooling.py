@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import os
 import shutil
 import subprocess
@@ -57,7 +56,6 @@ def _run_command(args: list[str], timeout: int = 20) -> dict[str, Any]:
         }
 
 
-
 def _getprop(name: str) -> str:
     result = _run_command(["getprop", name])
     if not result["ok"]:
@@ -65,10 +63,8 @@ def _getprop(name: str) -> str:
     return result["stdout"].strip()
 
 
-
 def _detect_android() -> bool:
     return bool(_getprop("ro.build.version.release"))
-
 
 
 def _detect_termux() -> bool:
@@ -76,10 +72,8 @@ def _detect_termux() -> bool:
     return "com.termux" in prefix or bool(os.environ.get("TERMUX_VERSION"))
 
 
-
 def _command_path(name: str) -> str | None:
     return shutil.which(name)
-
 
 
 def _package_list_candidates() -> list[list[str]]:
@@ -87,7 +81,6 @@ def _package_list_candidates() -> list[list[str]]:
         ["cmd", "package", "list", "packages"],
         ["pm", "list", "packages"],
     ]
-
 
 
 def _list_installed_packages() -> list[str]:
@@ -103,7 +96,6 @@ def _list_installed_packages() -> list[str]:
         if packages:
             return packages
     return []
-
 
 
 def android_utility_doctor() -> dict[str, Any]:
@@ -125,12 +117,20 @@ def android_utility_doctor() -> dict[str, Any]:
     packages = _list_installed_packages()
     missing = [name for name, path in commands.items() if not path]
     guidance: list[str] = []
-    if not commands.get("termux-clipboard-get") or not commands.get("termux-clipboard-set"):
-        guidance.append("Clipboard helpers are unavailable; install/configure termux-api if you want clipboard integration.")
+    if not commands.get("termux-clipboard-get") or not commands.get(
+        "termux-clipboard-set"
+    ):
+        guidance.append(
+            "Clipboard helpers are unavailable; install/configure termux-api if you want clipboard integration."
+        )
     if not commands.get("termux-share"):
-        guidance.append("Native Termux share helper is unavailable; Android ACTION_SEND fallback can still be used.")
+        guidance.append(
+            "Native Termux share helper is unavailable; Android ACTION_SEND fallback can still be used."
+        )
     if not commands.get("adb"):
-        guidance.append("ADB is not available; browser CDP control will require android-tools.")
+        guidance.append(
+            "ADB is not available; browser CDP control will require android-tools."
+        )
 
     return {
         "success": True,
@@ -150,7 +150,6 @@ def android_utility_doctor() -> dict[str, Any]:
     }
 
 
-
 def android_open_settings(page: str = "app_settings") -> dict[str, Any]:
     key = (page or "").strip().lower()
     if key not in SETTINGS_ACTIONS:
@@ -165,7 +164,6 @@ def android_open_settings(page: str = "app_settings") -> dict[str, Any]:
         "action": action,
         "launcher_result": result,
     }
-
 
 
 def android_launch_app(package_name: str) -> dict[str, Any]:
@@ -191,7 +189,6 @@ def android_launch_app(package_name: str) -> dict[str, Any]:
     }
 
 
-
 def android_share_text(text: str, subject: str = "") -> dict[str, Any]:
     if not text.strip():
         raise ValueError("text is required")
@@ -215,7 +212,6 @@ def android_share_text(text: str, subject: str = "") -> dict[str, Any]:
         "text_length": len(text),
         "launcher_result": result,
     }
-
 
 
 def android_find_apps(query: str = "", max_results: int = 50) -> dict[str, Any]:

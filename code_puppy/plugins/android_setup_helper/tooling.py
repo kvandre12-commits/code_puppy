@@ -27,7 +27,9 @@ def android_setup_doctor() -> dict[str, Any]:
             "android": bool((utility.get("platform") or {}).get("is_android")),
             "termux": bool((utility.get("platform") or {}).get("is_termux")),
             "adb_installed": bool((cdp.get("adb") or {}).get("installed")),
-            "notification_command_installed": bool((notifications.get("commands") or {}).get("termux-notification")),
+            "notification_command_installed": bool(
+                (notifications.get("commands") or {}).get("termux-notification")
+            ),
         },
         "guidance": [
             "Use android_setup_next_steps(goal='basics') if you are just starting.",
@@ -43,11 +45,12 @@ def android_setup_doctor() -> dict[str, Any]:
     }
 
 
-
 def android_setup_next_steps(goal: str = "basics") -> dict[str, Any]:
     key = (goal or "").strip().lower()
     if key not in GOALS:
-        raise ValueError(f"Unknown goal '{goal}'. Valid goals: {', '.join(sorted(GOALS))}")
+        raise ValueError(
+            f"Unknown goal '{goal}'. Valid goals: {', '.join(sorted(GOALS))}"
+        )
 
     steps: dict[str, list[str]] = {
         "basics": [
@@ -89,7 +92,6 @@ def android_setup_next_steps(goal: str = "basics") -> dict[str, Any]:
         "steps": steps[key],
         "next_best_goals": [g for g in GOALS if g != key][:3],
     }
-
 
 
 def android_first_run_tour(topic: str = "basics") -> dict[str, Any]:

@@ -45,15 +45,12 @@ def _run_command(args: list[str], timeout: int = 60) -> dict[str, Any]:
         }
 
 
-
 def _adb() -> str | None:
     return shutil.which("adb")
 
 
-
 def _timestamp() -> str:
     return datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
-
 
 
 def android_bugreport_doctor() -> dict[str, Any]:
@@ -71,7 +68,6 @@ def android_bugreport_doctor() -> dict[str, Any]:
             "Keep the phone awake and connected during bugreport collection.",
         ],
     }
-
 
 
 def android_bugreport_collect(
@@ -118,6 +114,8 @@ def android_bugreport_collect(
         "result": result,
         "artifacts": existing,
         "message": (
-            "Bugreport collection completed." if result.get("exit_code") == 0 else "Bugreport collection failed or was interrupted."
+            "Bugreport collection completed."
+            if result.get("exit_code") == 0
+            else "Bugreport collection failed or was interrupted."
         ),
     }

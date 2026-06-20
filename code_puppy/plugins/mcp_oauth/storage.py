@@ -43,7 +43,9 @@ class ServerTokenStorage(TokenStorage):
     def save_state(self, state: Dict[str, Any]) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         _chmod_best_effort(str(self.path.parent), _DIR_MODE)
-        self.path.write_text(json.dumps(state, indent=2, sort_keys=True), encoding="utf-8")
+        self.path.write_text(
+            json.dumps(state, indent=2, sort_keys=True), encoding="utf-8"
+        )
         _chmod_best_effort(str(self.path), _FILE_MODE)
 
     def clear(self, keep_client_info: bool = True) -> None:

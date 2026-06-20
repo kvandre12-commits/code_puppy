@@ -17,10 +17,8 @@ from ..android_workflow_feasibility_kit.tooling import (
 OUTPUT_DIR = Path("outputs")
 
 
-
 def _timestamp() -> str:
     return datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
-
 
 
 def _top_apps(assessment: dict[str, Any], limit: int = 3) -> list[dict[str, Any]]:
@@ -32,11 +30,12 @@ def _top_apps(assessment: dict[str, Any], limit: int = 3) -> list[dict[str, Any]
     return apps[:limit]
 
 
-
 def _exec_summary(assessment: dict[str, Any], business_goal: str) -> dict[str, Any]:
     direct = len((assessment.get("summary") or {}).get("direct_handoff_candidates", []))
     ui = len((assessment.get("summary") or {}).get("ui_steering_candidates", []))
-    reactivate = len((assessment.get("summary") or {}).get("reactivation_candidates", []))
+    reactivate = len(
+        (assessment.get("summary") or {}).get("reactivation_candidates", [])
+    )
     missing = len((assessment.get("summary") or {}).get("missing_apps", []))
     best = _top_apps(assessment, limit=3)
     return {
@@ -49,7 +48,6 @@ def _exec_summary(assessment: dict[str, Any], business_goal: str) -> dict[str, A
         "missing_count": missing,
         "best_candidates": [app.get("package_name") for app in best],
     }
-
 
 
 def _stack_overview(assessment: dict[str, Any]) -> list[dict[str, Any]]:
@@ -66,8 +64,9 @@ def _stack_overview(assessment: dict[str, Any]) -> list[dict[str, Any]]:
     ]
 
 
-
-def _priority_actions(assessment: dict[str, Any], blueprint: dict[str, Any]) -> list[str]:
+def _priority_actions(
+    assessment: dict[str, Any], blueprint: dict[str, Any]
+) -> list[str]:
     actions: list[str] = []
     summary = assessment.get("summary") or {}
     direct = summary.get("direct_handoff_candidates", [])
@@ -75,17 +74,13 @@ def _priority_actions(assessment: dict[str, Any], blueprint: dict[str, Any]) -> 
     ui = summary.get("ui_steering_candidates", [])
 
     if direct:
-        actions.append(
-            f"Pilot direct handoff first with: {', '.join(direct[:3])}."
-        )
+        actions.append(f"Pilot direct handoff first with: {', '.join(direct[:3])}.")
     if reactivate:
         actions.append(
             f"Repair or reinstall before promising automation for: {', '.join(reactivate[:3])}."
         )
     if ui:
-        actions.append(
-            f"Reserve UI-guided automation work for: {', '.join(ui[:3])}."
-        )
+        actions.append(f"Reserve UI-guided automation work for: {', '.join(ui[:3])}.")
 
     phases = blueprint.get("rollout_phases", [])
     if phases:
@@ -94,9 +89,10 @@ def _priority_actions(assessment: dict[str, Any], blueprint: dict[str, Any]) -> 
         )
 
     if not actions:
-        actions.append("Profile more real apps and test a narrow cross-app workflow before expanding scope.")
+        actions.append(
+            "Profile more real apps and test a narrow cross-app workflow before expanding scope."
+        )
     return actions
-
 
 
 def _render_markdown(report: dict[str, Any]) -> str:
@@ -113,7 +109,9 @@ def _render_markdown(report: dict[str, Any]) -> str:
         "",
         "## Best Candidates",
     ]
-    for package_name in ((report.get("executive_summary") or {}).get("best_candidates") or []):
+    for package_name in (report.get("executive_summary") or {}).get(
+        "best_candidates"
+    ) or []:
         lines.append(f"- `{package_name}`")
     lines.extend(["", "## Priority Actions"])
     for action in report.get("priority_actions", []):
@@ -136,7 +134,6 @@ def _render_markdown(report: dict[str, Any]) -> str:
     return "\n".join(lines) + "\n"
 
 
-
 def android_app_stack_report_doctor() -> dict[str, Any]:
     feasibility = android_workflow_feasibility_doctor()
     blueprint = android_orchestration_blueprint_doctor()
@@ -152,7 +149,6 @@ def android_app_stack_report_doctor() -> dict[str, Any]:
             "Use dry_run first if you only want to inspect the report structure.",
         ],
     }
-
 
 
 def android_app_stack_report_generate(
@@ -208,7 +204,6 @@ def android_app_stack_report_generate(
         "dry_run": False,
         "artifact_paths": [str(json_path), str(md_path)],
     }
-
 
 
 def android_app_stack_report_examples() -> dict[str, Any]:

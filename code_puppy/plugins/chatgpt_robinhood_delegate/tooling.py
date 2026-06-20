@@ -108,7 +108,9 @@ def build_delegation_packet(
     warnings.extend(payload_warnings)
 
     if normalized_task_type in {"order_submit", "order_cancel", "order_replace"}:
-        normalized_policy = (approval_policy or "").strip() or "operator_confirm_required"
+        normalized_policy = (
+            approval_policy or ""
+        ).strip() or "operator_confirm_required"
         if normalized_policy != "operator_confirm_required":
             warnings.append(
                 "Approval policy was coerced to operator_confirm_required for live-order style requests."

@@ -15,7 +15,8 @@ from __future__ import annotations
 # Each rule: (type_substr, msg_substr_or_empty, what, fix, why)
 RULES: list[tuple[str, str, str, str, str]] = [
     (
-        "NullPointerException", "",
+        "NullPointerException",
+        "",
         "The app tried to use an object that was null (nothing there).",
         "Find the variable on the crash line and guard it before use: "
         "check for null (Java) or use a safe-call `?.` / Elvis `?:` (Kotlin). "
@@ -29,7 +30,8 @@ RULES: list[tuple[str, str, str, str, str]] = [
         "source removes it.",
     ),
     (
-        "NetworkOnMainThreadException", "",
+        "NetworkOnMainThreadException",
+        "",
         "The app did network work on the main (UI) thread.",
         "Move the network/IO call off the main thread: a coroutine on "
         "Dispatchers.IO, an Executor, WorkManager, or RxJava background "
@@ -39,7 +41,8 @@ RULES: list[tuple[str, str, str, str, str]] = [
         "The OS throws on purpose to force you to background it.",
     ),
     (
-        "ActivityNotFoundException", "",
+        "ActivityNotFoundException",
+        "",
         "The app fired an Intent that no installed app can handle.",
         "Verify the Intent action/data/MIME, confirm a target app exists, "
         "and on Android 11+ add a <queries> entry in the manifest. Guard the "
@@ -50,7 +53,8 @@ RULES: list[tuple[str, str, str, str, str]] = [
         "it and throws. Checking resolvability first prevents the crash.",
     ),
     (
-        "SecurityException", "permission",
+        "SecurityException",
+        "permission",
         "The app used a feature it doesn't have permission for.",
         "Declare the permission in AndroidManifest.xml AND request it at "
         "runtime (for dangerous permissions) before the call. Handle the "
@@ -61,7 +65,8 @@ RULES: list[tuple[str, str, str, str, str]] = [
         "runtime, or the call is blocked.",
     ),
     (
-        "SecurityException", "",
+        "SecurityException",
+        "",
         "The app tried something the OS blocked for security reasons.",
         "Read the message for the exact restriction. Common causes: missing "
         "permission, accessing another app's data, or a background-activity/"
@@ -71,7 +76,8 @@ RULES: list[tuple[str, str, str, str, str]] = [
         "those lines.",
     ),
     (
-        "IllegalStateException", "Fragment",
+        "IllegalStateException",
+        "Fragment",
         "The app touched a Fragment that wasn't attached / was destroyed.",
         "Guard UI work with `isAdded`/`viewLifecycleOwner`, and don't commit "
         "fragment transactions after onSaveInstanceState. Cancel async "
@@ -82,7 +88,8 @@ RULES: list[tuple[str, str, str, str, str]] = [
         "stale callback.",
     ),
     (
-        "OutOfMemoryError", "",
+        "OutOfMemoryError",
+        "",
         "The app ran out of memory (usually huge bitmaps or a leak).",
         "Downsample images with inSampleSize / use Glide/Coil, recycle "
         "bitmaps, and hunt leaks with LeakCanary. Avoid holding Context/View "
@@ -92,7 +99,8 @@ RULES: list[tuple[str, str, str, str, str]] = [
         "The fix is to use less memory and release it promptly.",
     ),
     (
-        "ClassCastException", "",
+        "ClassCastException",
+        "",
         "The app assumed an object was one type but it was another.",
         "Check the cast on the crash line; validate with `is`/`instanceof` "
         "before casting, or fix the source that produced the wrong type "
@@ -103,7 +111,8 @@ RULES: list[tuple[str, str, str, str, str]] = [
         "usually originates earlier - that's the real bug.",
     ),
     (
-        "NumberFormatException", "",
+        "NumberFormatException",
+        "",
         "The app tried to turn text into a number, but the text wasn't one.",
         "Validate/trim input before parsing and use a safe parse "
         "(Kotlin `toIntOrNull()`), defaulting or erroring cleanly on bad "
@@ -113,7 +122,8 @@ RULES: list[tuple[str, str, str, str, str]] = [
         "crash into a handled case.",
     ),
     (
-        "IndexOutOfBoundsException", "",
+        "IndexOutOfBoundsException",
+        "",
         "The app accessed a list/array position that doesn't exist.",
         "Check the index against size before access; confirm the collection "
         "isn't empty or smaller than expected, especially after async "
@@ -123,7 +133,8 @@ RULES: list[tuple[str, str, str, str, str]] = [
         "access, which the runtime rejects.",
     ),
     (
-        "BadTokenException", "",
+        "BadTokenException",
+        "",
         "The app showed a dialog/window on a dead or wrong Activity.",
         "Only show dialogs on a valid, resumed Activity context (not "
         "application context), and dismiss them in onDestroy/onPause to "
@@ -133,7 +144,8 @@ RULES: list[tuple[str, str, str, str, str]] = [
         "WindowManager refuses to draw.",
     ),
     (
-        "SQLiteException", "",
+        "SQLiteException",
+        "",
         "A database operation failed (bad query, schema, or migration).",
         "Check the SQL/message; for 'no such column/table' it's usually a "
         "missing migration. Bump the DB version and supply a migration path "
@@ -146,8 +158,7 @@ RULES: list[tuple[str, str, str, str, str]] = [
 ]
 
 ANR_DIAG = (
-    "The app's main thread was blocked too long, so Android flagged it "
-    "Not Responding.",
+    "The app's main thread was blocked too long, so Android flagged it Not Responding.",
     "Move the slow work (network, disk, big loops, locks) off the main "
     "thread. Find what the 'main' thread was doing in the ANR trace and "
     "background it.",

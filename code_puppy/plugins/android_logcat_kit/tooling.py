@@ -41,7 +41,6 @@ def _run_command(args: list[str], timeout: int = 20) -> dict[str, Any]:
         }
 
 
-
 def android_logcat_doctor() -> dict[str, Any]:
     adb = shutil.which("adb")
     local_logcat = shutil.which("logcat")
@@ -60,7 +59,6 @@ def android_logcat_doctor() -> dict[str, Any]:
     }
 
 
-
 def _select_logcat_command(use_adb: bool = True) -> list[str]:
     adb = shutil.which("adb")
     local_logcat = shutil.which("logcat")
@@ -69,7 +67,6 @@ def _select_logcat_command(use_adb: bool = True) -> list[str]:
     if local_logcat:
         return [local_logcat]
     raise RuntimeError("Neither adb nor local logcat command is available")
-
 
 
 def android_logcat_recent(
@@ -104,7 +101,6 @@ def android_logcat_recent(
         "log_text": joined,
         "stderr": result.get("stderr", ""),
     }
-
 
 
 def android_logcat_clear(use_adb: bool = True) -> dict[str, Any]:

@@ -23,7 +23,6 @@ from code_puppy.agents._steer_processor import make_steer_history_processor
 from code_puppy.agents.event_stream_handler import event_stream_handler
 from code_puppy.callbacks import (
     on_pre_mcp_autostart,
-    on_pre_mcp_autostart_sync,
     on_wrap_pydantic_agent,
 )
 from code_puppy.config import (
@@ -256,7 +255,7 @@ def _autostart_bound_servers(manager: Any, agent_name: str) -> None:
     targets = list(_iter_autostart_targets(manager, agent_name))
     if not targets:
         return
-    #temp debug
+    # temp debug
     # on_pre_mcp_autostart_sync(agent_name, [name for name, _ in targets])
     for server_name, config in targets:
         try:

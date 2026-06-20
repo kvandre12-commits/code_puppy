@@ -6,9 +6,13 @@ from pathlib import Path
 from typing import Any
 
 from ..android_app_stack_report_kit.tooling import android_app_stack_report_generate
-from ..android_orchestration_blueprint_kit.tooling import android_orchestration_blueprint_plan
+from ..android_orchestration_blueprint_kit.tooling import (
+    android_orchestration_blueprint_plan,
+)
 from ..android_ui_capability_audit_kit.tooling import android_ui_capability_audit_stack
-from ..android_workflow_feasibility_kit.tooling import android_workflow_feasibility_assess
+from ..android_workflow_feasibility_kit.tooling import (
+    android_workflow_feasibility_assess,
+)
 
 OUTPUT_DIR = Path("outputs")
 
@@ -71,7 +75,6 @@ def _timestamp() -> str:
     return datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
 
 
-
 def _clean_list(values: list[str] | None) -> list[str]:
     cleaned: list[str] = []
     for value in values or []:
@@ -81,11 +84,9 @@ def _clean_list(values: list[str] | None) -> list[str]:
     return cleaned
 
 
-
 def _industry_template(industry: str) -> dict[str, Any]:
     key = (industry or "").strip().lower()
     return INDUSTRY_TEMPLATES.get(key, {"common_workflows": [], "notes": []})
-
 
 
 def _opportunities(
@@ -143,7 +144,6 @@ def _opportunities(
     return opportunities
 
 
-
 def _recommended_pilot(feasibility: dict[str, Any], workflow_name: str) -> str:
     summary = feasibility.get("summary") or {}
     direct = summary.get("direct_handoff_candidates", []) or []
@@ -153,7 +153,6 @@ def _recommended_pilot(feasibility: dict[str, Any], workflow_name: str) -> str:
     if ui:
         return f"Pilot a narrow '{workflow_name}' flow around {ui[0]} using launch + UI steering."
     return f"Pilot a support-first version of '{workflow_name}' with stack audit and artifact collection before deeper automation."
-
 
 
 def _render_markdown(model: dict[str, Any]) -> str:
@@ -180,13 +179,14 @@ def _render_markdown(model: dict[str, Any]) -> str:
         lines.append(f"- {criterion}")
     lines.extend(["", "## Opportunities"])
     for item in model.get("automation_opportunities", []):
-        lines.append(f"- **{item.get('type')}** — {item.get('summary')} ({item.get('why')})")
+        lines.append(
+            f"- **{item.get('type')}** — {item.get('summary')} ({item.get('why')})"
+        )
     lines.extend(["", "## Recommended Pilot"])
     lines.append(f"- {model.get('recommended_pilot')}")
     lines.extend(["", "## Support Posture"])
     lines.append(f"- {model.get('support_posture')}")
     return "\n".join(lines) + "\n"
-
 
 
 def android_business_workflow_capture_doctor() -> dict[str, Any]:
@@ -201,8 +201,9 @@ def android_business_workflow_capture_doctor() -> dict[str, Any]:
     }
 
 
-
-def android_business_workflow_capture_template(industry: str = "retail") -> dict[str, Any]:
+def android_business_workflow_capture_template(
+    industry: str = "retail",
+) -> dict[str, Any]:
     template = _industry_template(industry)
     return {
         "success": True,
@@ -218,7 +219,6 @@ def android_business_workflow_capture_template(industry: str = "retail") -> dict
             "industry_notes": template.get("notes", []),
         },
     }
-
 
 
 def android_business_workflow_capture_create(
@@ -308,7 +308,6 @@ def android_business_workflow_capture_create(
         "dry_run": False,
         "artifact_paths": [str(json_path), str(md_path)],
     }
-
 
 
 def android_business_workflow_capture_examples() -> dict[str, Any]:

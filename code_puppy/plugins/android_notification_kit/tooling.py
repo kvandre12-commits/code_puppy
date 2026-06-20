@@ -43,12 +43,13 @@ def _run_command(args: list[str], timeout: int = 20) -> dict[str, Any]:
         }
 
 
-
 def android_notification_doctor() -> dict[str, Any]:
     termux_notification = shutil.which("termux-notification")
     adb = shutil.which("adb")
     cmd = shutil.which("cmd")
-    local_cmd_probe = _run_command([cmd, "notification", "help"], timeout=15) if cmd else None
+    local_cmd_probe = (
+        _run_command([cmd, "notification", "help"], timeout=15) if cmd else None
+    )
     adb_devices = _run_command([adb, "devices", "-l"], timeout=20) if adb else None
     return {
         "success": True,
@@ -61,7 +62,9 @@ def android_notification_doctor() -> dict[str, Any]:
         "adb_devices": adb_devices,
         "posting_modes": {
             "termux_api_notification": bool(termux_notification),
-            "local_cmd_notification": bool(local_cmd_probe and local_cmd_probe.get("exit_code") == 0),
+            "local_cmd_notification": bool(
+                local_cmd_probe and local_cmd_probe.get("exit_code") == 0
+            ),
             "share_fallback": True,
         },
         "guidance": [
@@ -72,9 +75,10 @@ def android_notification_doctor() -> dict[str, Any]:
     }
 
 
-
 def android_open_notification_settings() -> dict[str, Any]:
-    result = _run_command(["am", "start", "-a", "android.settings.NOTIFICATION_SETTINGS"], timeout=20)
+    result = _run_command(
+        ["am", "start", "-a", "android.settings.NOTIFICATION_SETTINGS"], timeout=20
+    )
     return {
         "success": result.get("exit_code") == 0,
         "action": "android.settings.NOTIFICATION_SETTINGS",
@@ -82,13 +86,14 @@ def android_open_notification_settings() -> dict[str, Any]:
     }
 
 
-
 def android_notification_setup_guide() -> dict[str, Any]:
     doctor = android_notification_doctor()
     return {
         "success": True,
         "summary": {
-            "termux_notification_installed": bool((doctor.get("commands") or {}).get("termux-notification")),
+            "termux_notification_installed": bool(
+                (doctor.get("commands") or {}).get("termux-notification")
+            ),
             "adb_installed": bool((doctor.get("commands") or {}).get("adb")),
         },
         "steps": [
@@ -102,7 +107,6 @@ def android_notification_setup_guide() -> dict[str, Any]:
             "android_notification_send title='DroidPuppy' text='Hello from DroidPuppy'",
         ],
     }
-
 
 
 def android_notification_send(

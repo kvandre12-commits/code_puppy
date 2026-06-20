@@ -8,11 +8,9 @@ from ..android_app_inventory_kit.tooling import (
 )
 
 
-
 def _has_reactivate_launcher(profile: dict[str, Any]) -> bool:
     launcher = (profile.get("launcher") or {}).get("components") or []
     return any("ReactivateActivity" in component for component in launcher)
-
 
 
 def _interaction_mode(profile: dict[str, Any]) -> str:
@@ -25,7 +23,6 @@ def _interaction_mode(profile: dict[str, Any]) -> str:
     if profile.get("launchable"):
         return "ui_steering"
     return "unknown"
-
 
 
 def _readiness_score(profile: dict[str, Any]) -> int:
@@ -45,7 +42,6 @@ def _readiness_score(profile: dict[str, Any]) -> int:
     return max(0, min(100, score))
 
 
-
 def _readiness_band(score: int) -> str:
     if score >= 70:
         return "high"
@@ -54,31 +50,41 @@ def _readiness_band(score: int) -> str:
     return "low"
 
 
-
 def _app_notes(profile: dict[str, Any]) -> list[str]:
     notes: list[str] = []
     if not profile.get("installed"):
         return ["App is not installed on this phone."]
     if _has_reactivate_launcher(profile):
-        notes.append("Launcher points to ReactivateActivity; app may be archived or partially inactive.")
+        notes.append(
+            "Launcher points to ReactivateActivity; app may be archived or partially inactive."
+        )
     if profile.get("url_view_capable"):
         notes.append("Accepts URL/view-style handoffs.")
     if profile.get("text_share_capable"):
         notes.append("Accepts text share handoffs.")
-    if profile.get("launchable") and not profile.get("url_view_capable") and not profile.get("text_share_capable"):
+    if (
+        profile.get("launchable")
+        and not profile.get("url_view_capable")
+        and not profile.get("text_share_capable")
+    ):
         notes.append("Likely requires UI steering after launch for deeper workflows.")
     if not notes:
-        notes.append("Little structured handoff surface detected; treat as a brittle target.")
+        notes.append(
+            "Little structured handoff surface detected; treat as a brittle target."
+        )
     return notes
 
 
-
-def _overall_recommendations(profiles: list[dict[str, Any]], business_goal: str = "") -> list[str]:
+def _overall_recommendations(
+    profiles: list[dict[str, Any]], business_goal: str = ""
+) -> list[str]:
     recommendations: list[str] = []
     direct = [p for p in profiles if _interaction_mode(p) == "direct_handoff"]
     ui = [p for p in profiles if _interaction_mode(p) == "ui_steering"]
     missing = [p for p in profiles if _interaction_mode(p) == "missing"]
-    reactivate = [p for p in profiles if _interaction_mode(p) == "reactivation_or_restore"]
+    reactivate = [
+        p for p in profiles if _interaction_mode(p) == "reactivation_or_restore"
+    ]
 
     if direct:
         recommendations.append(
@@ -101,9 +107,10 @@ def _overall_recommendations(profiles: list[dict[str, Any]], business_goal: str 
             f"Assess every workflow step against the stated goal: {business_goal.strip()}"
         )
     if not recommendations:
-        recommendations.append("Start by profiling more candidate apps and testing a small cross-app workflow.")
+        recommendations.append(
+            "Start by profiling more candidate apps and testing a small cross-app workflow."
+        )
     return recommendations
-
 
 
 def _overall_band(profiles: list[dict[str, Any]]) -> str:
@@ -116,7 +123,6 @@ def _overall_band(profiles: list[dict[str, Any]]) -> str:
     if avg >= 40:
         return "medium"
     return "low"
-
 
 
 def android_workflow_feasibility_doctor() -> dict[str, Any]:
@@ -138,7 +144,6 @@ def android_workflow_feasibility_doctor() -> dict[str, Any]:
     }
 
 
-
 def android_workflow_feasibility_assess(
     package_names: list[str],
     business_goal: str = "",
@@ -152,7 +157,9 @@ def android_workflow_feasibility_assess(
     if not cleaned:
         raise ValueError("package_names must contain at least one package")
 
-    raw_profiles = [android_app_profile(package_name=name, user=user) for name in cleaned]
+    raw_profiles = [
+        android_app_profile(package_name=name, user=user) for name in cleaned
+    ]
     assessed_apps = []
     for profile in raw_profiles:
         score = _readiness_score(profile)
@@ -171,10 +178,16 @@ def android_workflow_feasibility_assess(
             }
         )
 
-    direct = [app for app in assessed_apps if app["interaction_mode"] == "direct_handoff"]
+    direct = [
+        app for app in assessed_apps if app["interaction_mode"] == "direct_handoff"
+    ]
     ui = [app for app in assessed_apps if app["interaction_mode"] == "ui_steering"]
     missing = [app for app in assessed_apps if app["interaction_mode"] == "missing"]
-    reactivate = [app for app in assessed_apps if app["interaction_mode"] == "reactivation_or_restore"]
+    reactivate = [
+        app
+        for app in assessed_apps
+        if app["interaction_mode"] == "reactivation_or_restore"
+    ]
 
     return {
         "success": True,
@@ -188,10 +201,11 @@ def android_workflow_feasibility_assess(
             "reactivation_candidates": [app["package_name"] for app in reactivate],
             "missing_apps": [app["package_name"] for app in missing],
         },
-        "recommendations": _overall_recommendations(raw_profiles, business_goal=business_goal),
+        "recommendations": _overall_recommendations(
+            raw_profiles, business_goal=business_goal
+        ),
         "apps": assessed_apps,
     }
-
 
 
 def android_workflow_feasibility_examples() -> dict[str, Any]:

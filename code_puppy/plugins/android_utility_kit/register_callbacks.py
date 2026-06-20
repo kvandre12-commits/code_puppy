@@ -23,14 +23,12 @@ _SHARE_TOOL = "android_share_text"
 _FIND_TOOL = "android_find_apps"
 
 
-
 def register_android_utility_doctor(agent: Any) -> None:
     @agent.tool
     async def android_utility_doctor(context: RunContext) -> dict[str, Any]:
         """Inspect Droid-native utility capability from Termux."""
         del context
         return android_utility_doctor_impl()
-
 
 
 def register_android_open_settings(agent: Any) -> None:
@@ -44,7 +42,6 @@ def register_android_open_settings(agent: Any) -> None:
         return android_open_settings_impl(page=page)
 
 
-
 def register_android_launch_app(agent: Any) -> None:
     @agent.tool
     async def android_launch_app(
@@ -54,7 +51,6 @@ def register_android_launch_app(agent: Any) -> None:
         """Launch an Android app by package name."""
         del context
         return android_launch_app_impl(package_name=package_name)
-
 
 
 def register_android_share_text(agent: Any) -> None:
@@ -69,7 +65,6 @@ def register_android_share_text(agent: Any) -> None:
         return android_share_text_impl(text=text, subject=subject)
 
 
-
 def register_android_find_apps(agent: Any) -> None:
     @agent.tool
     async def android_find_apps(
@@ -82,7 +77,6 @@ def register_android_find_apps(agent: Any) -> None:
         return android_find_apps_impl(query=query, max_results=max_results)
 
 
-
 def register_tools_callback() -> list[dict[str, Any]]:
     return [
         {"name": _DOCTOR_TOOL, "register_func": register_android_utility_doctor},
@@ -91,7 +85,6 @@ def register_tools_callback() -> list[dict[str, Any]]:
         {"name": _SHARE_TOOL, "register_func": register_android_share_text},
         {"name": _FIND_TOOL, "register_func": register_android_find_apps},
     ]
-
 
 
 def _advertise_tools_to_agent(agent_name: str | None = None) -> list[str]:

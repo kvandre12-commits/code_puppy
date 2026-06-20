@@ -21,13 +21,13 @@ _CREATE = "android_business_workflow_capture_create"
 _EXAMPLES = "android_business_workflow_capture_examples"
 
 
-
 def register_android_business_workflow_capture_doctor(agent: Any) -> None:
     @agent.tool
-    async def android_business_workflow_capture_doctor(context: RunContext) -> dict[str, Any]:
+    async def android_business_workflow_capture_doctor(
+        context: RunContext,
+    ) -> dict[str, Any]:
         del context
         return android_business_workflow_capture_doctor_impl()
-
 
 
 def register_android_business_workflow_capture_template(agent: Any) -> None:
@@ -38,7 +38,6 @@ def register_android_business_workflow_capture_template(agent: Any) -> None:
     ) -> dict[str, Any]:
         del context
         return android_business_workflow_capture_template_impl(industry=industry)
-
 
 
 def register_android_business_workflow_capture_create(agent: Any) -> None:
@@ -73,23 +72,34 @@ def register_android_business_workflow_capture_create(agent: Any) -> None:
         )
 
 
-
 def register_android_business_workflow_capture_examples(agent: Any) -> None:
     @agent.tool
-    async def android_business_workflow_capture_examples(context: RunContext) -> dict[str, Any]:
+    async def android_business_workflow_capture_examples(
+        context: RunContext,
+    ) -> dict[str, Any]:
         del context
         return android_business_workflow_capture_examples_impl()
 
 
-
 def register_tools_callback() -> list[dict[str, Any]]:
     return [
-        {"name": _DOCTOR, "register_func": register_android_business_workflow_capture_doctor},
-        {"name": _TEMPLATE, "register_func": register_android_business_workflow_capture_template},
-        {"name": _CREATE, "register_func": register_android_business_workflow_capture_create},
-        {"name": _EXAMPLES, "register_func": register_android_business_workflow_capture_examples},
+        {
+            "name": _DOCTOR,
+            "register_func": register_android_business_workflow_capture_doctor,
+        },
+        {
+            "name": _TEMPLATE,
+            "register_func": register_android_business_workflow_capture_template,
+        },
+        {
+            "name": _CREATE,
+            "register_func": register_android_business_workflow_capture_create,
+        },
+        {
+            "name": _EXAMPLES,
+            "register_func": register_android_business_workflow_capture_examples,
+        },
     ]
-
 
 
 def _advertise_tools_to_agent(agent_name: str | None = None) -> list[str]:

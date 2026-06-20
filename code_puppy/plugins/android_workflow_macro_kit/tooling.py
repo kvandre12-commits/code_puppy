@@ -35,7 +35,6 @@ def _count_adb_devices(adb_devices_block: dict[str, Any] | None) -> int:
     return count
 
 
-
 def android_workflow_doctor() -> dict[str, Any]:
     utility = android_utility_doctor()
     browser = get_android_browser_status()
@@ -48,11 +47,16 @@ def android_workflow_doctor() -> dict[str, Any]:
             "is_android": bool((utility.get("platform") or {}).get("is_android")),
             "is_termux": bool((utility.get("platform") or {}).get("is_termux")),
             "android_version": (utility.get("platform") or {}).get("android_version"),
-            "brave_installed": bool((browser.get("browsers") or {}).get("brave_installed")),
-            "chrome_installed": bool((browser.get("browsers") or {}).get("chrome_installed")),
+            "brave_installed": bool(
+                (browser.get("browsers") or {}).get("brave_installed")
+            ),
+            "chrome_installed": bool(
+                (browser.get("browsers") or {}).get("chrome_installed")
+            ),
             "adb_installed": bool((cdp.get("adb") or {}).get("installed")),
             "connected_adb_devices": _count_adb_devices(adb_devices),
-            "friendly_shortcut_count": len(shortcuts.get("app_shortcuts", [])) + len(shortcuts.get("settings_shortcuts", [])),
+            "friendly_shortcut_count": len(shortcuts.get("app_shortcuts", []))
+            + len(shortcuts.get("settings_shortcuts", [])),
         },
         "guidance": [
             "Use android_workflow_list to see simple named actions.",
@@ -60,7 +64,6 @@ def android_workflow_doctor() -> dict[str, Any]:
             "Use capture_screen to verify what the phone is showing before deeper UI actions.",
         ],
     }
-
 
 
 def android_workflow_list() -> dict[str, Any]:
@@ -81,7 +84,6 @@ def android_workflow_list() -> dict[str, Any]:
     }
 
 
-
 def android_workflow_run(
     name: str,
     repo_url: str = DEFAULT_REPO_URL,
@@ -97,7 +99,9 @@ def android_workflow_run(
         return {
             "success": True,
             "workflow": workflow,
-            "result": android_open("https://example.com", browser="brave", dry_run=dry_run),
+            "result": android_open(
+                "https://example.com", browser="brave", dry_run=dry_run
+            ),
         }
     if workflow == "open_wireless_debugging":
         return {
@@ -139,7 +143,9 @@ def android_workflow_run(
         return {
             "success": True,
             "workflow": workflow,
-            "result": android_capture_screenshot(artifact_name="droidpuppy_workflow_capture", dry_run=dry_run),
+            "result": android_capture_screenshot(
+                artifact_name="droidpuppy_workflow_capture", dry_run=dry_run
+            ),
         }
 
     raise RuntimeError(f"Workflow '{name}' is not implemented")

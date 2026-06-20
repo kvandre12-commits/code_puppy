@@ -21,7 +21,6 @@ _QUICK = "android_reconnect_quick"
 _FULL = "android_reconnect_full"
 
 
-
 def register_android_reconnect_doctor(agent: Any) -> None:
     @agent.tool
     async def android_reconnect_doctor(
@@ -31,7 +30,6 @@ def register_android_reconnect_doctor(agent: Any) -> None:
     ) -> dict[str, Any]:
         del context
         return android_reconnect_doctor_impl(host=host, connect_port=connect_port)
-
 
 
 def register_android_reconnect_plan(agent: Any) -> None:
@@ -52,7 +50,6 @@ def register_android_reconnect_plan(agent: Any) -> None:
         )
 
 
-
 def register_android_reconnect_quick(agent: Any) -> None:
     @agent.tool
     async def android_reconnect_quick(
@@ -67,7 +64,6 @@ def register_android_reconnect_quick(agent: Any) -> None:
             connect_port=connect_port,
             dry_run=dry_run,
         )
-
 
 
 def register_android_reconnect_full(agent: Any) -> None:
@@ -90,7 +86,6 @@ def register_android_reconnect_full(agent: Any) -> None:
         )
 
 
-
 def register_tools_callback() -> list[dict[str, Any]]:
     return [
         {"name": _DOCTOR, "register_func": register_android_reconnect_doctor},
@@ -98,7 +93,6 @@ def register_tools_callback() -> list[dict[str, Any]]:
         {"name": _QUICK, "register_func": register_android_reconnect_quick},
         {"name": _FULL, "register_func": register_android_reconnect_full},
     ]
-
 
 
 def _advertise_tools_to_agent(agent_name: str | None = None) -> list[str]:

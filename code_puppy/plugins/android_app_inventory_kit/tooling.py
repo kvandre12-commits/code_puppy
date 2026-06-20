@@ -8,7 +8,6 @@ from typing import Any
 DEFAULT_USER = "0"
 
 
-
 def _run_command(args: list[str], timeout: int = 30) -> dict[str, Any]:
     try:
         completed = subprocess.run(
@@ -45,10 +44,8 @@ def _run_command(args: list[str], timeout: int = 30) -> dict[str, Any]:
         }
 
 
-
 def _which(name: str) -> str | None:
     return shutil.which(name)
-
 
 
 def _package_list(query: str = "", third_party_only: bool = True) -> list[str]:
@@ -66,28 +63,29 @@ def _package_list(query: str = "", third_party_only: bool = True) -> list[str]:
     return packages
 
 
-
 def _single_line(command: list[str], timeout: int = 30) -> str:
     result = _run_command(command, timeout=timeout)
     return result.get("stdout", "")
-
 
 
 def _parse_component_lines(text: str) -> list[str]:
     found: list[str] = []
     for line in text.splitlines():
         line = line.strip()
-        if not line or line.startswith("priority=") or line.startswith("Activity #") or line.endswith("activities found:"):
+        if (
+            not line
+            or line.startswith("priority=")
+            or line.startswith("Activity #")
+            or line.endswith("activities found:")
+        ):
             continue
         if "/" in line and not line.startswith("Exception"):
             found.append(line)
     return found
 
 
-
 def _is_third_party(package_name: str) -> bool:
     return package_name in _package_list(query=package_name, third_party_only=True)
-
 
 
 def _package_path(package_name: str) -> str | None:
@@ -97,7 +95,6 @@ def _package_path(package_name: str) -> str | None:
         if line.startswith("package:"):
             return line.split(":", 1)[1]
     return None
-
 
 
 def _resolve_launcher(package_name: str, user: str = DEFAULT_USER) -> dict[str, Any]:
@@ -124,7 +121,6 @@ def _resolve_launcher(package_name: str, user: str = DEFAULT_USER) -> dict[str, 
     }
 
 
-
 def _query_url_handlers(package_name: str, user: str = DEFAULT_USER) -> dict[str, Any]:
     result = _run_command(
         [
@@ -149,8 +145,9 @@ def _query_url_handlers(package_name: str, user: str = DEFAULT_USER) -> dict[str
     }
 
 
-
-def _query_text_share_handlers(package_name: str, user: str = DEFAULT_USER) -> dict[str, Any]:
+def _query_text_share_handlers(
+    package_name: str, user: str = DEFAULT_USER
+) -> dict[str, Any]:
     result = _run_command(
         [
             "cmd",
@@ -174,26 +171,33 @@ def _query_text_share_handlers(package_name: str, user: str = DEFAULT_USER) -> d
     }
 
 
-
 def android_app_inventory_doctor() -> dict[str, Any]:
     commands = {name: _which(name) for name in ["cmd", "pm", "am", "getprop"]}
-    list_probe = _run_command(["cmd", "package", "list", "packages", "-3"], timeout=30) if commands.get("cmd") else None
-    resolve_probe = _run_command(
-        [
-            "cmd",
-            "package",
-            "resolve-activity",
-            "--brief",
-            "--user",
-            DEFAULT_USER,
-            "-a",
-            "android.intent.action.MAIN",
-            "-c",
-            "android.intent.category.LAUNCHER",
-            "com.brave.browser",
-        ],
-        timeout=30,
-    ) if commands.get("cmd") else None
+    list_probe = (
+        _run_command(["cmd", "package", "list", "packages", "-3"], timeout=30)
+        if commands.get("cmd")
+        else None
+    )
+    resolve_probe = (
+        _run_command(
+            [
+                "cmd",
+                "package",
+                "resolve-activity",
+                "--brief",
+                "--user",
+                DEFAULT_USER,
+                "-a",
+                "android.intent.action.MAIN",
+                "-c",
+                "android.intent.category.LAUNCHER",
+                "com.brave.browser",
+            ],
+            timeout=30,
+        )
+        if commands.get("cmd")
+        else None
+    )
     return {
         "success": True,
         "commands": commands,
@@ -203,7 +207,9 @@ def android_app_inventory_doctor() -> dict[str, Any]:
         },
         "capabilities": {
             "list_packages": bool(list_probe and list_probe.get("exit_code") == 0),
-            "resolve_launcher": bool(resolve_probe and resolve_probe.get("exit_code") == 0),
+            "resolve_launcher": bool(
+                resolve_probe and resolve_probe.get("exit_code") == 0
+            ),
             "profile_apps": bool(commands.get("cmd")),
         },
         "guidance": [
@@ -212,7 +218,6 @@ def android_app_inventory_doctor() -> dict[str, Any]:
             "This layer is meant to map app ecosystems before building multi-app workflows.",
         ],
     }
-
 
 
 def android_app_inventory_list(
@@ -231,7 +236,6 @@ def android_app_inventory_list(
     }
 
 
-
 def android_app_profile(package_name: str, user: str = DEFAULT_USER) -> dict[str, Any]:
     pkg = (package_name or "").strip()
     if not pkg:
@@ -242,7 +246,9 @@ def android_app_profile(package_name: str, user: str = DEFAULT_USER) -> dict[str
     path = _package_path(pkg) if installed else None
     launcher = _resolve_launcher(pkg, user=user) if installed else None
     url_handlers = _query_url_handlers(pkg, user=user) if installed else None
-    text_share_handlers = _query_text_share_handlers(pkg, user=user) if installed else None
+    text_share_handlers = (
+        _query_text_share_handlers(pkg, user=user) if installed else None
+    )
 
     return {
         "success": True,
@@ -253,7 +259,9 @@ def android_app_profile(package_name: str, user: str = DEFAULT_USER) -> dict[str
         "apk_path": path,
         "launchable": bool(launcher and launcher.get("components")),
         "url_view_capable": bool(url_handlers and url_handlers.get("components")),
-        "text_share_capable": bool(text_share_handlers and text_share_handlers.get("components")),
+        "text_share_capable": bool(
+            text_share_handlers and text_share_handlers.get("components")
+        ),
         "launcher": launcher,
         "url_view_handlers": url_handlers,
         "text_share_handlers": text_share_handlers,

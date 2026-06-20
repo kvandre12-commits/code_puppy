@@ -133,8 +133,14 @@ def _show_status(server_name: Optional[str] = None) -> None:
             emit_warning(f"'{name}' is not configured for MCP OAuth.")
             continue
         state = load_token_state(name)
-        token_payload = state.get("tokens") if isinstance(state.get("tokens"), dict) else {}
-        client_info = state.get("client_info") if isinstance(state.get("client_info"), dict) else {}
+        token_payload = (
+            state.get("tokens") if isinstance(state.get("tokens"), dict) else {}
+        )
+        client_info = (
+            state.get("client_info")
+            if isinstance(state.get("client_info"), dict)
+            else {}
+        )
         has_access = bool(token_payload.get("access_token"))
         has_refresh = bool(token_payload.get("refresh_token"))
         emit_info(f" {name}")
@@ -215,7 +221,9 @@ def _handle_custom_command(command: str, name: str) -> Optional[object]:
         server_name = _parse_server_name(command)
         if not server_name:
             emit_info(f"Usage: /{COMMAND_AUTH} <server-name>")
-            emit_info(f"Configured OAuth MCP servers: {', '.join(list_oauth_server_names()) or '(none)'}")
+            emit_info(
+                f"Configured OAuth MCP servers: {', '.join(list_oauth_server_names()) or '(none)'}"
+            )
             return True
         return _handle_auth(server_name)
 

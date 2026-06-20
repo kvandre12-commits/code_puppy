@@ -19,13 +19,13 @@ _ASSESS = "android_workflow_feasibility_assess"
 _EXAMPLES = "android_workflow_feasibility_examples"
 
 
-
 def register_android_workflow_feasibility_doctor(agent: Any) -> None:
     @agent.tool
-    async def android_workflow_feasibility_doctor(context: RunContext) -> dict[str, Any]:
+    async def android_workflow_feasibility_doctor(
+        context: RunContext,
+    ) -> dict[str, Any]:
         del context
         return android_workflow_feasibility_doctor_impl()
-
 
 
 def register_android_workflow_feasibility_assess(agent: Any) -> None:
@@ -44,22 +44,30 @@ def register_android_workflow_feasibility_assess(agent: Any) -> None:
         )
 
 
-
 def register_android_workflow_feasibility_examples(agent: Any) -> None:
     @agent.tool
-    async def android_workflow_feasibility_examples(context: RunContext) -> dict[str, Any]:
+    async def android_workflow_feasibility_examples(
+        context: RunContext,
+    ) -> dict[str, Any]:
         del context
         return android_workflow_feasibility_examples_impl()
 
 
-
 def register_tools_callback() -> list[dict[str, Any]]:
     return [
-        {"name": _DOCTOR, "register_func": register_android_workflow_feasibility_doctor},
-        {"name": _ASSESS, "register_func": register_android_workflow_feasibility_assess},
-        {"name": _EXAMPLES, "register_func": register_android_workflow_feasibility_examples},
+        {
+            "name": _DOCTOR,
+            "register_func": register_android_workflow_feasibility_doctor,
+        },
+        {
+            "name": _ASSESS,
+            "register_func": register_android_workflow_feasibility_assess,
+        },
+        {
+            "name": _EXAMPLES,
+            "register_func": register_android_workflow_feasibility_examples,
+        },
     ]
-
 
 
 def _advertise_tools_to_agent(agent_name: str | None = None) -> list[str]:

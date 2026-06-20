@@ -19,13 +19,11 @@ _PLAN = "android_support_bundle_plan"
 _COLLECT = "android_support_bundle_collect"
 
 
-
 def register_android_support_bundle_doctor(agent: Any) -> None:
     @agent.tool
     async def android_support_bundle_doctor(context: RunContext) -> dict[str, Any]:
         del context
         return android_support_bundle_doctor_impl()
-
 
 
 def register_android_support_bundle_plan(agent: Any) -> None:
@@ -36,7 +34,6 @@ def register_android_support_bundle_plan(agent: Any) -> None:
     ) -> dict[str, Any]:
         del context
         return android_support_bundle_plan_impl(artifact_name=artifact_name)
-
 
 
 def register_android_support_bundle_collect(agent: Any) -> None:
@@ -59,14 +56,12 @@ def register_android_support_bundle_collect(agent: Any) -> None:
         )
 
 
-
 def register_tools_callback() -> list[dict[str, Any]]:
     return [
         {"name": _DOCTOR, "register_func": register_android_support_bundle_doctor},
         {"name": _PLAN, "register_func": register_android_support_bundle_plan},
         {"name": _COLLECT, "register_func": register_android_support_bundle_collect},
     ]
-
 
 
 def _advertise_tools_to_agent(agent_name: str | None = None) -> list[str]:

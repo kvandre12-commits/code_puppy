@@ -53,7 +53,6 @@ def _run_command(args: list[str], timeout: int = 15) -> dict[str, Any]:
         }
 
 
-
 def _getprop(name: str) -> str:
     result = _run_command(["getprop", name])
     if not result["ok"]:
@@ -61,16 +60,13 @@ def _getprop(name: str) -> str:
     return result["stdout"].strip()
 
 
-
 def _detect_termux() -> bool:
     prefix = os.environ.get("PREFIX", "")
     return "com.termux" in prefix or bool(os.environ.get("TERMUX_VERSION"))
 
 
-
 def _detect_android() -> bool:
     return bool(_getprop("ro.build.version.release"))
-
 
 
 def _list_installed_packages() -> list[str]:
@@ -92,12 +88,10 @@ def _list_installed_packages() -> list[str]:
     return []
 
 
-
 def _validate_url(url: str) -> None:
     parsed = urlparse(url)
     if parsed.scheme not in {"http", "https"} or not parsed.netloc:
         raise ValueError("url must be a valid http or https URL")
-
 
 
 def get_android_browser_status() -> dict[str, Any]:
@@ -129,7 +123,9 @@ def get_android_browser_status() -> dict[str, Any]:
             "detected_packages": [
                 pkg
                 for pkg in installed_packages
-                if any(name in pkg for name in ("brave", "chrome", "firefox", "mozilla"))
+                if any(
+                    name in pkg for name in ("brave", "chrome", "firefox", "mozilla")
+                )
             ],
         },
         "recommended_default": (
@@ -142,7 +138,6 @@ def get_android_browser_status() -> dict[str, Any]:
     }
 
 
-
 def _browser_package_for_name(browser: str) -> str | None:
     normalized = (browser or "").strip().lower()
     if normalized in {"brave", "brave-browser"}:
@@ -151,10 +146,7 @@ def _browser_package_for_name(browser: str) -> str | None:
         return CHROME_PACKAGE
     if normalized in {"system", "default", "chooser", "android"}:
         return None
-    raise ValueError(
-        "browser must be one of: brave, chrome, system"
-    )
-
+    raise ValueError("browser must be one of: brave, chrome, system")
 
 
 def open_android_url(

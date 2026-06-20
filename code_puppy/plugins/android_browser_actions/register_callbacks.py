@@ -21,7 +21,6 @@ _FILL_TOOL = "android_browser_fill_input"
 _SCREENSHOT_TOOL = "android_browser_take_screenshot"
 
 
-
 def register_android_browser_click_link_by_text(agent: Any) -> None:
     @agent.tool
     async def android_browser_click_link_by_text(
@@ -47,7 +46,6 @@ def register_android_browser_click_link_by_text(agent: Any) -> None:
         )
 
 
-
 def register_android_browser_click_selector(agent: Any) -> None:
     @agent.tool
     async def android_browser_click_selector(
@@ -69,7 +67,6 @@ def register_android_browser_click_selector(agent: Any) -> None:
             local_port=local_port,
             wait_seconds=wait_seconds,
         )
-
 
 
 def register_android_browser_fill_input(agent: Any) -> None:
@@ -97,7 +94,6 @@ def register_android_browser_fill_input(agent: Any) -> None:
         )
 
 
-
 def register_android_browser_take_screenshot(agent: Any) -> None:
     @agent.tool
     async def android_browser_take_screenshot(
@@ -123,15 +119,22 @@ def register_android_browser_take_screenshot(agent: Any) -> None:
         )
 
 
-
 def register_tools_callback() -> list[dict[str, Any]]:
     return [
-        {"name": _CLICK_TEXT_TOOL, "register_func": register_android_browser_click_link_by_text},
-        {"name": _CLICK_SELECTOR_TOOL, "register_func": register_android_browser_click_selector},
+        {
+            "name": _CLICK_TEXT_TOOL,
+            "register_func": register_android_browser_click_link_by_text,
+        },
+        {
+            "name": _CLICK_SELECTOR_TOOL,
+            "register_func": register_android_browser_click_selector,
+        },
         {"name": _FILL_TOOL, "register_func": register_android_browser_fill_input},
-        {"name": _SCREENSHOT_TOOL, "register_func": register_android_browser_take_screenshot},
+        {
+            "name": _SCREENSHOT_TOOL,
+            "register_func": register_android_browser_take_screenshot,
+        },
     ]
-
 
 
 def _advertise_tools_to_agent(agent_name: str | None = None) -> list[str]:
