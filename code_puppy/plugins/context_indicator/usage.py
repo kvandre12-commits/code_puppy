@@ -253,9 +253,12 @@ def _live_mcp_servers_for(agent):
     try:
         from code_puppy.config import get_value
         from code_puppy.mcp_ import get_mcp_manager
+        from code_puppy.mcp_.optional import is_mcp_available
 
         mcp_disabled = get_value("disable_mcp_servers")
         if mcp_disabled and str(mcp_disabled).lower() in ("1", "true", "yes", "on"):
+            return None
+        if not is_mcp_available():
             return None
 
         agent_name = getattr(agent, "name", None)

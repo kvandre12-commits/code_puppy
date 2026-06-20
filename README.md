@@ -208,7 +208,15 @@ Code Puppy loads rules from multiple locations, combining them in order:
 
 ## Using MCP Servers for External Tools
 
-Use the `/mcp` command to manage MCP (list, start, stop, status, etc.)
+MCP support is optional. Install it with:
+
+```bash
+pip install "code-puppy[mcp]"
+# or
+uv pip install "code-puppy[mcp]"
+```
+
+Then use the `/mcp` command to manage MCP servers (list, start, stop, status, etc.)
 
 ## Round Robin Model Distribution
 

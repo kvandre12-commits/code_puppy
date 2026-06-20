@@ -31,8 +31,11 @@ def _block_imports(blocked_modules: set[str]):
     real_import = builtins.__import__
 
     def blocked_import(name, *args, **kwargs):
-        if name in blocked_modules:
-            raise ModuleNotFoundError(f"No module named '{name}'")
+        if any(
+            name == blocked_name or name.startswith(f"{blocked_name}.")
+            for blocked_name in blocked_modules
+        ):
+            raise ModuleNotFoundError(name=name)
         return real_import(name, *args, **kwargs)
 
     return patch("builtins.__import__", side_effect=blocked_import)
@@ -67,6 +70,85 @@ def test_model_factory_imports_without_optional_provider_sdks_until_used():
                 model_factory._load_openai_model_classes()
             with pytest.raises(RuntimeError, match="optional openai extra"):
                 model_factory.make_openai_provider("openai")
+    finally:
+        _restore_modules(originals, module_names)
+
+
+def test_mcp_modules_import_without_optional_mcp_until_used():
+    module_names = {
+        "code_puppy.command_line.command_handler",
+        "code_puppy.command_line.core_commands",
+        "code_puppy.command_line.agent_menu",
+        "code_puppy.command_line.mcp_binding_menu",
+        "code_puppy.agents",
+        "code_puppy.agents.agent_manager",
+        "code_puppy.agents.base_agent",
+        "code_puppy.agents._builder",
+        "code_puppy.agents._runtime",
+        "code_puppy.mcp_",
+        "code_puppy.mcp_.manager",
+        "code_puppy.mcp_.optional",
+        "mcp",
+        "mcp.shared",
+        "mcp.shared.exceptions",
+        "pydantic_ai.mcp",
+    }
+    originals = {name: sys.modules.get(name, _MISSING) for name in module_names}
+
+    try:
+        _unload_modules(module_names)
+        with _block_imports({"mcp", "pydantic_ai.mcp"}):
+            command_handler = importlib.import_module(
+                "code_puppy.command_line.command_handler"
+            )
+            builder = importlib.import_module("code_puppy.agents._builder")
+            runtime = importlib.import_module("code_puppy.agents._runtime")
+            mcp_package = importlib.import_module("code_puppy.mcp_")
+
+            assert command_handler is not None
+            assert runtime is not None
+            assert builder.load_mcp_servers(agent_name="code-puppy") == []
+            assert builder.reload_mcp_servers(agent_name="code-puppy") == []
+
+            with pytest.raises(RuntimeError, match="optional mcp extra"):
+                mcp_package.get_mcp_manager()
+    finally:
+        _restore_modules(originals, module_names)
+
+
+def test_mcp_command_warns_when_optional_mcp_extra_is_missing():
+    module_names = {
+        "code_puppy.command_line.core_commands",
+        "code_puppy.command_line.agent_menu",
+        "code_puppy.command_line.mcp_binding_menu",
+        "code_puppy.agents",
+        "code_puppy.agents.agent_manager",
+        "code_puppy.agents.base_agent",
+        "code_puppy.agents._builder",
+        "code_puppy.agents._runtime",
+        "code_puppy.mcp_",
+        "code_puppy.mcp_.manager",
+        "code_puppy.mcp_.optional",
+        "mcp",
+        "mcp.shared",
+        "mcp.shared.exceptions",
+        "pydantic_ai.mcp",
+    }
+    originals = {name: sys.modules.get(name, _MISSING) for name in module_names}
+
+    try:
+        _unload_modules(module_names)
+        with _block_imports({"mcp", "pydantic_ai.mcp"}):
+            core_commands = importlib.import_module(
+                "code_puppy.command_line.core_commands"
+            )
+            with patch(
+                "code_puppy.command_line.core_commands.emit_warning"
+            ) as mock_warn:
+                assert core_commands.handle_mcp_command("/mcp") is True
+
+        mock_warn.assert_called_once()
+        assert "optional mcp extra" in mock_warn.call_args[0][0]
     finally:
         _restore_modules(originals, module_names)
 

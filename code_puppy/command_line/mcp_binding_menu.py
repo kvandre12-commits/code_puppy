@@ -32,6 +32,7 @@ from code_puppy.mcp_.agent_bindings import (
     toggle_auto_start,
     toggle_binding,
 )
+from code_puppy.mcp_.optional import get_missing_mcp_message, is_mcp_available
 from code_puppy.messaging import emit_info, emit_warning
 from code_puppy.tools.command_runner import set_awaiting_user_input
 
@@ -144,6 +145,10 @@ async def interactive_mcp_binding_menu(agent_name: str) -> None:
     Returns when the user hits Enter / Q / Ctrl+C. Mutates the bindings file
     immediately on each toggle (no save/cancel split).
     """
+    if not is_mcp_available():
+        emit_warning(get_missing_mcp_message("Agent MCP bindings"))
+        return
+
     servers = _list_servers()
     if not servers:
         emit_info(

@@ -14,7 +14,8 @@ from code_puppy.command_line.model_picker_completion import (
 )
 from code_puppy.command_line.utils import make_directory_table
 from code_puppy.config import finalize_autosave_session
-from code_puppy.messaging import emit_error, emit_info
+from code_puppy.mcp_.optional import get_missing_mcp_message, is_mcp_available
+from code_puppy.messaging import emit_error, emit_info, emit_warning
 from code_puppy.tools.tools_content import tools_content
 
 
@@ -607,6 +608,10 @@ def handle_model_settings_command(command: str) -> bool:
 )
 def handle_mcp_command(command: str) -> bool:
     """Handle MCP server management."""
+    if not is_mcp_available():
+        emit_warning(get_missing_mcp_message("The /mcp command"))
+        return True
+
     from code_puppy.command_line.mcp import MCPCommandHandler
 
     handler = MCPCommandHandler()

@@ -25,7 +25,6 @@ from typing import Any, Callable, List, Optional, Sequence, Type, Union
 
 import httpcore
 import httpx
-import mcp
 from pydantic_ai import (
     BinaryContent,
     DocumentUrl,
@@ -34,6 +33,14 @@ from pydantic_ai import (
     UsageLimitExceeded,
     UsageLimits,
 )
+
+try:  # pragma: no cover - optional dependency
+    from mcp.shared.exceptions import McpError
+except ImportError:
+
+    class McpError(Exception):
+        """Fallback placeholder when the optional MCP extra isn't installed."""
+
 
 try:  # pragma: no cover - pydantic-ai version dependent
     from pydantic_ai.exceptions import ModelHTTPError
@@ -479,7 +486,7 @@ async def run_with_mcp(
                 "by saying 'please continue' or similar.",
                 group_id=group_id,
             )
-        except* mcp.shared.exceptions.McpError as mcp_error:
+        except* McpError as mcp_error:
             # Already announced once by blocking_startup.py with a /mcp logs
             # hint. Don't re-vomit the exception text — just give the user
             # a single short, actionable nudge.

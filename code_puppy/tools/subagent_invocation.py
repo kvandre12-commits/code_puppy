@@ -214,11 +214,16 @@ async def _invoke_agent_impl(
             from code_puppy.agents._builder import autostart_bound_servers_async
             from code_puppy.config import get_value
             from code_puppy.mcp_ import get_mcp_manager
+            from code_puppy.mcp_.optional import is_mcp_available
 
             mcp_servers = []
             mcp_disabled = get_value("disable_mcp_servers")
-            if not (
-                mcp_disabled and str(mcp_disabled).lower() in ("1", "true", "yes", "on")
+            if (
+                not (
+                    mcp_disabled
+                    and str(mcp_disabled).lower() in ("1", "true", "yes", "on")
+                )
+                and is_mcp_available()
             ):
                 manager = get_mcp_manager()
                 bound_agent_name = getattr(agent_config, "name", None)

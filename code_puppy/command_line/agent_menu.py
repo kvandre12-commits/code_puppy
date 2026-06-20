@@ -25,6 +25,7 @@ from code_puppy.agents import (
 )
 from code_puppy.command_line.mcp_binding_menu import interactive_mcp_binding_menu
 from code_puppy.mcp_.agent_bindings import get_bound_servers
+from code_puppy.mcp_.optional import get_missing_mcp_message, is_mcp_available
 from code_puppy.command_line.model_picker_completion import (
     ModelSelectionMenu,
     load_model_names,
@@ -673,7 +674,10 @@ async def interactive_agent_picker() -> Optional[str]:
             if pending_action[0] == "bind":
                 entry = get_current_entry()
                 if entry:
-                    await interactive_mcp_binding_menu(entry[0])
+                    if not is_mcp_available():
+                        emit_warning(get_missing_mcp_message("Agent MCP bindings"))
+                    else:
+                        await interactive_mcp_binding_menu(entry[0])
                 continue
 
             if pending_action[0] == "clone":
