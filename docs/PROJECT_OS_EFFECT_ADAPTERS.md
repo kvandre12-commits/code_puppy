@@ -219,6 +219,83 @@ Different adapters may touch different systems, but they do not get different
 governments. Android intents, browser actions, and tool calls are effect adapters
 behind the same authority substrate.
 
+## Runtime proof versus deployment proof
+
+Project OS is not the Android app.
+
+Current distinction:
+
+```text
+Project OS
+  status: proven Termux-loadable governed runtime
+  owns: governance, authority grants, leases, audit, effect adapter doctrine
+
+SharpEdge-Android
+  status: native Android source scaffold
+  owns: APK/presentation shell and future native operator UI
+
+SharpEdge APK
+  status: not built yet
+  owns: deployment proof once a repeatable build exists
+```
+
+The stack evolves inward-to-outward:
+
+```text
+Governance Layer
+  -> Capability Security Layer
+      -> Runtime Layer
+          -> Effect Adapter Layer
+              -> Android Packaging Layer
+```
+
+From the Project OS perspective, the important proof already achieved is:
+
+```text
+authority-check PASS
+  -> lease issued
+      -> lease consumed
+          -> reuse denied
+              -> audit written
+```
+
+That is a security model proof. An APK build is a deployment proof. Do not
+confuse them.
+
+Milestone map:
+
+```text
+Milestone 0: Governed Runtime Proven
+  status: COMPLETE
+
+Milestone 1: Effect Adapter Proven
+  examples: No-op, Android Intent, Browser Action, Tool Call
+  status: IN PROGRESS
+
+Milestone 2: Android Packaging Proven
+  examples: GitHub Actions, Gradle build, debug APK artifact
+  status: NOT STARTED
+
+Milestone 3: Native Operator Shell
+  examples: APK installs, connects to Project OS, displays audit trail,
+            displays leases, displays runs
+  status: NOT STARTED
+```
+
+The clean APK path is to let GitHub Actions build the native shell while Project
+OS remains the governed runtime substrate:
+
+```text
+SharpEdge-Android
+  -> GitHub Actions
+      -> debug.apk artifact
+          -> install on phone
+              -> presentation layer over Project OS runtime
+```
+
+Do not embed all governance/runtime logic directly into the Android app just to
+make an APK exist. The APK is the shell, not the theorem.
+
 ## Adapter implementation rule
 
 An adapter may:
