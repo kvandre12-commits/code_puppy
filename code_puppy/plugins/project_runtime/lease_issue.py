@@ -6,7 +6,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
-from . import authority_check, lease_store
+from . import authority_check, effect_specs, lease_store
 
 EXPIRY_MINUTES = 15
 
@@ -71,9 +71,10 @@ def issue_lease(
     *,
     confirm_lease_id: str,
     issued_at: str | None = None,
+    effect: str = effect_specs.DEFAULT_EFFECT,
 ) -> LeaseIssueResult:
     """Issue one lease only after authority-check passes and ID confirmation matches."""
-    check = authority_check.check_authority()
+    check = authority_check.check_authority(effect=effect)
     record = _record_from_check(check, issued_at) if check.run_id else {}
     expected = str(record.get("lease_id") or "")
     if not expected or confirm_lease_id != expected:

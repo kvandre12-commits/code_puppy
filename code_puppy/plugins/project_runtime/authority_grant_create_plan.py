@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from . import authority_grant_draft, authority_validator, store
+from . import authority_grant_draft, authority_validator, effect_specs, store
 
 EXPIRY_MINUTES = 15
 
@@ -133,9 +133,10 @@ def plan_grant_create(
     state: Mapping[str, Any] | None = None,
     *,
     issued_at: str | None = None,
+    effect: str = effect_specs.DEFAULT_EFFECT,
 ) -> AuthorityGrantCreatePlan:
     """Plan grant creation without creating, granting, leasing, or executing."""
-    draft = authority_grant_draft.draft_authority_grant(state)
+    draft = authority_grant_draft.draft_authority_grant(state, effect=effect)
     current_report = authority_validator.validate_authority(state)
     if not draft.validation_passed or not draft.run_id:
         reason = (

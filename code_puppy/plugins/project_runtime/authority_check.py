@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
 
-from . import authority_validator, lease_draft, store
+from . import authority_validator, effect_specs, lease_draft, store
 
 
 @dataclass(frozen=True, slots=True)
@@ -104,9 +104,13 @@ def _blockers(
     return tuple(blockers)
 
 
-def check_authority(state: Mapping[str, Any] | None = None) -> AuthorityCheck:
+def check_authority(
+    state: Mapping[str, Any] | None = None,
+    *,
+    effect: str = effect_specs.DEFAULT_EFFECT,
+) -> AuthorityCheck:
     """Check authority requirements without authorizing, leasing, or executing."""
-    draft = lease_draft.draft_lease(state)
+    draft = lease_draft.draft_lease(state, effect=effect)
     if not draft.validation_passed:
         return AuthorityCheck(
             validation_passed=False,
