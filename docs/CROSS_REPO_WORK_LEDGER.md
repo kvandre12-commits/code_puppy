@@ -1,11 +1,44 @@
 # Cross-Repo Work Ledger
 
-_Last updated: 2026-06-20_
+_Last updated: 2026-06-21_
 
 Purpose: stop rebuilding the same systems in the wrong repo.
 
 This ledger is the quick routing map for work that spans Code Puppy, DroidPuppy,
 SharpEdge, private repos, and generated artifacts.
+
+## Lineage and corrective framing
+
+The rough lineage matters because it explains why the stack can feel muddled if
+we do not write it down explicitly:
+
+1. **SharpEdge** is the identity/name thread and the oldest conceptual root.
+   The name comes from the first code the user wrote on GitHub, so it is not
+   just branding slapped on later.
+2. **DroidPuppy** is the Android agent overlay/capability line: phone-native
+   tools, device observability, browser/CDP, UI automation, support bundles,
+   and Android workflow experiments.
+3. **Project OS / governance** is the higher-order control problem: contracts,
+   authority, review boundaries, service orchestration, worker survivability,
+   journals, and recovery semantics.
+
+Corrective architecture sentence:
+
+```text
+Android is one brick of governance, not the whole building.
+```
+
+More concretely:
+
+```text
+SharpEdge = intent / identity / operator-facing direction
+Code Puppy = runtime and plugin substrate
+DroidPuppy = Android actuator and observation layer
+Project OS governance = authority, orchestration, review, journals, recovery
+```
+
+If work starts collapsing those layers into one blob, stop and route it through
+this ledger before writing more code.
 
 ## Default stance
 
@@ -51,6 +84,27 @@ Does not own:
 - Native SharpEdge app/UI product direction.
 - Private-repo-only implementations unless explicitly promoted here.
 
+## Active now / park for later
+
+### Active now
+
+- Cross-repo ownership clarity so we stop rebuilding the same systems.
+- Governance-first architecture: authority objects, review boundaries,
+  containment, and durable journals.
+- Android worker survivability: checkpointing, recovery, bounded background
+  execution, and operator-facing reconciliation.
+- Promoting real prototypes into the right source repo instead of letting them
+  rot in generated artifacts or memory.
+
+### Park for later
+
+- Rebuilding SharpEdge analytics/truth inside this checkout.
+- Treating browser automation or Android UI automation as the architecture.
+- Expanding Android polish/features before the governance and recovery seams are
+  boringly reliable.
+- Inventing a native product shell boundary before ownership with SharpEdge is
+  explicit.
+
 ## Known high-value work outside this checkout
 
 | Area | Likely owner | Notes |
@@ -83,6 +137,12 @@ What this means in practice:
 - After the breaker trips, the affected principal enters a short quarantine cooldown window; tracked tool calls are blocked before lease lookup so the system remembers that it just contained something sketchy.
 - The containment stack depends on a valid shared audit contract: the root authority gateway validates against `DroidPuppy/contracts/v2/eyes_audit_event.schema.json`, so schema correctness is operational, not cosmetic.
 - Full-repo Ruff sweep was brought back to green after the gateway/anomaly work, so the milestone is not just architectural poetry — it is validated source state.
+
+## Governance / stack mapping milestones
+
+| Date | Repo | Source | Milestone |
+| --- | --- | --- | --- |
+| 2026-06-20 | Code Puppy | `docs/AGENT_STACK_GOVERNANCE.md` + `docs/agent_stack_inventory.json` | Promoted a repo-local governance doctrine and machine-readable stack map covering layers, authority rules, repo boundaries, and imported SharpEdge operator semantics. |
 
 ## Current promoted prototypes
 

@@ -63,6 +63,8 @@ SharpEdge decides **what** should happen.
 
 DroidPuppy helps with **how Android actions/observations can be performed**.
 
+Android is one governed execution surface, not the whole stack.
+
 SharpEdge-Android owns the primary viewer. DroidPuppy/Brave/CDP is optional debug
 or execution tooling, not the foundation for rendering the Trade Gate.
 
@@ -96,11 +98,12 @@ provider suites.
 Read first:
 
 1. `OWNERSHIP.md`
-2. `docs/REPO_INVENTORY.md`
-3. `docs/CROSS_REPO_WORK_LEDGER.md` before rebuilding familiar systems
-4. `DroidPuppy/README.md` if touching Android tooling
-5. `DroidPuppy/contracts/README.md` if touching orchestration contracts
-6. `code_puppy/callbacks.py` only if touching plugin hooks
+2. `docs/AGENT_STACK_GOVERNANCE.md`
+3. `docs/REPO_INVENTORY.md`
+4. `docs/CROSS_REPO_WORK_LEDGER.md` before rebuilding familiar systems
+5. `DroidPuppy/README.md` if touching Android tooling
+6. `DroidPuppy/contracts/README.md` if touching orchestration contracts
+7. `code_puppy/callbacks.py` only if touching plugin hooks
 
 Then work only inside Code Puppy/DroidPuppy infrastructure unless the task
 explicitly points to a SharpEdge repo.
