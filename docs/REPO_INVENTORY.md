@@ -136,12 +136,13 @@ At inventory time:
 If you are tired and need the shortest path back into the system, start here:
 
 1. `README.md` — Code Puppy core overview
-2. `DroidPuppy/README.md` — what the Android layer is
-3. `DroidPuppy/docs/PLUGIN_REFERENCE.md` — full Android plugin/tool index
-4. `DroidPuppy/docs/PLUGIN_OVERVIEW.md` — plugin families at a glance
-5. `DroidPuppy/docs/ORCHESTRA_AGENT.md` — the architecture constitution
-6. `DroidPuppy/contracts/README.md` — contract model and boundaries
-7. `docs/robinhood_mcp_config_only_proof.md` — current Robinhood path in this repo
+2. `docs/AGENT_STACK_GOVERNANCE.md` — current stack layers, authority rules, repo boundaries
+3. `DroidPuppy/README.md` — what the Android layer is
+4. `DroidPuppy/docs/PLUGIN_REFERENCE.md` — full Android plugin/tool index
+5. `DroidPuppy/docs/PLUGIN_OVERVIEW.md` — plugin families at a glance
+6. `DroidPuppy/docs/ORCHESTRA_AGENT.md` — the architecture constitution
+7. `DroidPuppy/contracts/README.md` — contract model and boundaries
+8. `docs/robinhood_mcp_config_only_proof.md` — current Robinhood path in this repo
 
 ## Plain-English identity
 

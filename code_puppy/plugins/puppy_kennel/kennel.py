@@ -14,12 +14,12 @@ import json
 import sqlite3
 from contextlib import contextmanager
 from dataclasses import dataclass
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterator
 
 from .config import DB_PATH, MAX_DRAWER_CHARS, KENNEL_ROOT
 from .schema import PRAGMAS, SCHEMA_SQL
+from .time_utils import now_iso
 
 
 @dataclass(slots=True, frozen=True)
@@ -35,8 +35,39 @@ class Drawer:
     metadata: dict[str, Any] | None
 
 
-def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+@dataclass(slots=True, frozen=True)
+class WingInventory:
+    """Inventory rollup for one wing."""
+
+    name: str
+    drawer_count: int
+    room_count: int
+    latest_ts: str | None
+
+
+@dataclass(slots=True, frozen=True)
+class RoomInventory:
+    """Inventory rollup for one room."""
+
+    wing_name: str
+    room_name: str
+    drawer_count: int
+    latest_ts: str | None
+
+
+@dataclass(slots=True, frozen=True)
+class DrawerContext:
+    """Drawer plus its resolved wing/room names for audit workflows."""
+
+    id: int
+    room_id: int
+    wing_name: str
+    room_name: str
+    role: str | None
+    content: str
+    ts: str
+    session_id: str | None
+    metadata: dict[str, Any] | None
 
 
 def _ensure_root() -> None:
@@ -85,7 +116,7 @@ def ensure_wing(name: str, metadata: dict[str, Any] | None = None) -> int:
     with _connect() as conn:
         conn.execute(
             "INSERT OR IGNORE INTO wings(name, created_at, metadata) VALUES (?, ?, ?)",
-            (name, _now_iso(), payload),
+            (name, now_iso(), payload),
         )
         row = conn.execute("SELECT id FROM wings WHERE name = ?", (name,)).fetchone()
         return int(row["id"])
@@ -101,7 +132,7 @@ def ensure_room(wing_id: int, name: str, metadata: dict[str, Any] | None = None)
         conn.execute(
             "INSERT OR IGNORE INTO rooms(wing_id, name, created_at, metadata) "
             "VALUES (?, ?, ?, ?)",
-            (wing_id, name, _now_iso(), payload),
+            (wing_id, name, now_iso(), payload),
         )
         row = conn.execute(
             "SELECT id FROM rooms WHERE wing_id = ? AND name = ?",
@@ -132,7 +163,7 @@ def add_drawer(
         cur = conn.execute(
             "INSERT INTO drawers(room_id, role, content, ts, session_id, metadata) "
             "VALUES (?, ?, ?, ?, ?, ?)",
-            (room_id, role, content, _now_iso(), session_id, payload),
+            (room_id, role, content, now_iso(), session_id, payload),
         )
         return int(cur.lastrowid)
 
@@ -356,6 +387,57 @@ def list_wings() -> list[str]:
     return [r["name"] for r in rows]
 
 
+def drawers_with_context(
+    wing_names: list[str] | None = None,
+    room_names: list[str] | None = None,
+    role: str | None = None,
+    limit: int | None = None,
+) -> list[DrawerContext]:
+    """Return drawers joined with wing/room names for audit-style reads."""
+    sql = [
+        "SELECT d.*, w.name AS wing_name, r.name AS room_name FROM drawers d",
+        "JOIN rooms r ON r.id = d.room_id",
+        "JOIN wings w ON w.id = r.wing_id",
+    ]
+    clauses: list[str] = []
+    params: list[Any] = []
+    if wing_names:
+        placeholders = ",".join("?" * len(wing_names))
+        clauses.append(f"w.name IN ({placeholders})")
+        params.extend(wing_names)
+    if room_names:
+        placeholders = ",".join("?" * len(room_names))
+        clauses.append(f"r.name IN ({placeholders})")
+        params.extend(room_names)
+    if role is not None:
+        clauses.append("d.role = ?")
+        params.append(role)
+    if clauses:
+        sql.append("WHERE " + " AND ".join(clauses))
+    sql.append("ORDER BY d.ts DESC, d.id DESC")
+    if limit is not None:
+        sql.append("LIMIT ?")
+        params.append(max(1, int(limit)))
+
+    with _connect() as conn:
+        rows = conn.execute(" ".join(sql), params).fetchall()
+
+    return [
+        DrawerContext(
+            id=int(row["id"]),
+            room_id=int(row["room_id"]),
+            wing_name=row["wing_name"],
+            room_name=row["room_name"],
+            role=row["role"],
+            content=row["content"],
+            ts=row["ts"],
+            session_id=row["session_id"],
+            metadata=json.loads(row["metadata"]) if row["metadata"] else None,
+        )
+        for row in rows
+    ]
+
+
 def count_drawers(wing_name: str | None = None) -> int:
     with _connect() as conn:
         if wing_name is None:
@@ -371,3 +453,88 @@ def count_drawers(wing_name: str | None = None) -> int:
                 (wing_name,),
             ).fetchone()
     return int(row["n"]) if row else 0
+
+
+def count_rooms(wing_names: list[str] | None = None) -> int:
+    sql = [
+        "SELECT COUNT(*) AS n FROM rooms r",
+        "JOIN wings w ON w.id = r.wing_id",
+    ]
+    params: list[Any] = []
+    if wing_names:
+        placeholders = ",".join("?" * len(wing_names))
+        sql.append(f"WHERE w.name IN ({placeholders})")
+        params.extend(wing_names)
+    with _connect() as conn:
+        row = conn.execute(" ".join(sql), params).fetchone()
+    return int(row["n"]) if row else 0
+
+
+def inventory_rollup(
+    wing_names: list[str] | None = None,
+    limit_wings: int = 10,
+    limit_rooms: int = 10,
+) -> tuple[list[WingInventory], list[RoomInventory]]:
+    wing_sql = [
+        "SELECT w.name AS name, COUNT(d.id) AS drawer_count,",
+        "COUNT(DISTINCT r.id) AS room_count, MAX(d.ts) AS latest_ts",
+        "FROM wings w",
+        "LEFT JOIN rooms r ON r.wing_id = w.id",
+        "LEFT JOIN drawers d ON d.room_id = r.id",
+    ]
+    room_sql = [
+        "SELECT w.name AS wing_name, r.name AS room_name,",
+        "COUNT(d.id) AS drawer_count, MAX(d.ts) AS latest_ts",
+        "FROM rooms r",
+        "JOIN wings w ON w.id = r.wing_id",
+        "LEFT JOIN drawers d ON d.room_id = r.id",
+    ]
+    params: list[Any] = []
+    room_params: list[Any] = []
+    if wing_names:
+        placeholders = ",".join("?" * len(wing_names))
+        clause = f"WHERE w.name IN ({placeholders})"
+        wing_sql.append(clause)
+        room_sql.append(clause)
+        params.extend(wing_names)
+        room_params.extend(wing_names)
+    wing_sql.extend(
+        [
+            "GROUP BY w.id, w.name",
+            "ORDER BY drawer_count DESC, latest_ts DESC, w.name ASC LIMIT ?",
+        ]
+    )
+    room_sql.extend(
+        [
+            "GROUP BY r.id, w.name, r.name",
+            "HAVING COUNT(d.id) > 0",
+            "ORDER BY drawer_count DESC, latest_ts DESC, w.name ASC, r.name ASC LIMIT ?",
+        ]
+    )
+    params.append(max(1, limit_wings))
+    room_params.append(max(1, limit_rooms))
+
+    with _connect() as conn:
+        wing_rows = conn.execute(" ".join(wing_sql), params).fetchall()
+        room_rows = conn.execute(" ".join(room_sql), room_params).fetchall()
+
+    return (
+        [
+            WingInventory(
+                name=row["name"],
+                drawer_count=int(row["drawer_count"]),
+                room_count=int(row["room_count"]),
+                latest_ts=row["latest_ts"],
+            )
+            for row in wing_rows
+        ],
+        [
+            RoomInventory(
+                wing_name=row["wing_name"],
+                room_name=row["room_name"],
+                drawer_count=int(row["drawer_count"]),
+                latest_ts=row["latest_ts"],
+            )
+            for row in room_rows
+        ],
+    )

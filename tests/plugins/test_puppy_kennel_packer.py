@@ -293,3 +293,183 @@ def test_drawer_with_embedded_newlines_renders_one_line(kennel_root: Path) -> No
     ]
     assert bullet_lines, "expected the drawer to render as a single bullet line"
     assert "Line two" in bullet_lines[0]
+
+
+def test_recent_context_skips_assistant_recap_of_sticky_decisions(
+    kennel_root: Path,
+) -> None:
+    from code_puppy.plugins.puppy_kennel import kennel, packer, recorder
+    from code_puppy.plugins.puppy_kennel.wings import repo_wing
+
+    repo = repo_wing()
+    kennel.write_note(
+        wing_name=repo,
+        room_name="decisions",
+        content=(
+            "What: Transcript-only context was insufficient for reliable operator workflows.\n"
+            "Why: Durable state kept getting buried in transcript residue.\n"
+            "Follow-up: Prefer packet-backed context."
+        ),
+        role="note",
+    )
+    kennel.write_note(
+        wing_name=repo,
+        room_name="decisions",
+        content=(
+            "What: approval_decision is the authority boundary for risky actions.\n"
+            "Why: Plans and journals must not silently become permission.\n"
+            "Follow-up: Keep approval explicit and persisted."
+        ),
+        role="note",
+    )
+    recorder.record_run_end(
+        agent_name="code-puppy",
+        model_name="m",
+        success=True,
+        response_text=_long(
+            "Done - backfilled decision notes for transcript-only context was insufficient for reliable operator workflows and approval_decision is the authority boundary for risky actions. Saved drawers and moved on. ",
+            260,
+        ),
+    )
+    recorder.record_run_end(
+        agent_name="code-puppy",
+        model_name="m",
+        success=True,
+        response_text=_long(
+            "Fresh unrelated context: the next task is to compare recall dedupe behavior against doctrine-gap findings ",
+            220,
+        ),
+    )
+
+    block = packer.pack()
+    assert block is not None
+    assert "Project Decisions" in block
+    assert "Transcript-only context was insufficient" in block
+    assert "approval_decision is the authority boundary" in block
+    assert "Fresh unrelated context" in block
+    assert "Done - backfilled decision notes" not in block
+
+
+def test_recent_context_skips_paraphrased_decision_recap(
+    kennel_root: Path,
+) -> None:
+    from code_puppy.plugins.puppy_kennel import kennel, packer, recorder
+    from code_puppy.plugins.puppy_kennel.wings import repo_wing
+
+    repo = repo_wing()
+    kennel.write_note(
+        wing_name=repo,
+        room_name="decisions",
+        content=(
+            "What: Canonical packet/object context won over transcript-only session slices for operator workflows.\n"
+            "Why: Transcript context is too lossy and too implicit for downstream agents.\n"
+            "Follow-up: Capture durable state in packet/object form."
+        ),
+        role="note",
+    )
+    kennel.write_note(
+        wing_name=repo,
+        room_name="decisions",
+        content=(
+            "What: Explicit approval_decision won over implicit approval encoded in transcript, plan text, or journal narration.\n"
+            "Why: Human authority must remain inspectable, replayable, and auditable.\n"
+            "Follow-up: Keep approval explicit for risky actions."
+        ),
+        role="note",
+    )
+    recorder.record_run_end(
+        agent_name="code-puppy",
+        model_name="m",
+        success=True,
+        response_text=_long(
+            "We backfilled the packet-first workflow context doctrine and the risky-actions authority boundary so transcript vibes and planner permission no longer pretend to be durable approval. ",
+            260,
+        ),
+    )
+    recorder.record_run_end(
+        agent_name="code-puppy",
+        model_name="m",
+        success=True,
+        response_text=_long(
+            "Unrelated fresh context: compare older repo-wing doctrine coverage against current checkpoint adoption rates ",
+            220,
+        ),
+    )
+
+    block = packer.pack()
+    assert block is not None
+    assert "Canonical packet/object context won over transcript-only" in block
+    assert "Explicit approval_decision won over implicit approval" in block
+    assert "Unrelated fresh context" in block
+    assert "packet-first workflow context doctrine" not in block
+
+
+def test_debug_assistant_echo_explains_drop_reasons(
+    kennel_root: Path,
+) -> None:
+    from code_puppy.plugins.puppy_kennel import kennel, packer, recorder
+    from code_puppy.plugins.puppy_kennel.wings import repo_wing
+
+    repo = repo_wing()
+    kennel.write_note(
+        wing_name=repo,
+        room_name="decisions",
+        content=(
+            "What: Canonical packet/object context won over transcript-only session slices for operator workflows.\n"
+            "Why: Transcript context is too lossy and too implicit for downstream agents.\n"
+            "Follow-up: Capture durable state in packet/object form."
+        ),
+        role="note",
+    )
+    kennel.write_note(
+        wing_name=repo,
+        room_name="decisions",
+        content=(
+            "What: Explicit approval_decision won over implicit approval encoded in transcript, plan text, or journal narration.\n"
+            "Why: Human authority must remain inspectable, replayable, and auditable.\n"
+            "Follow-up: Keep approval explicit for risky actions."
+        ),
+        role="note",
+    )
+    recorder.record_run_end(
+        agent_name="code-puppy",
+        model_name="m",
+        success=True,
+        response_text=_long(
+            "We backfilled the packet-first workflow context doctrine and the risky-actions authority boundary so transcript vibes and planner permission no longer pretend to be durable approval. ",
+            260,
+        ),
+    )
+    recorder.record_run_end(
+        agent_name="code-puppy",
+        model_name="m",
+        success=True,
+        response_text=_long(
+            "Fresh unrelated context: compare older repo-wing doctrine coverage against current checkpoint adoption rates ",
+            220,
+        ),
+    )
+
+    debug_rows = packer.debug_assistant_echo()
+
+    dropped = next(
+        row
+        for row in debug_rows
+        if "packet-first workflow context doctrine" in str(row["preview"])
+    )
+    kept = next(
+        row for row in debug_rows if "Fresh unrelated context" in str(row["preview"])
+    )
+
+    assert dropped["dropped"] is True
+    assert dropped["reason"] == "recap-marker-overlap"
+    assert int(dropped["exact_overlap_count"]) == 0
+    assert int(dropped["token_overlap_count"]) >= 1
+    assert int(dropped["overlap_count"]) >= 1
+    assert dropped["has_recap_marker"] is True
+    assert "transcript" in dropped["matched_tokens"]
+    assert dropped["matched_anchors"]
+
+    assert kept["dropped"] is False
+    assert kept["reason"] == "kept"
+    assert int(kept["overlap_count"]) == 0

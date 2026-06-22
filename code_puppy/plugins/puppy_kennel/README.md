@@ -91,15 +91,20 @@ heuristic — accurate to ±20%, zero deps.
 
 **Phase 2 — active tooling:**
 
-Five agent-callable tools registered via ``register_tools``:
+Agent-callable tools registered via ``register_tools``:
 
 | Tool | Purpose |
 |---|---|
 | `kennel_recall(query, wing?, top_k=5, scope=?)` | BM25 search across wings, deduplicated. |
 | `kennel_remember(content, wing="repo", room="notes")` | Explicit verbatim write to a chosen wing. |
+| `kennel_capture_decision(what, why, evidence?, outcome?, follow_up?, who?, when?, wing="repo", room="decisions")` | Structured checkpoint write for who/what/when/why moments. |
 | `kennel_recent(wing?, top_k=5, scope=?)` | Time-ordered drawer browsing (no query needed). |
+| `kennel_recent_hinges(wing?, top_k=10, scope=?)` | Newest durable hinge-point captures. |
+| `kennel_decisions_missing_follow_up(wing?, top_k=10, scope=?)` | Decision captures with no explicit next-step trail. |
+| `kennel_doctrine_gaps(wing?, top_k=10, scope="all", min_session_drawers=3)` | Session-heavy wings whose doctrine capture is lagging. |
 | `kennel_list_wings()` | Discover all wings + drawer counts. |
 | `kennel_stats()` | Kennel-wide totals + on-disk size. |
+| `kennel_inventory(wing?, scope="all", max_wings=10, max_rooms=10)` | Wing/room growth summary for governance. |
 
 Wing shortcuts accepted by every tool: ``"repo"`` (current project,
 default for writes), ``"agent"`` (this agent's diary), ``"user"``
@@ -117,6 +122,9 @@ Plus a **`/kennel`** slash command suite for humans:
 | `/kennel search <q>` | BM25 search across default scope |
 | `/kennel wings` | list wings + drawer counts |
 | `/kennel stats` | DB size, totals, current enabled state |
+| `/kennel inventory` | top wings/rooms by memory growth |
+| `/kennel audit [scope] [n]` | run recent-hinges / missing-follow-up / doctrine-gap audit |
+| `/kennel checkpoint <what> \|\| <why> [\|\| follow-up: <next>] ...` | friendly structured hinge capture path |
 | `/kennel status` | is memory currently on or off? |
 | `/kennel enable` (or `on`) | turn memory on at runtime |
 | `/kennel disable` (or `off`) | turn memory off at runtime (drawers preserved) |
@@ -172,6 +180,31 @@ front end can read or write the same value.
 
 ## How tools reach the agent
 
+### Capture habit that actually works
+
+The failure mode is predictable: the strongest insight happens in the middle of
+work, then only the first and last turns survive in human memory. The kennel is
+best when it captures **decision checkpoints** at the moment a seam becomes
+clear, not only at the final wrap-up.
+
+Good durable shapes:
+- `room="decisions"` for why-we-chose-X
+- `room="notes"` for useful but lower-stakes facts
+- `room="preferences"` only for true cross-repo user preferences
+
+If you know the future session will need the who/what/when/why, prefer
+`kennel_capture_decision(...)` over a free-form note. Structure beats vibes.
+
+Human-friendly version for the same habit:
+- `/kennel checkpoint <what> || <why>`
+- optional labeled tails:
+  - `|| follow-up: <next>`
+  - `|| evidence: <proof>`
+  - `|| outcome: <result>`
+  - `|| who: <actor>`
+  - `|| wing: repo|agent|user|...`
+  - `|| room: decisions|notes|...`
+
 Code Puppy agents expose a hardcoded ``get_available_tools()`` list. To get
 plugin tools onto that list without editing every agent, this plugin uses
 the ``register_agent_tools`` hook — a small piece of core architecture
@@ -179,7 +212,7 @@ added alongside this plugin specifically to avoid that pattern.
 
 ``register_tools`` defines tools and drops them into ``TOOL_REGISTRY``;
 ``register_agent_tools`` says *which* tools to advertise to *which* agent.
-The puppy_kennel plugin always returns all five tool names regardless of
+The puppy_kennel plugin always returns all kennel tool names regardless of
 agent — memory is universally useful. Other plugins can scope per-agent by
 branching on the ``agent_name`` argument.
 

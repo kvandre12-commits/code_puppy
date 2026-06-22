@@ -43,12 +43,85 @@ _FETCH_LIMIT = 50
 # drawer with. Avoids "...truncated]" being most of the rendered line.
 _MIN_REMAINING_CHARS = 120
 
+# Assistant recaps about durable notes are often the first thing to become
+# prompt-budget confetti. If a recent assistant drawer is mostly narrating
+# decisions that already exist as sticky notes, prefer the note and skip the
+# recap.
+_DECISION_RECAP_MARKERS = (
+    "backfilled",
+    "saved drawers",
+    "checkpoint saved",
+    "decision note",
+    "decision notes",
+    "project decisions",
+    "repo `decisions` notes",
+)
+
+_COMMON_TOKENS = {
+    "about",
+    "after",
+    "against",
+    "because",
+    "before",
+    "being",
+    "could",
+    "decision",
+    "decisions",
+    "explicit",
+    "follow",
+    "from",
+    "have",
+    "into",
+    "notes",
+    "operator",
+    "other",
+    "over",
+    "project",
+    "reliable",
+    "saved",
+    "should",
+    "state",
+    "still",
+    "that",
+    "their",
+    "there",
+    "these",
+    "this",
+    "through",
+    "workflow",
+    "workflows",
+}
+
+_TOKEN_STRIP = "`'\".,:;!?()[]{}<>/\\|-_"
+_TOKEN_BREAK_TABLE = str.maketrans({sep: " " for sep in "/\\|-_"})
+_MIN_SIGNAL_TOKENS = 3
+
 
 @dataclass(slots=True)
 class PackSection:
     title: str
     lines: list[str]
     used_chars: int
+
+
+@dataclass(slots=True, frozen=True)
+class EchoAnchor:
+    summary: str
+    normalized: str
+    tokens: frozenset[str]
+
+
+@dataclass(slots=True)
+class EchoDecision:
+    drawer: Drawer
+    dropped: bool
+    reason: str
+    exact_overlap_count: int
+    token_overlap_count: int
+    overlap_count: int
+    has_recap_marker: bool
+    matched_anchors: list[str]
+    matched_tokens: list[str]
 
 
 def _agent_label(d: Drawer) -> str:
@@ -71,6 +144,159 @@ def _format_drawer(d: Drawer, max_chars: int) -> str:
     if len(body) > body_budget:
         body = body[: body_budget - 1].rstrip() + "..."
     return head + body
+
+
+def _normalize_for_match(text: str) -> str:
+    """Cheap normalization for overlap checks without pulling in regex."""
+    return " ".join(text.lower().split())
+
+
+def _decision_anchor(drawer: Drawer) -> str:
+    """Extract a short anchor phrase that represents a sticky decision."""
+    for line in drawer.content.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("What:"):
+            return stripped[len("What:") :].strip()[:140]
+    for line in drawer.content.splitlines():
+        stripped = line.strip()
+        if stripped:
+            return stripped[:140]
+    return ""
+
+
+def _content_tokens(text: str) -> set[str]:
+    """Return a small set of meaningful tokens for fuzzy overlap checks."""
+    normalized = _normalize_for_match(text).translate(_TOKEN_BREAK_TABLE)
+    tokens: set[str] = set()
+    for raw in normalized.split():
+        token = raw.strip(_TOKEN_STRIP)
+        if len(token) < 5:
+            continue
+        if token in _COMMON_TOKENS:
+            continue
+        tokens.add(token)
+    return tokens
+
+
+def _build_echo_anchors(sticky_notes: list[Drawer]) -> list[EchoAnchor]:
+    """Compile sticky notes into compact overlap anchors."""
+    anchors: list[EchoAnchor] = []
+    for note in sticky_notes:
+        summary = _decision_anchor(note)
+        if len(summary) < 24:
+            continue
+        anchors.append(
+            EchoAnchor(
+                summary=summary,
+                normalized=_normalize_for_match(summary),
+                tokens=frozenset(_content_tokens(summary)),
+            )
+        )
+    return anchors
+
+
+def _inspect_assistant_echo(
+    drawers: list[Drawer], sticky_notes: list[Drawer]
+) -> list[EchoDecision]:
+    """Return per-drawer echo decisions for filtering and debugging."""
+    anchors = _build_echo_anchors(sticky_notes)
+    if not anchors:
+        return [
+            EchoDecision(
+                drawer=drawer,
+                dropped=False,
+                reason="kept-no-anchors",
+                exact_overlap_count=0,
+                token_overlap_count=0,
+                overlap_count=0,
+                has_recap_marker=False,
+                matched_anchors=[],
+                matched_tokens=[],
+            )
+            for drawer in drawers
+        ]
+
+    decisions: list[EchoDecision] = []
+    for drawer in drawers:
+        normalized = _normalize_for_match(drawer.content)
+        drawer_tokens = _content_tokens(drawer.content)
+        exact_overlap_count = 0
+        token_overlap_count = 0
+        matched_anchors: list[str] = []
+        matched_tokens: set[str] = set()
+        for anchor in anchors:
+            if anchor.normalized in normalized:
+                exact_overlap_count += 1
+                matched_anchors.append(anchor.summary)
+                continue
+            overlap_tokens = drawer_tokens & anchor.tokens
+            if len(overlap_tokens) >= _MIN_SIGNAL_TOKENS:
+                token_overlap_count += 1
+                matched_anchors.append(anchor.summary)
+                matched_tokens.update(overlap_tokens)
+        overlap_count = exact_overlap_count + token_overlap_count
+        has_recap_marker = any(
+            marker in normalized for marker in _DECISION_RECAP_MARKERS
+        )
+        reason = "kept"
+        if overlap_count >= 2:
+            reason = "overlaps-multiple-decisions"
+        elif has_recap_marker and overlap_count >= 1:
+            reason = "recap-marker-overlap"
+        decisions.append(
+            EchoDecision(
+                drawer=drawer,
+                dropped=reason != "kept",
+                reason=reason,
+                exact_overlap_count=exact_overlap_count,
+                token_overlap_count=token_overlap_count,
+                overlap_count=overlap_count,
+                has_recap_marker=has_recap_marker,
+                matched_anchors=matched_anchors,
+                matched_tokens=sorted(matched_tokens),
+            )
+        )
+    return decisions
+
+
+def _filter_assistant_echo(
+    drawers: list[Drawer], sticky_notes: list[Drawer]
+) -> list[Drawer]:
+    """Skip assistant recap drawers that merely echo sticky decision notes."""
+    return [
+        decision.drawer
+        for decision in _inspect_assistant_echo(drawers, sticky_notes)
+        if not decision.dropped
+    ]
+
+
+def debug_assistant_echo(cwd_override: str | None = None) -> list[dict[str, object]]:
+    """Return human-inspectable reasons for assistant echo filtering."""
+    cwd = cwd_override if cwd_override is not None else detect_cwd()
+    repo_w = repo_wing(cwd)
+    sticky = kennel.recent_drawers(repo_w, limit=_FETCH_LIMIT, role="note")
+    assistant = kennel.recent_drawers(repo_w, limit=_FETCH_LIMIT, role="assistant")
+
+    debug_rows: list[dict[str, object]] = []
+    for decision in _inspect_assistant_echo(assistant, sticky):
+        preview = decision.drawer.content.strip().replace("\n", " ")[:160]
+        debug_rows.append(
+            {
+                "drawer_id": decision.drawer.id,
+                "agent": _agent_label(decision.drawer),
+                "ts": decision.drawer.ts,
+                "dropped": decision.dropped,
+                "reason": decision.reason,
+                "exact_overlap_count": decision.exact_overlap_count,
+                "token_overlap_count": decision.token_overlap_count,
+                "overlap_count": decision.overlap_count,
+                "has_recap_marker": decision.has_recap_marker,
+                "matched_anchors": decision.matched_anchors,
+                "matched_tokens": decision.matched_tokens,
+                "preview": preview,
+            }
+        )
+    return debug_rows
 
 
 def _pack_class(
@@ -128,6 +354,7 @@ def pack(cwd_override: str | None = None) -> str | None:
     # P2 - recent assistant responses fill whatever budget remains.
     p2_budget = total_budget - p0.used_chars - p1.used_chars
     assistant = kennel.recent_drawers(repo_w, limit=_FETCH_LIMIT, role="assistant")
+    assistant = _filter_assistant_echo(assistant, sticky)
     p2 = _pack_class(assistant, max(0, p2_budget))
     p2.title = "Recent Context"
 

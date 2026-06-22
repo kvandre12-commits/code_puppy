@@ -167,11 +167,36 @@ This checkout now ships project JSON agents mirroring that doctrine:
 
 - `workflow-state`
 - `execution-plan`
+- `lease-request`
 - `approval-decision`
+- `workflow-commit`
+- `lease-audit`
 - `journal-audit`
 - `governance-orchestrator`
 
-`governance-orchestrator` exists to run the chain explicitly instead of letting one giant agent answer blur facts, plans, authority, and audit together.
+`governance-orchestrator` exists to run the chain explicitly instead of letting one giant agent answer blur facts, plans, lease needs, authority, commit, and audit together.
+
+These agents now bind to the DroidPuppy canonical context packet:
+- `workflow-state` reads the packet and writes only `workflow_state`
+- `execution-plan` reads the packet and writes only `execution_plan`
+- `lease-request` reads the packet plus authority posture and writes the lease-shaped prerequisite back into `execution_plan`
+- `approval-decision` reads the packet and writes only `approval_decision`
+- `workflow-commit` reads the packet and writes only the governed commit receipt
+- `lease-audit` reads the packet plus authority-gateway telemetry and appends/writes journal reconciliation about lease reality
+- `journal-audit` reads the packet and appends/writes only journal state
+- `governance-orchestrator` initializes/reads the packet, captures handshake intent, and tells the chain to use it
+
+That keeps transcript context advisory while the typed packet becomes the durable workflow governor.
+
+Operator shortcut:
+- `/workflow-commit [optional request text]` is an orchestrated prompt wrapper, not a raw authority object and not the low-level commit tool itself. It forwards a structured prompt that tells a governance-capable agent to capture/refresh the handshake, reconcile the canonical packet, and create a governed workflow commit receipt when appropriate.
+- `/wcommit [optional request text]` is the short alias. Example: `/wcommit to discord`
+
+Portable repo setup:
+- `droidpuppy_context_install_repo_governance(target_root="/path/to/repo")` scaffolds this same `.code_puppy/agents/` governance stack into another repo.
+- That keeps the handoff steps boring and repeatable instead of making every repo reinvent the same haunted governance blob.
+- After install, the target repo can use the same `/workflow-commit` / `/wcommit` entrypoint and the same authority rule: `approval_decision` is the only permission object.
+- The portable stack now also includes dedicated lease shaping and lease auditing agents so every repo can ask for narrow authority and inspect live gateway reality with the same boring structure.
 
 ## Broker / Robinhood routing rule
 
@@ -260,11 +285,13 @@ Source:
 Responsibilities:
 - durable repo/user/agent notes
 - recall, recent history, wing listing, stats, inventory
+- structured decision checkpoints for who/what/when/why capture
 - cross-session continuity
 
 Governance rule:
 - memory is context, not authority
 - write durable facts/decisions, not speculative noise
+- capture hinge-point decisions when they become clear, not only at end-of-session
 
 ### Broker delegation seam
 

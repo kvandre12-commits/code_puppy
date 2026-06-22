@@ -7,6 +7,12 @@ Full tool surface:
 * ``kennel_recent``     — recent drawers without a query (timeline view)
 * ``kennel_list_wings`` — discover wings + drawer counts
 * ``kennel_stats``      — kennel-wide totals + on-disk size
+* ``kennel_inventory``  — wing/room inventory for governance
+* ``kennel_debug_echo`` — inspect why recent assistant drawers were kept/dropped
+* ``kennel_capture_decision`` — structured who/what/when/why checkpoint write
+* ``kennel_recent_hinges`` — newest durable hinge-point captures
+* ``kennel_decisions_missing_follow_up`` — decisions without explicit next-step trail
+* ``kennel_doctrine_gaps`` — session-heavy wings with thin doctrine capture
 
 All tools share a single ``register_tools_callback`` plugin entrypoint.
 """
@@ -19,15 +25,22 @@ from pydantic import BaseModel, Field
 from pydantic_ai import RunContext
 
 from . import kennel
+from .audit import (
+    register_kennel_decisions_missing_follow_up,
+    register_kennel_doctrine_gaps,
+    register_kennel_recent_hinges,
+)
+from .capture import register_kennel_capture_decision
+from .echo_debug import register_kennel_debug_echo
 from .config import DB_PATH
 from .state import DISABLED_TOOL_ERROR, is_enabled
-from .wings import (
-    USER_WING,
-    agent_wing,
-    default_recall_scope,
-    detect_cwd,
-    repo_wing,
+from .tool_helpers import (
+    agent_name_from_context,
+    coerce_bounded_int,
+    resolve_scope,
+    resolve_wing,
 )
+from .wings import detect_cwd
 
 
 class KennelDrawer(BaseModel):
@@ -95,6 +108,31 @@ class KennelStatsOutput(BaseModel):
     error: str | None = None
 
 
+class KennelInventoryWing(BaseModel):
+    name: str
+    drawer_count: int
+    room_count: int
+    latest_ts: str | None = None
+
+
+class KennelInventoryRoom(BaseModel):
+    wing_name: str
+    room_name: str
+    drawer_count: int
+    latest_ts: str | None = None
+
+
+class KennelInventoryOutput(BaseModel):
+    """Output for ``kennel_inventory``."""
+
+    wings_searched: list[str]
+    total_wings: int
+    total_rooms: int
+    wing_summaries: list[KennelInventoryWing] = Field(default_factory=list)
+    room_summaries: list[KennelInventoryRoom] = Field(default_factory=list)
+    error: str | None = None
+
+
 def _drawer_to_model(d: Any) -> KennelDrawer:
     meta = d.metadata or {}
     return KennelDrawer(
@@ -107,46 +145,6 @@ def _drawer_to_model(d: Any) -> KennelDrawer:
         agent=meta.get("agent"),
         cwd=meta.get("cwd"),
     )
-
-
-def _resolve_wing(value: str, agent_name: str, cwd: Any) -> str:
-    """Turn a wing shortcut into a concrete wing name.
-
-    Shortcuts:
-        ``"repo"``   -> current repo wing (the default for writes)
-        ``"agent"``  -> this agent's diary wing
-        ``"user"``   -> the global user-prefs wing
-        ``""``       -> defaults to ``repo`` (most writes are project-scoped)
-        anything else is treated as an explicit wing name.
-    """
-    v = (value or "").strip()
-    if v == "" or v == "repo":
-        return repo_wing(cwd)
-    if v == "agent":
-        return agent_wing(agent_name)
-    if v == "user":
-        return USER_WING
-    return v
-
-
-def _resolve_scope(wing: str, scope: str, agent_name: str, cwd: Any) -> list[str]:
-    """Turn (wing, scope) into the list of wings to search.
-
-    Returns an empty list to mean "no wing filter — search everything."
-    """
-    w = (wing or "").strip()
-    if w:
-        return [_resolve_wing(w, agent_name, cwd)]
-    if scope == "repo":
-        return [repo_wing(cwd)]
-    if scope == "agent":
-        return [agent_wing(agent_name)]
-    if scope == "user":
-        return [USER_WING]
-    if scope == "all":
-        return []  # caller treats empty as "no filter"
-    # "default" or anything weird
-    return default_recall_scope(agent_name, cwd)
 
 
 def register_kennel_recall(agent: Any) -> None:
@@ -187,10 +185,7 @@ def register_kennel_recall(agent: Any) -> None:
                 total_hits=0,
                 error=DISABLED_TOOL_ERROR,
             )
-        try:
-            top_k = max(1, min(int(top_k), 20))
-        except (TypeError, ValueError):
-            top_k = 5
+        top_k = coerce_bounded_int(top_k, default=5, minimum=1, maximum=20)
 
         if not query or not query.strip():
             return KennelRecallOutput(
@@ -201,9 +196,9 @@ def register_kennel_recall(agent: Any) -> None:
             )
 
         try:
-            agent_name = _agent_name_from_context(context)
+            agent_name = agent_name_from_context(context)
             cwd = detect_cwd()
-            wings_to_search = _resolve_scope(wing, scope, agent_name, cwd)
+            wings_to_search = resolve_scope(wing, scope, agent_name, cwd)
 
             hits = kennel.search_drawers_multi(
                 query=query,
@@ -280,9 +275,9 @@ def register_kennel_remember(agent: Any) -> None:
                 error="Empty content — nothing to remember.",
             )
         try:
-            agent_name = _agent_name_from_context(context)
+            agent_name = agent_name_from_context(context)
             cwd = detect_cwd()
-            resolved_wing = _resolve_wing(wing, agent_name, cwd)
+            resolved_wing = resolve_wing(wing, agent_name, cwd)
             drawer_id = kennel.write_note(
                 wing_name=resolved_wing,
                 room_name=(room or "notes").strip() or "notes",
@@ -333,14 +328,11 @@ def register_kennel_recent(agent: Any) -> None:
                 total=0,
                 error=DISABLED_TOOL_ERROR,
             )
+        top_k = coerce_bounded_int(top_k, default=5, minimum=1, maximum=50)
         try:
-            top_k = max(1, min(int(top_k), 50))
-        except (TypeError, ValueError):
-            top_k = 5
-        try:
-            agent_name = _agent_name_from_context(context)
+            agent_name = agent_name_from_context(context)
             cwd = detect_cwd()
-            wings_to_search = _resolve_scope(wing, scope, agent_name, cwd)
+            wings_to_search = resolve_scope(wing, scope, agent_name, cwd)
             hits = kennel.recent_drawers_multi(
                 wing_names=wings_to_search or None,
                 limit=top_k,
@@ -419,31 +411,115 @@ def register_kennel_stats(agent: Any) -> None:
             )
 
 
-def _agent_name_from_context(context: RunContext) -> str:
-    """Best-effort extraction of the calling agent's name from the run context.
+def register_kennel_inventory(agent: Any) -> None:
+    """Register the ``kennel_inventory`` tool — wing/room rollup."""
 
-    Falls back to ``"unknown"`` if the framework doesn't expose it on this
-    version of pydantic_ai.
-    """
-    for attr in ("agent_name", "name"):
-        val = getattr(context, attr, None)
-        if val:
-            return str(val)
-    deps = getattr(context, "deps", None)
-    if deps is not None:
-        for attr in ("agent_name", "name"):
-            val = getattr(deps, attr, None)
-            if val:
-                return str(val)
-    return "unknown"
+    @agent.tool
+    async def kennel_inventory(
+        context: RunContext,
+        wing: str = "",
+        scope: str = "all",
+        max_wings: int = 10,
+        max_rooms: int = 10,
+    ) -> KennelInventoryOutput:
+        """Summarize kennel growth by wing and room.
+
+        Useful when the memory store is getting feral and you need an inventory
+        view instead of raw drawer search results.
+        """
+        if not is_enabled():
+            return KennelInventoryOutput(
+                wings_searched=[],
+                total_wings=0,
+                total_rooms=0,
+                error=DISABLED_TOOL_ERROR,
+            )
+        max_wings = coerce_bounded_int(
+            max_wings,
+            default=10,
+            minimum=1,
+            maximum=50,
+        )
+        max_rooms = coerce_bounded_int(
+            max_rooms,
+            default=10,
+            minimum=1,
+            maximum=100,
+        )
+        try:
+            agent_name = agent_name_from_context(context)
+            cwd = detect_cwd()
+            wings_to_search = resolve_scope(wing, scope, agent_name, cwd)
+            wing_summaries, room_summaries = kennel.inventory_rollup(
+                wing_names=wings_to_search or None,
+                limit_wings=max_wings,
+                limit_rooms=max_rooms,
+            )
+            all_wings = kennel.list_wings()
+            total_wings = (
+                len([name for name in all_wings if name in wings_to_search])
+                if wings_to_search
+                else len(all_wings)
+            )
+            total_rooms = kennel.count_rooms(wings_to_search or None)
+            return KennelInventoryOutput(
+                wings_searched=wings_to_search,
+                total_wings=total_wings,
+                total_rooms=total_rooms,
+                wing_summaries=[
+                    KennelInventoryWing(
+                        name=w.name,
+                        drawer_count=w.drawer_count,
+                        room_count=w.room_count,
+                        latest_ts=w.latest_ts,
+                    )
+                    for w in wing_summaries
+                ],
+                room_summaries=[
+                    KennelInventoryRoom(
+                        wing_name=r.wing_name,
+                        room_name=r.room_name,
+                        drawer_count=r.drawer_count,
+                        latest_ts=r.latest_ts,
+                    )
+                    for r in room_summaries
+                ],
+            )
+        except Exception as exc:  # noqa: BLE001
+            return KennelInventoryOutput(
+                wings_searched=[],
+                total_wings=0,
+                total_rooms=0,
+                error=f"kennel_inventory failed: {exc!r}",
+            )
+
+
+_TOOL_SPECS: tuple[tuple[str, Any], ...] = (
+    ("kennel_recall", register_kennel_recall),
+    ("kennel_remember", register_kennel_remember),
+    ("kennel_recent", register_kennel_recent),
+    ("kennel_list_wings", register_kennel_list_wings),
+    ("kennel_stats", register_kennel_stats),
+    ("kennel_inventory", register_kennel_inventory),
+    ("kennel_debug_echo", register_kennel_debug_echo),
+    ("kennel_capture_decision", register_kennel_capture_decision),
+    ("kennel_recent_hinges", register_kennel_recent_hinges),
+    (
+        "kennel_decisions_missing_follow_up",
+        register_kennel_decisions_missing_follow_up,
+    ),
+    ("kennel_doctrine_gaps", register_kennel_doctrine_gaps),
+)
+
+
+def kennel_tool_names() -> list[str]:
+    """Return the canonical advertised tool-name surface for puppy_kennel."""
+    return [name for name, _register_func in _TOOL_SPECS]
 
 
 def register_tools_callback() -> list[dict[str, Any]]:
     """``register_tools`` callback — exposes the full kennel tool surface."""
     return [
-        {"name": "kennel_recall", "register_func": register_kennel_recall},
-        {"name": "kennel_remember", "register_func": register_kennel_remember},
-        {"name": "kennel_recent", "register_func": register_kennel_recent},
-        {"name": "kennel_list_wings", "register_func": register_kennel_list_wings},
-        {"name": "kennel_stats", "register_func": register_kennel_stats},
+        {"name": name, "register_func": register_func}
+        for name, register_func in _TOOL_SPECS
     ]

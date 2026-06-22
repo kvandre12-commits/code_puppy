@@ -6,6 +6,7 @@ Covers:
 * recorder no-ops when disabled
 * retriever returns None when disabled
 * every agent-facing tool returns the disabled error when disabled
+* /kennel debug emits echo-filter inspection lines for humans
 * /kennel enable / disable / status slash commands flip and report state
 * /kennel stats and /kennel wings still work when disabled (human inspection)
 """
@@ -167,6 +168,7 @@ def test_all_tools_return_disabled_error_when_off(kennel_root: Path) -> None:
     tools.register_kennel_recent(agent)
     tools.register_kennel_list_wings(agent)
     tools.register_kennel_stats(agent)
+    tools.register_kennel_debug_echo(agent)
 
     recall_out = asyncio.run(agent.registered["kennel_recall"](_ctx(), "anything"))
     remember_out = asyncio.run(
@@ -175,8 +177,9 @@ def test_all_tools_return_disabled_error_when_off(kennel_root: Path) -> None:
     recent_out = asyncio.run(agent.registered["kennel_recent"](_ctx()))
     wings_out = asyncio.run(agent.registered["kennel_list_wings"](_ctx()))
     stats_out = asyncio.run(agent.registered["kennel_stats"](_ctx()))
+    debug_out = asyncio.run(agent.registered["kennel_debug_echo"](_ctx()))
 
-    for out in (recall_out, remember_out, recent_out, wings_out, stats_out):
+    for out in (recall_out, remember_out, recent_out, wings_out, stats_out, debug_out):
         assert out.error is not None
         assert "disabled" in out.error.lower()
 
@@ -298,17 +301,119 @@ def test_search_command_works_when_disabled(kennel_root: Path) -> None:
     assert commands.handle("/kennel search pangolin", "kennel") is True
 
 
+def test_inventory_command_works_when_disabled(kennel_root: Path) -> None:
+    from code_puppy.plugins.puppy_kennel import commands, recorder, state
+
+    recorder.record_run_end(
+        agent_name="code-puppy",
+        model_name="m",
+        session_id="alpha-session",
+        success=True,
+        response_text="Inventory me.",
+    )
+    state.set_enabled(False)
+    assert commands.handle("/kennel inventory", "kennel") is True
+
+
+def test_debug_command_emits_echo_sections(
+    kennel_root: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from code_puppy.plugins.puppy_kennel import commands, kennel, recorder
+    from code_puppy.plugins.puppy_kennel.wings import repo_wing
+
+    lines: list[str] = []
+    monkeypatch.setattr(commands, "emit_info", lines.append)
+    monkeypatch.setattr(commands, "emit_warning", lines.append)
+    monkeypatch.setattr(commands, "emit_success", lines.append)
+
+    kennel.write_note(
+        wing_name=repo_wing(),
+        room_name="decisions",
+        content=(
+            "What: Canonical packet/object context won over transcript-only session slices for operator workflows.\n"
+            "Why: Transcript context is too lossy and too implicit for downstream agents.\n"
+            "Follow-up: Capture durable state in packet/object form."
+        ),
+        role="note",
+    )
+    recorder.record_run_end(
+        agent_name="code-puppy",
+        model_name="m",
+        success=True,
+        response_text=(
+            "We backfilled the packet-first workflow context doctrine so transcript residue stops pretending to be durable state. "
+            + " lorem ipsum" * 20
+        ),
+    )
+
+    assert commands.handle("/kennel debug dropped 3", "kennel") is True
+    joined = "\n".join(lines)
+    assert "Kennel echo debug" in joined
+    assert "[DROP]" in joined
+    assert "preview:" in joined
+
+
+def test_checkpoint_command_writes_structured_decision_note(kennel_root: Path) -> None:
+    from code_puppy.plugins.puppy_kennel import commands, kennel
+
+    assert (
+        commands.handle(
+            "/kennel checkpoint Shifted to packet state || Transcript fog was losing durable context || follow-up: add bootstrap helper || evidence: tests passed",
+            "kennel",
+        )
+        is True
+    )
+
+    hits = kennel.search_drawers("packet state", limit=5)
+    assert len(hits) == 1
+    content = hits[0].content
+    assert "What: Shifted to packet state" in content
+    assert "Why: Transcript fog was losing durable context" in content
+    assert "Follow-up: add bootstrap helper" in content
+    assert "Evidence: tests passed" in content
+
+
+def test_audit_command_emits_summary_sections(
+    kennel_root: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from code_puppy.plugins.puppy_kennel import commands, recorder
+
+    lines: list[str] = []
+    monkeypatch.setattr(commands, "emit_info", lines.append)
+    monkeypatch.setattr(commands, "emit_warning", lines.append)
+    monkeypatch.setattr(commands, "emit_success", lines.append)
+
+    recorder.record_run_end(
+        agent_name="code-puppy",
+        model_name="m",
+        session_id="alpha-session",
+        success=True,
+        response_text="Session residue for audit.",
+    )
+    commands.handle(
+        "/kennel checkpoint Durable choice || Because the doctrine matters || follow-up: reuse this pattern",
+        "kennel",
+    )
+
+    assert commands.handle("/kennel audit all 2", "kennel") is True
+    joined = "\n".join(lines)
+    assert "Kennel audit scope:" in joined
+    assert "Recent hinges:" in joined
+    assert "Decisions missing follow-up:" in joined
+    assert "Doctrine gaps:" in joined
+
+
 # --------------------------------------------------------------------------- #
 # register_agent_tools advertisement honours the toggle
 # --------------------------------------------------------------------------- #
 
 
 def test_advertise_tools_returns_full_list_when_enabled(kennel_root: Path) -> None:
-    from code_puppy.plugins.puppy_kennel import register_callbacks, state
+    from code_puppy.plugins.puppy_kennel import register_callbacks, state, tools
 
     state.set_enabled(True)
     advertised = register_callbacks._advertise_tools_to_agent("code-puppy")
-    assert set(advertised) == set(register_callbacks._KENNEL_TOOL_NAMES)
+    assert set(advertised) == set(tools.kennel_tool_names())
 
 
 def test_advertise_tools_returns_empty_when_disabled(kennel_root: Path) -> None:

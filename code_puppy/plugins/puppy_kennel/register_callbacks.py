@@ -60,15 +60,6 @@ def _on_agent_run_end(
     )
 
 
-_KENNEL_TOOL_NAMES = (
-    "kennel_recall",
-    "kennel_remember",
-    "kennel_recent",
-    "kennel_list_wings",
-    "kennel_stats",
-)
-
-
 def _advertise_tools_to_agent(agent_name: str | None = None) -> list[str]:
     """``register_agent_tools`` callback — advertise kennel tools to every agent.
 
@@ -83,7 +74,7 @@ def _advertise_tools_to_agent(agent_name: str | None = None) -> list[str]:
     """
     if not is_enabled():
         return []
-    return list(_KENNEL_TOOL_NAMES)
+    return tools.kennel_tool_names()
 
 
 if _initialize_once():
