@@ -341,8 +341,10 @@ def write_isolated_job_manifest(
         return {"success": False, "reason": "command must contain at least one token"}
 
     default_cwd = DEFAULT_PROOT_WORKSPACE if clean_runtime == "proot" else "."
+    authority_principal_id = principal_id.strip() or get_default_principal_id()
     job_env = {
-        "PROJECT_OS_PRINCIPAL_ID": principal_id.strip() or get_default_principal_id(),
+        "PROJECT_OS_AUTHORITY_PRINCIPAL_ID": authority_principal_id,
+        "PROJECT_OS_PRINCIPAL_ID": authority_principal_id,
         "PYTHONUNBUFFERED": "1",
         **_normalize_env(env),
     }
@@ -385,7 +387,7 @@ def write_isolated_job_manifest(
             strict_validation=True,
         ),
         authority=AuthorityConfig(
-            principal_id=job_env["PROJECT_OS_PRINCIPAL_ID"],
+            principal_id=job_env["PROJECT_OS_AUTHORITY_PRINCIPAL_ID"],
             required=include_authority,
             enforce_handshake=include_authority,
         ),
