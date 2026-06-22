@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 import contextvars
-import re
-import shlex
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -11,12 +9,9 @@ from urllib.parse import urlparse
 from .anomaly import active_quarantine_reason, evaluate_runtime_anomalies
 from .audit import emit_authority_event
 from .constraints import lease_constraint_failure
-from .lease_store import (
-    LeaseRecord,
-    consume_lease,
-    get_default_principal_id,
-    list_matching_leases,
-)
+from .identity import get_execution_identity
+from .lease_store import LeaseRecord, consume_lease, list_matching_leases
+from .shell_policy import assess_shell_command as assess_shell_policy_command
 
 _RESERVED_LEASE: contextvars.ContextVar[LeaseRecord | None] = contextvars.ContextVar(
     "authority_gateway_reserved_lease", default=None
@@ -55,36 +50,6 @@ BLOCKED_INTENT_FLAGS = {
     "FLAG_GRANT_READ_URI_PERMISSION",
     "FLAG_GRANT_WRITE_URI_PERMISSION",
 }
-SAFE_SHELL_BINARIES = {
-    "cat",
-    "env",
-    "find",
-    "git",
-    "grep",
-    "head",
-    "ls",
-    "pwd",
-    "pytest",
-    "python",
-    "ruff",
-    "sed",
-    "stat",
-    "tail",
-    "uv",
-    "wc",
-    "which",
-}
-SAFE_GIT_SUBCOMMANDS = {"branch", "diff", "log", "rev-parse", "show", "status"}
-SAFE_PYTHON_MODULES = {"pytest", "ruff"}
-SAFE_UV_TOOLS = {"pytest", "ruff"}
-BLOCKED_SHELL_PATTERNS = (
-    re.compile(r"(^|\s)sudo(\s|$)"),
-    re.compile(r"(^|\s)su(\s|$)"),
-    re.compile(r"(^|\s)rm\s+-rf\b"),
-    re.compile(r"(^|\s)dd\s+"),
-    re.compile(r"(^|\s)(mkfs|fdisk|parted|shutdown|reboot|poweroff)\b"),
-    re.compile(r"\|\s*(sh|bash|zsh)\b"),
-)
 
 TOOL_CAPABILITIES = {
     "android_browser_click_link_by_text": "android.browser.act",
@@ -149,23 +114,6 @@ def _is_dry_run(tool_args: dict[str, Any]) -> bool:
     return bool(tool_args.get("dry_run"))
 
 
-def _safe_shell_segment(tokens: list[str]) -> bool:
-    if not tokens:
-        return True
-    binary = tokens[0]
-    if binary not in SAFE_SHELL_BINARIES:
-        return False
-    if binary == "git":
-        return len(tokens) > 1 and tokens[1] in SAFE_GIT_SUBCOMMANDS
-    if binary == "python":
-        return (
-            len(tokens) > 2 and tokens[1] == "-m" and tokens[2] in SAFE_PYTHON_MODULES
-        )
-    if binary == "uv":
-        return len(tokens) > 2 and tokens[1] == "run" and tokens[2] in SAFE_UV_TOOLS
-    return True
-
-
 def _tracked_tool(tool_name: str) -> bool:
     return tool_name == "agent_run_shell_command" or tool_name in TOOL_CAPABILITIES
 
@@ -206,46 +154,13 @@ def _maybe_trip_circuit_breaker(principal_id: str) -> str | None:
     return anomaly.reason
 
 
-def assess_shell_command(command: str) -> PolicyDecision:
-    stripped = (command or "").strip()
-    if not stripped:
-        return _block("[BLOCKED] Empty shell command is not allowed.")
-
-    for pattern in BLOCKED_SHELL_PATTERNS:
-        if pattern.search(stripped):
-            return _block(
-                "[BLOCKED] Command matched a statically forbidden shell pattern."
-            )
-
-    if any(marker in stripped for marker in ("$(", "`", ">", "<")):
-        return _require_lease(
-            "shell.exec",
-            "Shell redirection/subshell syntax requires an active execution lease.",
-        )
-
-    chain_segments = re.split(r"\s*(?:&&|\|\||;)\s*", stripped)
-    safe = True
-    for segment in chain_segments:
-        segment = segment.strip()
-        if not segment:
-            continue
-        try:
-            tokens = shlex.split(segment)
-        except ValueError:
-            return _require_lease(
-                "shell.exec",
-                "Shell command parsing failed cleanly, so a lease is required.",
-            )
-        if not _safe_shell_segment(tokens):
-            safe = False
-            break
-
-    if safe:
-        return _allow()
-
-    return _require_lease(
-        "shell.exec",
-        "Shell command is outside the deterministic read-only allowlist.",
+def assess_shell_command(command: str, *, cwd: str = "") -> PolicyDecision:
+    decision = assess_shell_policy_command(command, cwd=cwd)
+    return PolicyDecision(
+        blocked=decision.blocked,
+        reason=decision.reason,
+        capability=decision.capability,
+        lease_required=decision.lease_required,
     )
 
 
@@ -329,7 +244,10 @@ def _evaluate_android_open(tool_args: dict[str, Any]) -> PolicyDecision:
 
 def evaluate_tool_call(tool_name: str, tool_args: dict[str, Any]) -> PolicyDecision:
     if tool_name == "agent_run_shell_command":
-        return assess_shell_command(str(tool_args.get("command", "")))
+        return assess_shell_command(
+            str(tool_args.get("command", "")),
+            cwd=str(tool_args.get("cwd", "") or ""),
+        )
 
     if tool_name == "android_intent_send":
         return _evaluate_intent(tool_args)
@@ -394,7 +312,7 @@ def _clear_reservation() -> None:
 def build_pre_tool_response(
     tool_name: str, tool_args: dict[str, Any]
 ) -> dict[str, Any] | None:
-    principal_id = get_default_principal_id()
+    principal_id = get_execution_identity().authority_principal_id
     tracked = _tracked_tool(tool_name)
     details = {"tool_args": _summarize_tool_args(tool_args)}
 
@@ -566,7 +484,7 @@ def handle_post_tool_result(tool_name: str, result: Any) -> None:
     lease = _RESERVED_LEASE.get()
     reserved_tool = _RESERVED_TOOL.get()
     capability = _RESERVED_CAPABILITY.get()
-    principal_id = get_default_principal_id()
+    principal_id = get_execution_identity().authority_principal_id
     try:
         if lease is None or reserved_tool != tool_name:
             return

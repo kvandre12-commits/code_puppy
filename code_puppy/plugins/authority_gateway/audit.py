@@ -12,6 +12,7 @@ from code_puppy.plugins.project_os_supervisor.bus import (
     publish_project_os_event_best_effort,
 )
 
+from .identity import get_execution_identity
 from .lease_store import (
     LeaseRecord,
     get_default_principal_id,
@@ -127,17 +128,19 @@ def emit_authority_event(
     details: dict[str, Any] | None = None,
 ) -> Path | None:
     timestamp_ns = time.time_ns()
+    identity = get_execution_identity()
+    event_details = {**identity.as_details(), **(details or {})}
     event_core = {
         "contract_version": "2.0.0",
         "event_id": f"audit-{uuid.uuid4().hex[:10]}",
         "event_type": event_type,
-        "principal_id": principal_id,
+        "principal_id": principal_id or identity.authority_principal_id,
         "lease_id": lease_id,
         "capability": capability,
         "tool_name": tool_name,
         "outcome": outcome,
         "reason": reason,
-        "details": details or {},
+        "details": event_details,
         "timestamp": _now(),
         "timestamp_ns": timestamp_ns,
         "previous_event_sha256": _previous_event_sha(),

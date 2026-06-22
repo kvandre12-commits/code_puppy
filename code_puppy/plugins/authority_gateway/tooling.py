@@ -1,14 +1,22 @@
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from .anomaly import get_active_quarantines, release_quarantine
+from .identity import get_execution_identity
 from .audit import (
+    emit_authority_event,
     list_authority_events,
     read_recent_authority_events,
     revoke_all_leases_with_audit,
 )
-from .lease_store import get_default_principal_id, get_eyes_root, iter_active_leases
+from .lease_store import (
+    get_default_principal_id,
+    get_eyes_root,
+    iter_active_leases,
+    mint_lease,
+)
 
 STATUS_WINDOW_SECONDS = 300
 DEFAULT_AUDIT_LIMIT = 20
@@ -22,6 +30,7 @@ def _serialize_lease(record: Any) -> dict[str, Any]:
         "capabilities": record.capabilities,
         "allowed_tools": record.allowed_tools,
         "constraints": record.constraints,
+        "delegation": record.delegation,
         "quotas": record.quotas,
         "remaining_uses": record.remaining_uses,
         "not_before": record.payload.get("not_before"),
@@ -48,6 +57,8 @@ def _format_audit_event(event: dict[str, Any]) -> str:
     details = event.get("details") if isinstance(event.get("details"), dict) else {}
     timestamp = str(event.get("timestamp", ""))
     principal_id = str(event.get("principal_id", "") or "*")
+    actor_id = str(details.get("actor_id", "") or "")
+    run_id = str(details.get("run_id", "") or "")
 
     if event_type == "tool_allowed":
         label = "ALLOWED"
@@ -83,8 +94,13 @@ def _format_audit_event(event: dict[str, Any]) -> str:
         label = event_type.upper() or "EVENT"
         summary = tool_name if tool_name != "-" else lease_id
 
+    actor_suffix = f" actor={actor_id}" if actor_id else ""
+    run_suffix = f" run={run_id}" if run_id else ""
     suffix = f" :: {reason}" if reason else ""
-    return f"[{label}] {timestamp} principal={principal_id} {summary}{suffix}"
+    return (
+        f"[{label}] {timestamp} principal={principal_id}{actor_suffix}{run_suffix} "
+        f"{summary}{suffix}"
+    )
 
 
 def _execution_topology_snapshot() -> dict[str, Any]:
@@ -139,6 +155,7 @@ def _execution_topology_snapshot() -> dict[str, Any]:
 
 
 def authority_gateway_status() -> dict[str, Any]:
+    identity = get_execution_identity()
     active_leases = _active_leases()
     quarantines = [entry.as_dict() for entry in get_active_quarantines()]
     recent_anomalies = read_recent_authority_events(
@@ -175,6 +192,9 @@ def authority_gateway_status() -> dict[str, Any]:
         "system_state": system_state,
         "eyes_root": str(get_eyes_root()),
         "default_principal_id": get_default_principal_id(),
+        "default_authority_principal_id": identity.authority_principal_id,
+        "current_actor_id": identity.actor_id,
+        "current_run_id": identity.run_id,
         "active_lease_count": len(active_leases),
         "quarantine_count": len(quarantines),
         "recent_anomaly_count": len(recent_anomalies),
@@ -261,6 +281,105 @@ def authority_gateway_release_quarantine(
         released_by=released_by,
     )
     return {"success": bool(result.get("released")), **result}
+
+
+def authority_gateway_grant_lease(
+    principal_id: str,
+    capabilities: list[str],
+    reason: str = "Manual operator lease grant.",
+    granted_by: str = "operator",
+    allowed_tools: list[str] | None = None,
+    constraints_json: str = "",
+    ttl_seconds: int = 3600,
+    max_uses: int = 25,
+    max_tool_calls: int | None = None,
+    max_shell_commands: int | None = None,
+    lease_id: str = "",
+    requested_by_actor_id: str = "",
+    delegated_by_actor_id: str = "",
+    delegated_to_actor_ids: list[str] | None = None,
+    run_id: str = "",
+) -> dict[str, Any]:
+    """Mint a narrow execution lease.
+
+    Prefer the stable authority principal (PROJECT_OS_AUTHORITY_PRINCIPAL_ID /
+    canonical repo authority) for principal_id. Keep actor and run identities
+    in delegation metadata so authority survives sub-agent/session rotation.
+    """
+    try:
+        constraints = json.loads(constraints_json) if constraints_json.strip() else {}
+    except json.JSONDecodeError as exc:
+        return {
+            "success": False,
+            "granted": False,
+            "reason": f"constraints_json must be valid JSON: {exc}",
+        }
+
+    try:
+        record = mint_lease(
+            principal_id=principal_id or get_default_principal_id(),
+            capabilities=capabilities,
+            reason=reason,
+            granted_by=granted_by,
+            allowed_tools=allowed_tools,
+            constraints=constraints,
+            ttl_seconds=ttl_seconds,
+            max_uses=max_uses,
+            max_tool_calls=max_tool_calls,
+            max_shell_commands=max_shell_commands,
+            lease_id=lease_id,
+            delegation={
+                "mode": (
+                    "shared_authority"
+                    if delegated_to_actor_ids or delegated_by_actor_id or run_id
+                    else "direct"
+                ),
+                "requested_by_actor_id": requested_by_actor_id or None,
+                "delegated_by_actor_id": delegated_by_actor_id or None,
+                "delegated_to_actor_ids": delegated_to_actor_ids or [],
+                "run_id": run_id or None,
+            },
+        )
+    except ValueError as exc:
+        return {
+            "success": False,
+            "granted": False,
+            "reason": str(exc),
+        }
+
+    event_path = emit_authority_event(
+        "lease_minted",
+        principal_id=record.principal_id,
+        lease_id=record.lease_id,
+        outcome="minted",
+        reason=reason,
+        details={
+            "granted_by": granted_by,
+            "capabilities": record.capabilities,
+            "allowed_tools": record.allowed_tools,
+            "constraints": record.constraints,
+            "delegation": record.delegation,
+            "quotas": record.quotas,
+        },
+    )
+
+    return {
+        "success": True,
+        "granted": True,
+        "lease_id": record.lease_id,
+        "principal_id": record.principal_id,
+        "reason": reason,
+        "granted_by": granted_by,
+        "capabilities": record.capabilities,
+        "allowed_tools": record.allowed_tools,
+        "constraints": record.constraints,
+        "delegation": record.delegation,
+        "quotas": record.quotas,
+        "not_before": record.payload.get("not_before"),
+        "expires_at": record.payload.get("expires_at"),
+        "path": str(record.path),
+        "audit_event_path": str(event_path) if event_path else None,
+    }
 
 
 def authority_gateway_revoke_all(

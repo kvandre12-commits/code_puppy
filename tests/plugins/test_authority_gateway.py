@@ -5,6 +5,7 @@ from pathlib import Path
 
 from code_puppy.plugins.authority_gateway import anomaly, audit
 from code_puppy.plugins.authority_gateway.audit import revoke_all_leases_with_audit
+from code_puppy.plugins.authority_gateway.identity import bind_runtime_actor_context
 from code_puppy.plugins.authority_gateway.lease_store import (
     consume_lease,
     find_matching_lease,
@@ -34,6 +35,7 @@ def _v2_lease(
     capabilities: list[str] | None = None,
     allowed_tools: list[str] | None = None,
     constraints: dict | None = None,
+    delegation: dict | None = None,
     remaining_uses: int = 1,
     max_uses: int = 1,
     max_tool_calls: int | None = None,
@@ -52,6 +54,14 @@ def _v2_lease(
         "capabilities": capabilities or ["shell.exec"],
         "allowed_tools": allowed_tools or [],
         "constraints": constraints or {},
+        "delegation": delegation
+        or {
+            "mode": "direct",
+            "requested_by_actor_id": None,
+            "delegated_by_actor_id": None,
+            "delegated_to_actor_ids": [],
+            "run_id": None,
+        },
         "quotas": {
             "max_uses": max_uses,
             "remaining_uses": remaining_uses,
@@ -86,11 +96,29 @@ class TestShellAuthorityPolicy:
         assert decision.blocked
         assert "forbidden shell pattern" in decision.reason
 
-    def test_non_allowlisted_shell_command_requires_lease(self):
+    def test_non_allowlisted_shell_command_requires_process_lease(self):
         decision = assess_shell_command("npm install")
         assert not decision.blocked
         assert decision.lease_required
-        assert decision.capability == "shell.exec"
+        assert decision.capability == "shell.process.exec"
+
+    def test_workspace_shell_command_requires_repo_write_lease(self):
+        decision = assess_shell_command("npm install", cwd=str(Path.cwd()))
+        assert not decision.blocked
+        assert decision.lease_required
+        assert decision.capability == "shell.repo.write"
+
+    def test_network_shell_command_requires_network_lease(self):
+        decision = assess_shell_command("ssh 192.168.1.8")
+        assert not decision.blocked
+        assert decision.lease_required
+        assert decision.capability == "network.lan.connect"
+
+    def test_adb_shell_command_requires_wireless_debug_lease(self):
+        decision = assess_shell_command("adb connect 192.168.1.2:5555")
+        assert not decision.blocked
+        assert decision.lease_required
+        assert decision.capability == "adb.wireless.connect"
 
 
 class TestAndroidPolicy:
@@ -182,7 +210,7 @@ class TestLeaseBinding:
         _write_lease(tmp_path, _v2_lease("lease-cap", capabilities=["shell.exec"]))
 
         record = find_matching_lease(
-            capability="shell.exec",
+            capability="shell.repo.write",
             tool_name="agent_run_shell_command",
             principal_id=get_default_principal_id(),
         )
@@ -244,6 +272,49 @@ class TestLeaseBinding:
         )
         assert result is not None
         assert result["blocked"] is True
+
+    def test_stable_authority_principal_survives_actor_rotation(
+        self, monkeypatch, tmp_path
+    ):
+        monkeypatch.setenv("PROJECT_OS_EYES_ROOT", str(tmp_path))
+        monkeypatch.setenv("PROJECT_OS_AUTHORITY_PRINCIPAL_ID", "stable-authority")
+        lease_path = _write_lease(
+            tmp_path,
+            _v2_lease(
+                "lease-stable",
+                principal_id="stable-authority",
+                capabilities=["shell.repo.write"],
+                delegation={
+                    "mode": "shared_authority",
+                    "requested_by_actor_id": "code-puppy-main",
+                    "delegated_by_actor_id": "code-puppy-main",
+                    "delegated_to_actor_ids": ["code-puppy-subagent"],
+                    "run_id": "run-sub-1",
+                },
+            ),
+        )
+
+        with bind_runtime_actor_context(
+            actor_id="code-puppy-subagent", run_id="run-sub-1"
+        ):
+            allowed = build_pre_tool_response(
+                "agent_run_shell_command",
+                {"command": "npm install", "cwd": str(tmp_path)},
+            )
+            assert allowed is None
+            handle_post_tool_result("agent_run_shell_command", {"success": True})
+
+        payload = json.loads(lease_path.read_text())
+        assert payload["quotas"]["shell_commands_used"] == 1
+        assert payload["principal_id"] == "stable-authority"
+
+        events = [
+            json.loads(path.read_text())
+            for path in sorted((tmp_path / "audit" / "events").glob("*.json"))
+        ]
+        assert events[0]["principal_id"] == "stable-authority"
+        assert events[0]["details"]["actor_id"] == "code-puppy-subagent"
+        assert events[0]["details"]["run_id"] == "run-sub-1"
 
     def test_intent_constraints_allow_only_approved_action_and_package(
         self, monkeypatch, tmp_path
@@ -355,7 +426,7 @@ class TestLeaseBinding:
             tmp_path,
             _v2_lease(
                 "lease-shell-path",
-                capabilities=["shell.exec"],
+                capabilities=["shell.repo.write"],
                 constraints={"allowed_paths": [str(allowed_dir)]},
             ),
         )
@@ -431,7 +502,7 @@ class TestLeaseBinding:
             tmp_path,
             _v2_lease(
                 "lease-runaway",
-                capabilities=["shell.exec"],
+                capabilities=["shell.repo.write"],
                 remaining_uses=5,
                 max_uses=5,
                 max_tool_calls=5,
@@ -575,14 +646,21 @@ class TestLeaseBinding:
 class TestLeaseStoreHelpers:
     def test_consume_lease_marks_used(self, monkeypatch, tmp_path):
         monkeypatch.setenv("PROJECT_OS_EYES_ROOT", str(tmp_path))
-        lease_path = _write_lease(tmp_path, _v2_lease("lease-helper"))
+        lease_path = _write_lease(
+            tmp_path,
+            _v2_lease("lease-helper", capabilities=["shell.repo.write"]),
+        )
         record = find_matching_lease(
-            capability="shell.exec",
+            capability="shell.repo.write",
             tool_name="agent_run_shell_command",
             principal_id=get_default_principal_id(),
         )
         assert record is not None
-        consume_lease(record, capability="shell.exec")
+        consume_lease(
+            record,
+            capability="shell.repo.write",
+            tool_name="agent_run_shell_command",
+        )
         payload = json.loads(lease_path.read_text())
         assert payload["quotas"]["remaining_uses"] == 0
         assert payload["quotas"]["tool_calls_used"] == 1

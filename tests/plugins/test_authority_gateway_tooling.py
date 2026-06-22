@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 from code_puppy.plugins.authority_gateway import anomaly, register_callbacks, tooling
+from code_puppy.plugins.authority_gateway.identity import get_execution_identity
 from code_puppy.plugins.authority_gateway.lease_store import get_default_principal_id
 from code_puppy.plugins.authority_gateway.policy import build_pre_tool_response
 
@@ -21,6 +22,7 @@ def _v2_lease(
     *,
     principal_id: str | None = None,
     capabilities: list[str] | None = None,
+    delegation: dict | None = None,
 ) -> dict:
     return {
         "contract_version": "2.0.0",
@@ -35,6 +37,14 @@ def _v2_lease(
         "capabilities": capabilities or ["shell.exec"],
         "allowed_tools": [],
         "constraints": {},
+        "delegation": delegation
+        or {
+            "mode": "direct",
+            "requested_by_actor_id": None,
+            "delegated_by_actor_id": None,
+            "delegated_to_actor_ids": [],
+            "run_id": None,
+        },
         "quotas": {
             "max_uses": 2,
             "remaining_uses": 2,
@@ -84,6 +94,20 @@ def _trip_constraint_breaker(monkeypatch, tmp_path: Path) -> None:
 
 
 class TestAuthorityGatewayToolRegistration:
+    async def test_agent_run_context_binds_actor_and_run_identity(self):
+        agent = type("Agent", (), {"name": "code-puppy-subagent"})()
+        context_manager = register_callbacks._bind_agent_run_context(
+            agent,
+            pydantic_agent=None,
+            group_id="run-123",
+            mcp_servers=None,
+        )
+
+        async with context_manager:
+            identity = get_execution_identity()
+            assert identity.actor_id == "code-puppy-subagent"
+            assert identity.run_id == "run-123"
+
     def test_register_tools_callback_exposes_cockpit_surface(self):
         specs = register_callbacks.register_tools_callback()
         names = {spec["name"] for spec in specs}
@@ -93,10 +117,11 @@ class TestAuthorityGatewayToolRegistration:
             "authority_gateway_recent_audit",
             "authority_gateway_quarantine_status",
             "authority_gateway_release_quarantine",
+            "authority_gateway_grant_lease",
             "authority_gateway_revoke_all",
         }
 
-    def test_register_agent_tools_advertises_same_surface(self):
+    def test_register_agent_tools_keeps_grant_surface_narrow(self):
         advertised = register_callbacks._advertise_tools_to_agent("code-puppy")
         assert advertised == [
             "authority_gateway_status",
@@ -106,6 +131,11 @@ class TestAuthorityGatewayToolRegistration:
             "authority_gateway_release_quarantine",
             "authority_gateway_revoke_all",
         ]
+
+        governance_tools = register_callbacks._advertise_tools_to_agent(
+            "governance-orchestrator"
+        )
+        assert "authority_gateway_grant_lease" in governance_tools
 
 
 class TestAuthorityGatewayTooling:
@@ -224,6 +254,49 @@ class TestAuthorityGatewayTooling:
         ]
         assert events[-1]["event_type"] == "quarantine_released"
         assert events[-1]["details"]["released_by"] == "butcher"
+
+    def test_grant_lease_mints_audited_repo_write_lease_with_delegation(
+        self, monkeypatch, tmp_path
+    ):
+        monkeypatch.setenv("PROJECT_OS_EYES_ROOT", str(tmp_path))
+        monkeypatch.setenv("PROJECT_OS_AUTHORITY_PRINCIPAL_ID", "stable-authority")
+
+        result = tooling.authority_gateway_grant_lease(
+            principal_id="stable-authority",
+            capabilities=["shell.repo.write"],
+            reason="Operator granted shell execution for lint and test work.",
+            granted_by="mike",
+            allowed_tools=["agent_run_shell_command"],
+            constraints_json=json.dumps({"allowed_paths": [str(Path.cwd())]}),
+            ttl_seconds=900,
+            max_uses=5,
+            max_shell_commands=5,
+            lease_id="shell-write-stable-authority",
+            requested_by_actor_id="code-puppy-main",
+            delegated_by_actor_id="code-puppy-main",
+            delegated_to_actor_ids=["code-puppy-subagent"],
+            run_id="run-sub-1",
+        )
+
+        assert result["success"] is True
+        assert result["granted"] is True
+        assert result["lease_id"] == "shell-write-stable-authority"
+        assert result["principal_id"] == "stable-authority"
+        assert result["capabilities"] == ["shell.repo.write"]
+        assert result["allowed_tools"] == ["agent_run_shell_command"]
+        assert result["constraints"]["allowed_paths"] == [str(Path.cwd())]
+        assert result["delegation"]["mode"] == "shared_authority"
+        assert result["delegation"]["delegated_to_actor_ids"] == ["code-puppy-subagent"]
+
+        leases = tooling.authority_gateway_list_active_leases(
+            principal_id="stable-authority"
+        )
+        assert leases["count"] == 1
+        assert leases["leases"][0]["lease_id"] == "shell-write-stable-authority"
+        assert leases["leases"][0]["delegation"]["run_id"] == "run-sub-1"
+
+        audit_result = tooling.authority_gateway_recent_audit(limit=10)
+        assert any("[MINTED]" in line for line in audit_result["lines"])
 
     def test_revoke_all_vaporizes_every_active_lease(self, monkeypatch, tmp_path):
         monkeypatch.setenv("PROJECT_OS_EYES_ROOT", str(tmp_path))
