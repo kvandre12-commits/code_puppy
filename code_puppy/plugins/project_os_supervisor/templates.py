@@ -159,6 +159,152 @@ def _workflow_payload(
     }
 
 
+def _status_index(status: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    return {
+        str(service.get("service_name", "")): service
+        for service in status.get("services", [])
+        if isinstance(service, dict) and str(service.get("service_name", ""))
+    }
+
+
+def _build_operator_actions(
+    manifest_path: Path,
+    *,
+    primary_service: str,
+    workflow_payload: dict[str, Any],
+) -> list[dict[str, Any]]:
+    tool_hints = workflow_payload.get("tool_hints") or {}
+    topics = (
+        workflow_payload.get("recommended_tail_topics") or DEFAULT_OPERATOR_TAIL_TOPICS
+    )
+    seconds = max(
+        0.0,
+        float(
+            workflow_payload.get(
+                "recommended_tail_seconds", DEFAULT_OPERATOR_TAIL_SECONDS
+            )
+            or 0.0
+        ),
+    )
+    max_events = max(
+        0,
+        int(
+            workflow_payload.get("recommended_max_events", DEFAULT_OPERATOR_MAX_EVENTS)
+            or 0
+        ),
+    )
+    return [
+        {
+            "label": "start",
+            "tool_name": str(
+                tool_hints.get("start") or "project_os_supervisor_start_isolated_job"
+            ),
+            "args": {
+                "manifest_path": str(manifest_path),
+                "service_name": primary_service,
+            },
+        },
+        {
+            "label": "snapshot",
+            "tool_name": str(
+                tool_hints.get("snapshot") or "project_os_supervisor_operator_snapshot"
+            ),
+            "args": {
+                "manifest_path": str(manifest_path),
+                "service_name": primary_service,
+                "topics": topics,
+                "seconds": seconds,
+                "max_events": max_events,
+            },
+        },
+        {
+            "label": "tail",
+            "tool_name": "project_os_tail",
+            "args": {
+                "topics": topics,
+                "seconds": seconds,
+                "max_events": max_events,
+            },
+        },
+        {
+            "label": "status",
+            "tool_name": "project_os_supervisor_status",
+            "args": {
+                "manifest_path": str(manifest_path),
+            },
+        },
+        {
+            "label": "stop",
+            "tool_name": "project_os_supervisor_stop_manifest",
+            "args": {
+                "manifest_path": str(manifest_path),
+            },
+        },
+    ]
+
+
+def _build_operator_brief(
+    *,
+    status: dict[str, Any],
+    primary_service: str,
+    authority_enabled: bool,
+) -> dict[str, Any]:
+    summary = status.get("summary", {})
+    services = _status_index(status)
+    primary = services.get(primary_service)
+    alerts: list[str] = []
+
+    primary_state = str(primary.get("state", "missing")) if primary else "missing"
+    primary_health = str(primary.get("health", "unknown")) if primary else "unknown"
+    authority_ready = None
+    if authority_enabled:
+        authority_ready = True
+        for name in ("event-bus", "authority-daemon"):
+            service = services.get(name)
+            if not service or service.get("state") != "running":
+                authority_ready = False
+                alerts.append(f"Authority service '{name}' is not running")
+
+    if primary is None:
+        alerts.append(f"Primary service '{primary_service}' has not started yet")
+    elif primary_state != "running":
+        alerts.append(
+            f"Primary service '{primary_service}' is {primary_state} ({primary_health})"
+        )
+    elif primary_health != "ok":
+        alerts.append(
+            f"Primary service '{primary_service}' is running but {primary_health}"
+        )
+
+    degraded = int(summary.get("degraded", 0) or 0)
+    if degraded:
+        alerts.append(f"{degraded} service(s) are degraded")
+
+    if primary is None or primary_state != "running":
+        recommended_action = "start"
+    elif degraded or (authority_enabled and authority_ready is False):
+        recommended_action = "snapshot"
+    else:
+        recommended_action = "tail"
+
+    mode = "healthy" if not alerts else "attention"
+    headline = (
+        f"Primary service '{primary_service}' is {primary_state}; "
+        f"running={int(summary.get('running', 0) or 0)}; "
+        f"degraded={degraded}"
+    )
+    return {
+        "mode": mode,
+        "headline": headline,
+        "primary_service_state": primary_state,
+        "primary_service_health": primary_health,
+        "authority_enabled": authority_enabled,
+        "authority_ready": authority_ready,
+        "recommended_action": recommended_action,
+        "alerts": alerts,
+    }
+
+
 def write_isolated_job_manifest(
     output_path: str | Path,
     *,
@@ -309,6 +455,20 @@ def start_isolated_job(
         job_start = start_manifest(manifest, service_name=primary_service)
         status = supervisor_status(manifest_path=manifest)
         topics = tail_topics or workflow["recommended_tail_topics"]
+        operator_workflow = {
+            **workflow,
+            "recommended_tail_topics": topics,
+            "recommended_tail_seconds": max(0.0, float(tail_seconds)),
+            "recommended_max_events": max(0, int(tail_max_events)),
+        }
+        operator_actions = _build_operator_actions(
+            manifest,
+            primary_service=primary_service,
+            workflow_payload=operator_workflow,
+        )
+        tail_hint = next(
+            action for action in operator_actions if action["label"] == "tail"
+        )
         success = bool(authority_start.get("success") and job_start.get("success"))
         return {
             "success": success,
@@ -318,12 +478,16 @@ def start_isolated_job(
             "authority_start": authority_start,
             "job_start": job_start,
             "status": status,
-            "workflow": workflow,
+            "workflow": operator_workflow,
+            "operator_brief": _build_operator_brief(
+                status=status,
+                primary_service=primary_service,
+                authority_enabled=_manifest_has_authority(manifest),
+            ),
+            "operator_actions": operator_actions,
             "tail_hint": {
-                "tool_name": "project_os_tail",
-                "topics": topics,
-                "seconds": max(0.0, float(tail_seconds)),
-                "max_events": max(0, int(tail_max_events)),
+                "tool_name": tail_hint["tool_name"],
+                **tail_hint["args"],
             },
         }
     except Exception as exc:
@@ -357,19 +521,40 @@ def operator_snapshot(
             or document.operator_workflow.recommended_tail_topics
             or DEFAULT_OPERATOR_TAIL_TOPICS,
         }
+        workflow_payload["recommended_tail_seconds"] = max(0.0, float(seconds))
+        workflow_payload["recommended_max_events"] = max(0, int(max_events))
         status = supervisor_status(manifest_path=manifest)
         tail = tail_project_os_events(
             topics=workflow_payload["recommended_tail_topics"],
-            seconds=max(0.0, float(seconds)),
-            max_events=max(0, int(max_events)),
+            seconds=workflow_payload["recommended_tail_seconds"],
+            max_events=workflow_payload["recommended_max_events"],
         )
+        operator_brief = _build_operator_brief(
+            status=status,
+            primary_service=primary_service,
+            authority_enabled=_manifest_has_authority(manifest),
+        )
+        if not tail.get("success"):
+            operator_brief["mode"] = "attention"
+            operator_brief["alerts"] = [
+                *operator_brief["alerts"],
+                str(tail.get("reason", "event tail unavailable")),
+            ]
+            if operator_brief["recommended_action"] == "tail":
+                operator_brief["recommended_action"] = "status"
         return {
-            "success": bool(status.get("success") and tail.get("success")),
+            "success": bool(status.get("success")),
             "manifest_path": str(manifest),
             "primary_service": primary_service,
             "workflow": workflow_payload,
             "status": status,
             "tail": tail,
+            "operator_brief": operator_brief,
+            "operator_actions": _build_operator_actions(
+                manifest,
+                primary_service=primary_service,
+                workflow_payload=workflow_payload,
+            ),
             "summary": (
                 f"primary_service={primary_service}; "
                 f"running={status['summary']['running']}; "

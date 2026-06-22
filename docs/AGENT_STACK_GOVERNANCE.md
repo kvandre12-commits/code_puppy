@@ -161,6 +161,34 @@ Only `approval_decision` is authoritative permission in that doctrine.
 That operator layer is mostly outside this checkout, but we adopt the rule here:
 **status, plans, and memory are not permission**.
 
+## Repo-shipped governance agents
+
+This checkout now ships project JSON agents mirroring that doctrine:
+
+- `workflow-state`
+- `execution-plan`
+- `approval-decision`
+- `journal-audit`
+- `governance-orchestrator`
+
+`governance-orchestrator` exists to run the chain explicitly instead of letting one giant agent answer blur facts, plans, authority, and audit together.
+
+## Broker / Robinhood routing rule
+
+Broker-adjacent work must be split into two different classes:
+
+1. **Local bounded validation/configuration work**
+   - examples: inspect MCP config, validate OAuth assumptions, check repo artifacts, assess whether a broker path is wired
+   - these can be planned and, if appropriate, approved locally as bounded repo work
+
+2. **Real broker-side account/order work**
+   - examples: account reads through the actual broker surface, order drafts for submission, submit/cancel/replace actions
+   - these are **not** to be represented as directly executable here unless a real authorized surface is in evidence
+   - if the live authority is downstream, route via `approval-decision` into `chatgpt_robinhood_delegate` or another explicit broker surface
+   - write-style requests remain operator-confirm-required
+
+This rule prevents the classic nonsense where OAuth research, config notes, or MCP optimism get mistaken for actual live broker authority.
+
 ## Stack surfaces already present in this repo
 
 ### Runtime substrate

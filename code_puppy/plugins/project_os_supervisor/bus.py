@@ -16,6 +16,7 @@ DEFAULT_QUEUE_LIMIT = 128
 DEFAULT_SELECT_TIMEOUT = 0.2
 DEFAULT_TAIL_SECONDS = 3.0
 DEFAULT_TAIL_MAX_EVENTS = 20
+DEFAULT_BUS_STATUS_TIMEOUT = 0.5
 
 
 @dataclass
@@ -167,6 +168,75 @@ def format_project_os_event(envelope: dict[str, Any]) -> str:
     return f"[{topic}] {timestamp} {event_type} source={source}{suffix}"
 
 
+def get_project_os_bus_status(
+    *,
+    timeout_seconds: float = DEFAULT_BUS_STATUS_TIMEOUT,
+) -> dict[str, Any]:
+    path = _socket_path()
+    sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    sock.settimeout(max(0.05, float(timeout_seconds)))
+    buffer = bytearray()
+    deadline = time.time() + max(0.05, float(timeout_seconds))
+    try:
+        sock.connect(str(path))
+        sock.sendall(_json_line({"op": "status"}))
+        while time.time() < deadline:
+            try:
+                chunk = sock.recv(4096)
+            except TimeoutError:
+                continue
+            if not chunk:
+                break
+            buffer.extend(chunk)
+            while b"\n" in buffer:
+                line, _, remainder = buffer.partition(b"\n")
+                buffer = bytearray(remainder)
+                if not line.strip():
+                    continue
+                message = json.loads(line.decode("utf-8"))
+                if message.get("op") != "status":
+                    continue
+                broker = message.get("broker")
+                if not isinstance(broker, dict):
+                    break
+                return {
+                    "success": True,
+                    "socket_path": str(path),
+                    "socket_exists": True,
+                    "broker_available": True,
+                    "connected_clients": int(broker.get("connected_clients", 0) or 0),
+                    "subscribed_clients": int(broker.get("subscribed_clients", 0) or 0),
+                    "published_events": int(broker.get("published_events", 0) or 0),
+                    "uptime_seconds": float(broker.get("uptime_seconds", 0.0) or 0.0),
+                    "timestamp": str(message.get("timestamp", "") or ""),
+                }
+    except OSError as exc:
+        return {
+            "success": True,
+            "socket_path": str(path),
+            "socket_exists": path.exists(),
+            "broker_available": False,
+            "connected_clients": 0,
+            "subscribed_clients": 0,
+            "published_events": 0,
+            "uptime_seconds": 0.0,
+            "reason": f"broker unavailable: {exc}",
+        }
+    finally:
+        sock.close()
+    return {
+        "success": True,
+        "socket_path": str(path),
+        "socket_exists": path.exists(),
+        "broker_available": False,
+        "connected_clients": 0,
+        "subscribed_clients": 0,
+        "published_events": 0,
+        "uptime_seconds": 0.0,
+        "reason": "broker did not return status response",
+    }
+
+
 def tail_project_os_events(
     *,
     topics: list[str] | None = None,
@@ -240,6 +310,7 @@ def run_event_broker() -> int:
     if path.exists():
         path.unlink()
 
+    started_at = time.time()
     server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     server.bind(str(path))
     server.listen()
@@ -323,6 +394,27 @@ def run_event_broker() -> int:
                             broker_envelope.setdefault("timestamp", utc_now())
                             broker_envelope["sequence"] = sequence
                             _broadcast(clients, broker_envelope)
+                        elif op == "status":
+                            _enqueue(
+                                client,
+                                {
+                                    "op": "status",
+                                    "timestamp": utc_now(),
+                                    "broker": {
+                                        "connected_clients": len(clients),
+                                        "subscribed_clients": sum(
+                                            1
+                                            for active_client in clients.values()
+                                            if active_client.subscribed
+                                        ),
+                                        "published_events": sequence,
+                                        "uptime_seconds": round(
+                                            max(0.0, time.time() - started_at),
+                                            3,
+                                        ),
+                                    },
+                                },
+                            )
 
                 if mask & selectors.EVENT_WRITE and client.out_queue:
                     payload = client.out_queue[0]

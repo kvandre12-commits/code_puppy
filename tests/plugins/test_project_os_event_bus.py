@@ -43,6 +43,31 @@ def _event_bus_service() -> dict:
 
 
 class TestProjectOsEventBus:
+    def test_project_os_bus_status_reports_unavailable_when_broker_is_down(
+        self, monkeypatch, tmp_path
+    ):
+        monkeypatch.setenv("PROJECT_OS_SUPERVISOR_ROOT", str(tmp_path / "supervisor"))
+
+        result = tooling.project_os_bus_status(timeout_seconds=0.1)
+
+        assert result["success"] is True
+        assert result["broker_available"] is False
+        assert result["socket_exists"] is False
+        assert "broker unavailable" in result["reason"]
+
+    def test_reset_state_clears_stale_event_socket(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("PROJECT_OS_SUPERVISOR_ROOT", str(tmp_path / "supervisor"))
+        socket_path = event_socket_path()
+        socket_path.parent.mkdir(parents=True, exist_ok=True)
+        socket_path.write_text("stale")
+
+        result = tooling.project_os_supervisor_reset_state(confirm=True)
+
+        assert result["success"] is True
+        assert result["socket_path"] == str(socket_path)
+        assert result["socket_cleared"] is True
+        assert not socket_path.exists()
+
     def test_project_os_tail_receives_direct_system_publish(
         self, monkeypatch, tmp_path
     ):
@@ -75,6 +100,14 @@ class TestProjectOsEventBus:
         assert result["events"][0]["topic"] == "system.test"
         assert result["events"][0]["event_type"] == "smoke"
         assert "hello from bus" in result["lines"][0]
+
+        status = tooling.project_os_bus_status(timeout_seconds=0.5)
+        assert status["success"] is True
+        assert status["broker_available"] is True
+        assert status["socket_exists"] is True
+        assert status["connected_clients"] >= 1
+        assert status["published_events"] >= 1
+        assert status["uptime_seconds"] >= 0.0
 
         tooling.project_os_supervisor_stop_manifest(str(manifest_path))
 

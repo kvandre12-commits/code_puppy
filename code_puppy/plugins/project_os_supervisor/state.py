@@ -370,4 +370,15 @@ def clear_supervisor_state() -> dict[str, Any]:
     root = get_supervisor_root()
     if root.exists():
         shutil.rmtree(root)
-    return {"success": True, "supervisor_root": str(root), "cleared": True}
+    socket_path = event_socket_path()
+    socket_cleared = False
+    if socket_path.exists() or socket_path.is_symlink():
+        socket_path.unlink(missing_ok=True)
+        socket_cleared = True
+    return {
+        "success": True,
+        "supervisor_root": str(root),
+        "cleared": True,
+        "socket_path": str(socket_path),
+        "socket_cleared": socket_cleared,
+    }

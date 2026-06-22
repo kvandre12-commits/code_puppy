@@ -89,6 +89,89 @@ def _check(name: str, status: str, detail: str, fix: str = "") -> dict[str, Any]
     return {"name": name, "status": status, "detail": detail, "fix": fix}
 
 
+def _parse_adb_device_count(adb_devices_block: dict[str, Any] | None) -> int:
+    if not adb_devices_block:
+        return 0
+    text = str(adb_devices_block.get("stdout") or "")
+    count = 0
+    for line in text.splitlines():
+        line = line.strip()
+        if not line or line.startswith("List of devices attached"):
+            continue
+        count += 1
+    return count
+
+
+def _surface(
+    surface_id: str,
+    *,
+    label: str,
+    availability: str,
+    verification: str,
+    capability_ids: list[str],
+    recommended_tools: list[str],
+    detail: str,
+    blockers: list[str] | None = None,
+) -> dict[str, Any]:
+    return {
+        "surface_id": surface_id,
+        "label": label,
+        "availability": availability,
+        "verification": verification,
+        "capability_ids": capability_ids,
+        "recommended_tools": recommended_tools,
+        "detail": detail,
+        "blockers": blockers or [],
+    }
+
+
+def _probe_android_utility() -> dict[str, Any]:
+    from code_puppy.plugins.android_utility_kit.tooling import android_utility_doctor
+
+    return android_utility_doctor()
+
+
+def _probe_android_browser() -> dict[str, Any]:
+    from code_puppy.plugins.android_brave_bridge.tooling import (
+        get_android_browser_status,
+    )
+
+    return get_android_browser_status()
+
+
+def _probe_android_cdp() -> dict[str, Any]:
+    from code_puppy.plugins.android_cdp_bridge.tooling import android_cdp_doctor
+
+    return android_cdp_doctor()
+
+
+def _probe_android_ui() -> dict[str, Any]:
+    from code_puppy.plugins.android_ui_dump_kit.tooling import android_ui_dump_doctor
+
+    return android_ui_dump_doctor()
+
+
+def _probe_android_screen() -> dict[str, Any]:
+    from code_puppy.plugins.android_screen_capture_kit.tooling import (
+        android_screen_capture_doctor,
+    )
+
+    return android_screen_capture_doctor()
+
+
+def _probe_project_os_bus() -> dict[str, Any]:
+    from code_puppy.plugins.project_os_supervisor.tooling import project_os_bus_status
+
+    return project_os_bus_status()
+
+
+def _safe_probe(name: str, probe: Callable[[], dict[str, Any]]) -> dict[str, Any]:
+    try:
+        return probe()
+    except Exception as exc:
+        return {"success": False, "probe": name, "error": str(exc)}
+
+
 # --------------------------------------------------------------------------- #
 # Individual checks                                                            #
 # --------------------------------------------------------------------------- #
@@ -226,6 +309,301 @@ def _check_cdp(local_port: int = 9222) -> list[dict[str, Any]]:
     ]
 
 
+def _check_project_os_bus() -> list[dict[str, Any]]:
+    probe = _safe_probe("project_os_bus_status", _probe_project_os_bus)
+    if not probe.get("success"):
+        return [
+            _check(
+                "project_os_bus_runtime",
+                WARN,
+                str(probe.get("error") or "project_os_bus_status failed"),
+                "Make sure the project_os_supervisor plugin is installed and wired up.",
+            )
+        ]
+    if probe.get("broker_available"):
+        return [
+            _check(
+                "project_os_bus_runtime",
+                PASS,
+                f"socket={probe.get('socket_path')} clients={probe.get('connected_clients')} published={probe.get('published_events')}",
+            )
+        ]
+    return [
+        _check(
+            "project_os_bus_runtime",
+            WARN,
+            str(probe.get("reason") or "Project OS bus is not running"),
+            "Start a manifest with the event_bus service or clear stale supervisor state.",
+        )
+    ]
+
+
+def _build_capability_routes() -> list[dict[str, Any]]:
+    return [
+        {
+            "capability_id": "android.app.launch",
+            "preferred_surface": "android_core",
+            "tools": ["android_launch_app", "android_open"],
+        },
+        {
+            "capability_id": "android.settings.open",
+            "preferred_surface": "android_core",
+            "tools": ["android_open_settings", "android_open"],
+        },
+        {
+            "capability_id": "android.intent.send",
+            "preferred_surface": "android_core",
+            "tools": ["android_intent_send", "android_share_text"],
+        },
+        {
+            "capability_id": "android.browser.open_url",
+            "preferred_surface": "browser_launch",
+            "tools": ["android_browser_open_url", "android_open"],
+        },
+        {
+            "capability_id": "android.browser.dom.read",
+            "preferred_surface": "browser_dom",
+            "tools": ["android_browser_read_page", "android_browser_get_html"],
+        },
+        {
+            "capability_id": "android.browser.dom.act",
+            "preferred_surface": "browser_dom",
+            "tools": [
+                "android_browser_click_link_by_text",
+                "android_browser_click_selector",
+                "android_browser_fill_input",
+            ],
+        },
+        {
+            "capability_id": "android.ui.inspect",
+            "preferred_surface": "ui_automation",
+            "tools": ["android_ui_dump_hierarchy", "android_ui_dump_find"],
+        },
+        {
+            "capability_id": "android.ui.act",
+            "preferred_surface": "ui_automation",
+            "tools": ["android_ui_tap_match", "android_ui_text_into_match"],
+        },
+        {
+            "capability_id": "android.screen.capture",
+            "preferred_surface": "screen_capture",
+            "tools": ["android_capture_screenshot", "android_record_screen"],
+        },
+        {
+            "capability_id": "android.diagnostics.observe",
+            "preferred_surface": "device_diagnostics",
+            "tools": [
+                "android_logcat_recent",
+                "android_dumpsys_snapshot",
+                "android_bugreport_collect",
+            ],
+        },
+        {
+            "capability_id": "project_os.governance.observe",
+            "preferred_surface": "governance",
+            "tools": [
+                "authority_gateway_status",
+                "project_os_supervisor_status",
+                "project_os_bus_status",
+            ],
+        },
+    ]
+
+
+def _build_surface_inventory(
+    checks: list[dict[str, Any]],
+    plugin_inventory: dict[str, Any],
+) -> dict[str, Any]:
+    utility = _safe_probe("android_utility_doctor", _probe_android_utility)
+    browser = _safe_probe("get_android_browser_status", _probe_android_browser)
+    cdp = _safe_probe("android_cdp_doctor", _probe_android_cdp)
+    ui = _safe_probe("android_ui_dump_doctor", _probe_android_ui)
+    screen = _safe_probe("android_screen_capture_doctor", _probe_android_screen)
+
+    platform = (
+        utility.get("platform") if isinstance(utility.get("platform"), dict) else {}
+    )
+    commands = (
+        utility.get("commands") if isinstance(utility.get("commands"), dict) else {}
+    )
+    browsers = (
+        browser.get("browsers") if isinstance(browser.get("browsers"), dict) else {}
+    )
+    cdp_adb = cdp.get("adb") if isinstance(cdp.get("adb"), dict) else {}
+    ui_commands = ui.get("commands") if isinstance(ui.get("commands"), dict) else {}
+    screen_commands = (
+        screen.get("commands") if isinstance(screen.get("commands"), dict) else {}
+    )
+    check_map = {row["name"]: row for row in checks}
+
+    android_core_ready = bool(platform.get("is_android")) and all(
+        commands.get(name) for name in CORE_COMMANDS
+    )
+    browser_launch_ready = android_core_ready and bool(
+        browsers.get("brave_installed")
+        or browsers.get("chrome_installed")
+        or browsers.get("firefox_packages")
+    )
+    adb_installed = bool(cdp_adb.get("installed"))
+    connected_adb_devices = _parse_adb_device_count(
+        cdp_adb.get("devices") if isinstance(cdp_adb.get("devices"), dict) else None
+    )
+    adb_ready = adb_installed and connected_adb_devices > 0
+
+    cdp_probe = check_map.get("cdp_probe")
+    cdp_deep_verified = cdp_probe is not None and cdp_probe.get("status") == PASS
+    cdp_blockers: list[str] = []
+    cdp_verification = "deep_verified" if cdp_deep_verified else "observed"
+    if not browser_launch_ready:
+        cdp_blockers.append("no supported browser launch surface is ready")
+    if not adb_installed:
+        cdp_blockers.append("adb is not installed")
+    elif connected_adb_devices <= 0:
+        cdp_blockers.append("no adb-connected Android device is available")
+    elif cdp_probe is None:
+        cdp_verification = "inferred"
+    elif cdp_probe.get("status") != PASS:
+        cdp_blockers.append(str(cdp_probe.get("detail") or "cdp probe failed"))
+
+    browser_dom_ready = (
+        browser_launch_ready and adb_ready and (cdp_deep_verified or cdp_probe is None)
+    )
+    ui_ready = adb_ready and bool(ui_commands.get("adb"))
+    screen_ready = adb_ready and bool(screen_commands.get("adb"))
+
+    plugin_map = {
+        plugin.get("name"): plugin
+        for plugin in plugin_inventory.get("plugins", [])
+        if isinstance(plugin, dict)
+    }
+    governance_ready = bool(
+        plugin_map.get("authority_gateway", {}).get("healthy")
+        and plugin_map.get("project_os_supervisor", {}).get("healthy")
+    )
+
+    surfaces = [
+        _surface(
+            "android_core",
+            label="Android native intents and settings",
+            availability="ready" if android_core_ready else "blocked",
+            verification="observed",
+            capability_ids=[
+                "android.app.launch",
+                "android.settings.open",
+                "android.intent.send",
+            ],
+            recommended_tools=[
+                "android_launch_app",
+                "android_open_settings",
+                "android_intent_send",
+                "android_share_text",
+            ],
+            detail="Direct Android app launch, settings routing, and intent dispatch.",
+            blockers=[]
+            if android_core_ready
+            else ["android core commands are unavailable"],
+        ),
+        _surface(
+            "browser_launch",
+            label="Android browser launch and URL handoff",
+            availability="ready" if browser_launch_ready else "blocked",
+            verification="observed",
+            capability_ids=["android.browser.open_url"],
+            recommended_tools=["android_browser_open_url", "android_open"],
+            detail="Open Brave/Chrome/system browser without DOM automation.",
+            blockers=[]
+            if browser_launch_ready
+            else [
+                "no supported browser package is installed or Android core is unavailable"
+            ],
+        ),
+        _surface(
+            "browser_dom",
+            label="Browser DOM automation through CDP",
+            availability="ready" if browser_dom_ready else "blocked",
+            verification=cdp_verification,
+            capability_ids=["android.browser.dom.read", "android.browser.dom.act"],
+            recommended_tools=[
+                "android_browser_read_page",
+                "android_browser_click_selector",
+                "android_browser_fill_input",
+            ],
+            detail="Structured browser reading/click/input through the Chrome DevTools bridge.",
+            blockers=cdp_blockers,
+        ),
+        _surface(
+            "ui_automation",
+            label="Device UI hierarchy and tap/type automation",
+            availability="ready" if ui_ready else "blocked",
+            verification="observed",
+            capability_ids=["android.ui.inspect", "android.ui.act"],
+            recommended_tools=["android_ui_dump_hierarchy", "android_ui_tap_match"],
+            detail="ADB-backed UI dump plus text/tap actions on visible Android widgets.",
+            blockers=[]
+            if ui_ready
+            else ["adb device connection is required for UI automation"],
+        ),
+        _surface(
+            "screen_capture",
+            label="Screenshot and screen recording capture",
+            availability="ready" if screen_ready else "blocked",
+            verification="observed",
+            capability_ids=["android.screen.capture"],
+            recommended_tools=["android_capture_screenshot", "android_record_screen"],
+            detail="ADB-backed still and video capture from the device screen.",
+            blockers=[]
+            if screen_ready
+            else ["adb device connection is required for screen capture"],
+        ),
+        _surface(
+            "device_diagnostics",
+            label="Android diagnostics and support collection",
+            availability="ready" if android_core_ready else "blocked",
+            verification="observed",
+            capability_ids=["android.diagnostics.observe"],
+            recommended_tools=[
+                "android_logcat_recent",
+                "android_dumpsys_snapshot",
+                "android_support_bundle_collect",
+            ],
+            detail="Logcat, dumpsys, bugreport, and support-bundle style observability.",
+            blockers=[]
+            if android_core_ready
+            else ["android environment is not available"],
+        ),
+        _surface(
+            "governance",
+            label="Project OS supervisor and authority gateway",
+            availability="ready" if governance_ready else "blocked",
+            verification="observed",
+            capability_ids=["project_os.governance.observe"],
+            recommended_tools=[
+                "authority_gateway_status",
+                "authority_gateway_list_active_leases",
+                "project_os_supervisor_status",
+                "project_os_bus_status",
+            ],
+            detail="Lease-aware control plane for gated actions, runtime observation, and event-bus health.",
+            blockers=[]
+            if governance_ready
+            else ["authority gateway or project_os_supervisor plugin is not healthy"],
+        ),
+    ]
+
+    summary = {
+        "ready": sum(1 for surface in surfaces if surface["availability"] == "ready"),
+        "blocked": sum(
+            1 for surface in surfaces if surface["availability"] == "blocked"
+        ),
+    }
+    return {
+        "summary": summary,
+        "connected_adb_devices": connected_adb_devices,
+        "surfaces": surfaces,
+        "capability_routes": _build_capability_routes(),
+    }
+
+
 # --------------------------------------------------------------------------- #
 # Plugin self-inventory                                                        #
 # --------------------------------------------------------------------------- #
@@ -284,6 +662,7 @@ def droidpuppy_doctor(deep: bool = False, local_port: int = 9222) -> dict[str, A
         _check_platform,
         _check_commands,
         _check_browsers,
+        _check_project_os_bus,
     ]
     for group in check_groups:
         try:
@@ -320,12 +699,15 @@ def droidpuppy_doctor(deep: bool = False, local_port: int = 9222) -> dict[str, A
     }
     next_steps = [c["fix"] for c in checks if c["status"] != PASS and c["fix"]]
 
+    surface_inventory = _build_surface_inventory(checks, inventory)
+
     return {
         "success": True,
         "overall_status": _overall_status(checks),
         "summary": summary,
         "checks": checks,
         "plugin_inventory": inventory,
+        "surface_inventory": surface_inventory,
         "next_steps": next_steps,
         "deep_probe_ran": deep,
     }

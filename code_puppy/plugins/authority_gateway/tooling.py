@@ -87,6 +87,57 @@ def _format_audit_event(event: dict[str, Any]) -> str:
     return f"[{label}] {timestamp} principal={principal_id} {summary}{suffix}"
 
 
+def _execution_topology_snapshot() -> dict[str, Any]:
+    try:
+        from code_puppy.plugins.droidpuppy_doctor.tooling import droidpuppy_doctor
+
+        result = droidpuppy_doctor(deep=False)
+    except Exception as exc:
+        return {
+            "success": False,
+            "error": f"droidpuppy_doctor unavailable: {exc}",
+        }
+
+    inventory = (
+        result.get("surface_inventory")
+        if isinstance(result.get("surface_inventory"), dict)
+        else {}
+    )
+    surfaces = (
+        inventory.get("surfaces") if isinstance(inventory.get("surfaces"), list) else []
+    )
+    ready_surface_ids = [
+        str(surface.get("surface_id"))
+        for surface in surfaces
+        if isinstance(surface, dict) and surface.get("availability") == "ready"
+    ]
+    blocked_surfaces = [
+        {
+            "surface_id": str(surface.get("surface_id")),
+            "blockers": list(surface.get("blockers") or []),
+        }
+        for surface in surfaces
+        if isinstance(surface, dict) and surface.get("availability") == "blocked"
+    ]
+    summary = (
+        inventory.get("summary") if isinstance(inventory.get("summary"), dict) else {}
+    )
+
+    return {
+        "success": True,
+        "overall_status": result.get("overall_status"),
+        "deep_probe_ran": bool(result.get("deep_probe_ran")),
+        "ready_surface_count": int(summary.get("ready", 0) or 0),
+        "blocked_surface_count": int(summary.get("blocked", 0) or 0),
+        "connected_adb_devices": int(inventory.get("connected_adb_devices", 0) or 0),
+        "ready_surface_ids": ready_surface_ids,
+        "blocked_surfaces": blocked_surfaces,
+        "capability_routes": inventory.get("capability_routes")
+        if isinstance(inventory.get("capability_routes"), list)
+        else [],
+    }
+
+
 def authority_gateway_status() -> dict[str, Any]:
     active_leases = _active_leases()
     quarantines = [entry.as_dict() for entry in get_active_quarantines()]
@@ -105,6 +156,19 @@ def authority_gateway_status() -> dict[str, Any]:
         system_state = "armed"
     else:
         system_state = "idle"
+
+    execution_topology = _execution_topology_snapshot()
+    topology_summary_bits: list[str] = []
+    if execution_topology.get("success"):
+        topology_summary_bits.extend(
+            [
+                f"surface_ready={execution_topology['ready_surface_count']}",
+                f"surface_blocked={execution_topology['blocked_surface_count']}",
+                f"adb_devices={execution_topology['connected_adb_devices']}",
+            ]
+        )
+    else:
+        topology_summary_bits.append("surface_topology=unavailable")
 
     return {
         "success": True,
@@ -125,9 +189,15 @@ def authority_gateway_status() -> dict[str, Any]:
         "quarantined_principals": [
             entry["principal_id"] for entry in quarantines if entry.get("principal_id")
         ],
-        "summary": (
-            f"state={system_state}; active_leases={len(active_leases)}; "
-            f"quarantines={len(quarantines)}; recent_anomalies={len(recent_anomalies)}"
+        "execution_topology": execution_topology,
+        "summary": "; ".join(
+            [
+                f"state={system_state}",
+                f"active_leases={len(active_leases)}",
+                f"quarantines={len(quarantines)}",
+                f"recent_anomalies={len(recent_anomalies)}",
+                *topology_summary_bits,
+            ]
         ),
     }
 

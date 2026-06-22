@@ -3,7 +3,8 @@ from __future__ import annotations
 import argparse
 import json
 
-from .bus import run_event_broker, tail_project_os_events
+from .bus import get_project_os_bus_status, run_event_broker, tail_project_os_events
+from .inspection import inspect_manifest
 from .manager import (
     initialize_sandbox,
     run_authority_daemon,
@@ -66,6 +67,9 @@ def main() -> None:
     write_job_manifest.add_argument("--without-authority", action="store_true")
     write_job_manifest.add_argument("--autostart", action="store_true")
 
+    inspect = subparsers.add_parser("inspect")
+    inspect.add_argument("--manifest", required=True)
+
     init_sandbox = subparsers.add_parser("init-sandbox")
     init_sandbox.add_argument("--manifest", default="")
     init_sandbox.add_argument("--service", default="")
@@ -111,6 +115,9 @@ def main() -> None:
 
     subparsers.add_parser("run-broker")
 
+    bus_status = subparsers.add_parser("bus-status")
+    bus_status.add_argument("--timeout-seconds", type=float, default=0.5)
+
     tail = subparsers.add_parser("tail")
     tail.add_argument("--seconds", type=float, default=3.0)
     tail.add_argument("--max-events", type=int, default=20)
@@ -140,6 +147,10 @@ def main() -> None:
         )
         print(json.dumps(result, indent=2, sort_keys=True))
         raise SystemExit(0 if result.get("success") else 1)
+    if args.command == "inspect":
+        result = inspect_manifest(args.manifest)
+        print(json.dumps(result, indent=2, sort_keys=True))
+        raise SystemExit(0 if result.get("valid") else 1)
     if args.command == "init-sandbox":
         result = initialize_sandbox(
             manifest_path=args.manifest or None,
@@ -195,6 +206,10 @@ def main() -> None:
         raise SystemExit(run_authority_daemon(max_beats=args.max_beats))
     if args.command == "run-broker":
         raise SystemExit(run_event_broker())
+    if args.command == "bus-status":
+        result = get_project_os_bus_status(timeout_seconds=args.timeout_seconds)
+        print(json.dumps(result, indent=2, sort_keys=True))
+        raise SystemExit(0 if result.get("broker_available") else 1)
     if args.command == "tail":
         result = tail_project_os_events(
             topics=args.topics,

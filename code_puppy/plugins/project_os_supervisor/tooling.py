@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from .bus import tail_project_os_events
+from .bus import get_project_os_bus_status, tail_project_os_events
+from .inspection import inspect_manifest
 from .manager import (
     clear_supervisor_state,
     initialize_sandbox,
@@ -33,6 +34,23 @@ def project_os_supervisor_write_authority_manifest(
     output_path: str = "outputs/project_os_authority_manifest.json",
 ) -> dict[str, Any]:
     return write_authority_manifest(output_path)
+
+
+def project_os_supervisor_inspect_manifest(
+    manifest_path: str,
+) -> dict[str, Any]:
+    if not manifest_path.strip():
+        return {
+            "manifest_path": "",
+            "valid": False,
+            "version": "",
+            "template_flavor": "",
+            "primary_service": "",
+            "runtime_summary": {},
+            "warnings": [],
+            "errors": ["manifest_path is required"],
+        }
+    return inspect_manifest(manifest_path)
 
 
 def project_os_supervisor_init_sandbox(
@@ -153,6 +171,10 @@ def project_os_supervisor_operator_snapshot(
         seconds=seconds,
         max_events=max_events,
     )
+
+
+def project_os_bus_status(timeout_seconds: float = 0.5) -> dict[str, Any]:
+    return get_project_os_bus_status(timeout_seconds=timeout_seconds)
 
 
 def project_os_tail(

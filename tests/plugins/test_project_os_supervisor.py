@@ -46,6 +46,7 @@ class TestProjectOsSupervisorRegistration:
         assert names == {
             "project_os_supervisor_status",
             "project_os_supervisor_write_authority_manifest",
+            "project_os_supervisor_inspect_manifest",
             "project_os_supervisor_init_sandbox",
             "project_os_supervisor_start_manifest",
             "project_os_supervisor_start_isolated_job",
@@ -54,6 +55,7 @@ class TestProjectOsSupervisorRegistration:
             "project_os_supervisor_reset_state",
             "project_os_supervisor_write_isolated_job_manifest",
             "project_os_supervisor_operator_snapshot",
+            "project_os_bus_status",
             "project_os_tail",
         }
 
@@ -61,6 +63,7 @@ class TestProjectOsSupervisorRegistration:
         assert register_callbacks._advertise_tools_to_agent("code-puppy") == [
             "project_os_supervisor_status",
             "project_os_supervisor_write_authority_manifest",
+            "project_os_supervisor_inspect_manifest",
             "project_os_supervisor_init_sandbox",
             "project_os_supervisor_start_manifest",
             "project_os_supervisor_start_isolated_job",
@@ -69,6 +72,7 @@ class TestProjectOsSupervisorRegistration:
             "project_os_supervisor_reset_state",
             "project_os_supervisor_write_isolated_job_manifest",
             "project_os_supervisor_operator_snapshot",
+            "project_os_bus_status",
             "project_os_tail",
         ]
 
@@ -124,6 +128,87 @@ class TestProjectOsSupervisorTooling:
             "rootfs_url": "",
         }
         assert job_service["env"]["PROJECT_OS_PRINCIPAL_ID"]
+
+    def test_project_os_supervisor_inspect_manifest_reports_normalized_runtime_summary(
+        self, monkeypatch, tmp_path
+    ):
+        monkeypatch.setenv("PROJECT_OS_SUPERVISOR_ROOT", str(tmp_path / "supervisor"))
+        result = tooling.project_os_supervisor_write_isolated_job_manifest(
+            output_path=str(tmp_path / "isolated_job.json"),
+            service_name="job",
+            sandbox_name="job-box",
+            command=[sys.executable, "-c", "print('sandbox hello')"],
+        )
+
+        report = tooling.project_os_supervisor_inspect_manifest(result["manifest_path"])
+
+        assert report["valid"] is True
+        assert report["version"] == "1.0.0"
+        assert report["primary_service"] == "job"
+        assert report["runtime_summary"] == {
+            "event-bus": "host (builtin)",
+            "authority-daemon": "host (builtin)",
+            "job": "proot (sandbox: job-box)",
+        }
+        assert report["warnings"] == []
+        assert report["errors"] == []
+
+    def test_project_os_supervisor_inspect_manifest_warns_on_legacy_shapes(
+        self, tmp_path
+    ):
+        manifest_path = tmp_path / "legacy_manifest.json"
+        manifest_path.write_text(
+            json.dumps(
+                {
+                    "manifest_version": "1.0.0",
+                    "template": {
+                        "flavor": "isolated_job.v1",
+                        "strict_validation": True,
+                    },
+                    "authority": {
+                        "principal_id": "principal-123",
+                        "required": True,
+                        "enforce_handshake": True,
+                    },
+                    "operator_workflow": {
+                        "primary_service": "job",
+                        "start_tool": "project_os_supervisor_start_isolated_job",
+                        "snapshot_tool": "project_os_supervisor_operator_snapshot",
+                    },
+                    "services": [
+                        {"name": "event-bus", "builtin": "event_bus"},
+                        {
+                            "name": "authority-daemon",
+                            "builtin": "authority_daemon",
+                        },
+                        {
+                            "name": "job",
+                            "command": [sys.executable, "-c", "print('hi')"],
+                            "runtime": "direct",
+                            "sandbox_name": "job-box",
+                            "sandbox_bind_mounts": [".:/workspace"],
+                        },
+                    ],
+                },
+                indent=2,
+            )
+            + "\n"
+        )
+
+        report = tooling.project_os_supervisor_inspect_manifest(str(manifest_path))
+
+        assert report["valid"] is True
+        assert report["runtime_summary"]["job"].startswith("host")
+        assert any(
+            "operator_workflow.start_tool" in warning for warning in report["warnings"]
+        )
+        assert any(
+            "operator_workflow.snapshot_tool" in warning
+            for warning in report["warnings"]
+        )
+        assert any("runtime=direct" in warning for warning in report["warnings"])
+        assert any("flat sandbox_* keys" in warning for warning in report["warnings"])
+        assert report["errors"] == []
 
     def test_load_manifest_document_supports_nested_and_legacy_runtime_shapes(
         self, tmp_path
@@ -389,6 +474,14 @@ class TestProjectOsSupervisorTooling:
         assert start["primary_service"] == "isolated-job"
         assert start["sandbox"]["skipped"] is True
         assert start["tail_hint"]["tool_name"] == "project_os_tail"
+        assert start["operator_brief"]["authority_enabled"] is True
+        assert {action["label"] for action in start["operator_actions"]} == {
+            "start",
+            "snapshot",
+            "tail",
+            "status",
+            "stop",
+        }
 
         running = _wait_for(
             lambda: (
@@ -436,8 +529,44 @@ class TestProjectOsSupervisorTooling:
         assert snapshot["tail"]["count"] == 1
         assert snapshot["tail"]["events"][0]["topic"] == "system.test"
         assert snapshot["status"]["count"] == 3
+        assert snapshot["operator_brief"]["recommended_action"] == "tail"
+        assert snapshot["operator_brief"]["mode"] == "healthy"
+        assert snapshot["operator_brief"]["alerts"] == []
+        assert snapshot["operator_actions"][0]["tool_name"] == (
+            "project_os_supervisor_start_isolated_job"
+        )
+        assert snapshot["operator_actions"][1]["args"]["topics"] == ["system.test"]
 
         tooling.project_os_supervisor_stop_manifest(manifest_path)
+
+    def test_operator_snapshot_guides_start_when_primary_is_idle(
+        self, monkeypatch, tmp_path
+    ):
+        monkeypatch.setenv("PROJECT_OS_SUPERVISOR_ROOT", str(tmp_path / "supervisor"))
+        manifest_result = tooling.project_os_supervisor_write_isolated_job_manifest(
+            output_path=str(tmp_path / "isolated_job.json"),
+            runtime="host",
+            command=[sys.executable, "-c", "print('hello from idle job')"],
+        )
+
+        snapshot = tooling.project_os_supervisor_operator_snapshot(
+            manifest_path=manifest_result["manifest_path"],
+            seconds=0.0,
+            max_events=0,
+        )
+
+        assert snapshot["success"] is True
+        assert snapshot["operator_brief"]["recommended_action"] == "start"
+        assert snapshot["operator_brief"]["mode"] == "attention"
+        assert any(
+            "has not started yet" in alert
+            for alert in snapshot["operator_brief"]["alerts"]
+        )
+        assert snapshot["operator_actions"][0]["label"] == "start"
+        assert (
+            snapshot["operator_actions"][0]["args"]["manifest_path"]
+            == (manifest_result["manifest_path"])
+        )
 
     def test_rotate_log_keeps_backups(self, tmp_path):
         log_path = tmp_path / "service.log"
@@ -451,6 +580,65 @@ class TestProjectOsSupervisorTooling:
         assert not log_path.exists()
         assert (tmp_path / "service.log.1").read_text() == "x" * 20
         assert (tmp_path / "service.log.2").read_text() == "older"
+
+    def test_cli_inspect_returns_nonzero_for_invalid_manifest(
+        self, monkeypatch, tmp_path, capsys
+    ):
+        manifest_path = tmp_path / "invalid_manifest.json"
+        manifest_path.write_text(
+            json.dumps(
+                {
+                    "manifest_version": "1.0.0",
+                    "template": {
+                        "flavor": "isolated_job.v1",
+                        "strict_validation": True,
+                    },
+                    "authority": {
+                        "principal_id": "",
+                        "required": True,
+                        "enforce_handshake": True,
+                    },
+                    "operator_workflow": {
+                        "primary_service": "job",
+                    },
+                    "services": [
+                        {"name": "event-bus", "builtin": "event_bus"},
+                        {
+                            "name": "authority-daemon",
+                            "builtin": "authority_daemon",
+                        },
+                        {
+                            "name": "job",
+                            "command": [sys.executable, "-c", "print('hi')"],
+                            "runtime": "host",
+                        },
+                    ],
+                },
+                indent=2,
+            )
+            + "\n"
+        )
+
+        monkeypatch.setattr(
+            sys,
+            "argv",
+            [
+                "project-os-supervisor",
+                "inspect",
+                "--manifest",
+                str(manifest_path),
+            ],
+        )
+        try:
+            main_mod.main()
+        except SystemExit as exc:
+            assert exc.code == 1
+
+        output = json.loads(capsys.readouterr().out)
+        assert output["valid"] is False
+        assert output["errors"] == [
+            "authority.principal_id is required when authority.required=true"
+        ]
 
     def test_cli_status_prints_json(self, monkeypatch, tmp_path, capsys):
         monkeypatch.setenv("PROJECT_OS_SUPERVISOR_ROOT", str(tmp_path / "supervisor"))

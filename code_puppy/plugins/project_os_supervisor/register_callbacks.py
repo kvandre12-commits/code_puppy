@@ -8,6 +8,7 @@ from code_puppy.callbacks import register_callback
 
 from .tooling import (
     project_os_supervisor_init_sandbox as project_os_supervisor_init_sandbox_impl,
+    project_os_supervisor_inspect_manifest as project_os_supervisor_inspect_manifest_impl,
     project_os_supervisor_operator_snapshot as project_os_supervisor_operator_snapshot_impl,
     project_os_supervisor_reset_state as project_os_supervisor_reset_state_impl,
     project_os_supervisor_start_isolated_job as project_os_supervisor_start_isolated_job_impl,
@@ -17,11 +18,13 @@ from .tooling import (
     project_os_supervisor_stop_service as project_os_supervisor_stop_service_impl,
     project_os_supervisor_write_authority_manifest as project_os_supervisor_write_authority_manifest_impl,
     project_os_supervisor_write_isolated_job_manifest as project_os_supervisor_write_isolated_job_manifest_impl,
+    project_os_bus_status as project_os_bus_status_impl,
     project_os_tail as project_os_tail_impl,
 )
 
 _STATUS = "project_os_supervisor_status"
 _WRITE_MANIFEST = "project_os_supervisor_write_authority_manifest"
+_INSPECT_MANIFEST = "project_os_supervisor_inspect_manifest"
 _INIT_SANDBOX = "project_os_supervisor_init_sandbox"
 _START_MANIFEST = "project_os_supervisor_start_manifest"
 _START_ISOLATED_JOB = "project_os_supervisor_start_isolated_job"
@@ -30,6 +33,7 @@ _STOP_MANIFEST = "project_os_supervisor_stop_manifest"
 _RESET_STATE = "project_os_supervisor_reset_state"
 _WRITE_ISOLATED_JOB_MANIFEST = "project_os_supervisor_write_isolated_job_manifest"
 _OPERATOR_SNAPSHOT = "project_os_supervisor_operator_snapshot"
+_BUS_STATUS = "project_os_bus_status"
 _TAIL = "project_os_tail"
 
 
@@ -56,6 +60,18 @@ def register_project_os_supervisor_write_authority_manifest(agent: Any) -> None:
         del context
         return project_os_supervisor_write_authority_manifest_impl(
             output_path=output_path,
+        )
+
+
+def register_project_os_supervisor_inspect_manifest(agent: Any) -> None:
+    @agent.tool
+    async def project_os_supervisor_inspect_manifest(
+        context: RunContext,
+        manifest_path: str,
+    ) -> dict[str, Any]:
+        del context
+        return project_os_supervisor_inspect_manifest_impl(
+            manifest_path=manifest_path,
         )
 
 
@@ -203,6 +219,16 @@ def register_project_os_supervisor_operator_snapshot(agent: Any) -> None:
         )
 
 
+def register_project_os_bus_status(agent: Any) -> None:
+    @agent.tool
+    async def project_os_bus_status(
+        context: RunContext,
+        timeout_seconds: float = 0.5,
+    ) -> dict[str, Any]:
+        del context
+        return project_os_bus_status_impl(timeout_seconds=timeout_seconds)
+
+
 def register_project_os_tail(agent: Any) -> None:
     @agent.tool
     async def project_os_tail(
@@ -225,6 +251,10 @@ def register_tools_callback() -> list[dict[str, Any]]:
         {
             "name": _WRITE_MANIFEST,
             "register_func": register_project_os_supervisor_write_authority_manifest,
+        },
+        {
+            "name": _INSPECT_MANIFEST,
+            "register_func": register_project_os_supervisor_inspect_manifest,
         },
         {
             "name": _INIT_SANDBOX,
@@ -258,6 +288,7 @@ def register_tools_callback() -> list[dict[str, Any]]:
             "name": _OPERATOR_SNAPSHOT,
             "register_func": register_project_os_supervisor_operator_snapshot,
         },
+        {"name": _BUS_STATUS, "register_func": register_project_os_bus_status},
         {"name": _TAIL, "register_func": register_project_os_tail},
     ]
 
@@ -267,6 +298,7 @@ def _advertise_tools_to_agent(agent_name: str | None = None) -> list[str]:
     return [
         _STATUS,
         _WRITE_MANIFEST,
+        _INSPECT_MANIFEST,
         _INIT_SANDBOX,
         _START_MANIFEST,
         _START_ISOLATED_JOB,
@@ -275,6 +307,7 @@ def _advertise_tools_to_agent(agent_name: str | None = None) -> list[str]:
         _RESET_STATE,
         _WRITE_ISOLATED_JOB_MANIFEST,
         _OPERATOR_SNAPSHOT,
+        _BUS_STATUS,
         _TAIL,
     ]
 

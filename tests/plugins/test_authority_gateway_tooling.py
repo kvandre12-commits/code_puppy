@@ -111,6 +111,26 @@ class TestAuthorityGatewayToolRegistration:
 class TestAuthorityGatewayTooling:
     def test_status_and_list_active_leases_show_live_state(self, monkeypatch, tmp_path):
         monkeypatch.setenv("PROJECT_OS_EYES_ROOT", str(tmp_path))
+        monkeypatch.setattr(
+            tooling,
+            "_execution_topology_snapshot",
+            lambda: {
+                "success": True,
+                "overall_status": "healthy",
+                "deep_probe_ran": False,
+                "ready_surface_count": 4,
+                "blocked_surface_count": 3,
+                "connected_adb_devices": 0,
+                "ready_surface_ids": ["android_core", "browser_launch"],
+                "blocked_surfaces": [
+                    {
+                        "surface_id": "browser_dom",
+                        "blockers": ["no adb-connected Android device is available"],
+                    }
+                ],
+                "capability_routes": [],
+            },
+        )
         _write_lease(tmp_path, _v2_lease("lease-one"))
         _write_lease(
             tmp_path,
@@ -127,9 +147,36 @@ class TestAuthorityGatewayTooling:
         assert status["system_state"] == "armed"
         assert status["active_lease_count"] == 2
         assert status["quarantine_count"] == 0
+        assert status["execution_topology"]["success"] is True
+        assert status["execution_topology"]["ready_surface_count"] == 4
+        assert status["execution_topology"]["blocked_surface_count"] == 3
+        assert status["execution_topology"]["connected_adb_devices"] == 0
+        assert "surface_ready=4" in status["summary"]
+        assert "surface_blocked=3" in status["summary"]
+        assert "adb_devices=0" in status["summary"]
         assert leases["count"] == 2
         assert filtered["count"] == 1
         assert filtered["leases"][0]["principal_id"] == "worker-beta"
+
+    def test_status_degrades_gracefully_when_topology_snapshot_is_unavailable(
+        self, monkeypatch, tmp_path
+    ):
+        monkeypatch.setenv("PROJECT_OS_EYES_ROOT", str(tmp_path))
+        monkeypatch.setattr(
+            tooling,
+            "_execution_topology_snapshot",
+            lambda: {
+                "success": False,
+                "error": "droidpuppy_doctor unavailable: boom",
+            },
+        )
+
+        status = tooling.authority_gateway_status()
+
+        assert status["success"] is True
+        assert status["system_state"] == "idle"
+        assert status["execution_topology"]["success"] is False
+        assert "surface_topology=unavailable" in status["summary"]
 
     def test_quarantine_status_and_recent_audit_surface_breaker_timeline(
         self, monkeypatch, tmp_path
