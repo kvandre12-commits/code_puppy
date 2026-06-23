@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from .doctrine_consultation import DoctrineMutationCheck, analyze_mutation
+from .doctrine_receipts import record_doctrine_receipt
 
 
 @dataclass(slots=True, frozen=True)
@@ -39,8 +40,8 @@ def prove_doctrine_guided_mutation(
         tool_name=tool_name, tool_args=original_args, check=check
     )
     decision_ids = tuple(conflict.decision.id for conflict in check.conflicts)
-
-    return MutationProofResult(
+    changed_plan = adapted_args != original_args
+    result = MutationProofResult(
         warning_message=check.warning_message,
         original_tool_name=tool_name,
         original_tool_args=original_args,
@@ -49,9 +50,11 @@ def prove_doctrine_guided_mutation(
         original_plan=_describe_original_plan(tool_name, check),
         adapted_plan=_describe_adapted_plan(tool_name, check, adapted_args),
         doctrine_decision_ids=decision_ids,
-        changed_plan=adapted_args != original_args,
-        patch_differs=adapted_args != original_args,
+        changed_plan=changed_plan,
+        patch_differs=changed_plan,
     )
+    _record_adaptation_receipts(check, result)
+    return result
 
 
 def _describe_original_plan(tool_name: str, check: DoctrineMutationCheck) -> str:
@@ -105,6 +108,21 @@ def _adapt_tool_args(
         replacements.append(next_replacement)
     adapted["replacements"] = replacements
     return adapted
+
+
+def _record_adaptation_receipts(
+    check: DoctrineMutationCheck,
+    result: MutationProofResult,
+) -> None:
+    for conflict in check.conflicts:
+        record_doctrine_receipt(
+            decision_id=conflict.decision.id,
+            proposed_action=check.proposed_action,
+            warning_shown=True,
+            adapted=result.changed_plan,
+            before_summary=result.original_plan,
+            after_summary=result.adapted_plan,
+        )
 
 
 def _strip_conflicting_lines(content: str, blocked_packages: set[str]) -> str:

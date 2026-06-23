@@ -22,6 +22,7 @@ def doctrine_env(
     from code_puppy.plugins.puppy_kennel import config as kennel_config
     from code_puppy.plugins.puppy_kennel import decisions as decisions_mod
     from code_puppy.plugins.puppy_kennel import doctrine_consultation as consult_mod
+    from code_puppy.plugins.puppy_kennel import doctrine_receipts as receipts_mod
     from code_puppy.plugins.puppy_kennel import kennel as kennel_mod
     from code_puppy.plugins.puppy_kennel import mutation_proof as proof_mod
     from code_puppy.plugins.puppy_kennel import state as state_mod
@@ -29,6 +30,7 @@ def doctrine_env(
     importlib.reload(kennel_config)
     importlib.reload(state_mod)
     importlib.reload(kennel_mod)
+    importlib.reload(receipts_mod)
     importlib.reload(decisions_mod)
     importlib.reload(consult_mod)
     importlib.reload(proof_mod)
@@ -70,8 +72,11 @@ def test_doctrine_warning_changes_plan_and_patch(
         ],
     }
 
+    from code_puppy.plugins.puppy_kennel import doctrine_receipts as receipts_mod
+
     warning = consult_mod.build_pre_tool_response("replace_in_file", tool_args)
     result = proof_mod.prove_doctrine_guided_mutation("replace_in_file", tool_args)
+    receipts = receipts_mod.recent_doctrine_receipts(limit=5)
 
     assert warning is not None
     assert result is not None
@@ -89,6 +94,12 @@ def test_doctrine_warning_changes_plan_and_patch(
     assert '"playwright>=1.55"' not in adapted_new
     assert adapted_new == result.original_tool_args["replacements"][0]["old_str"]
     assert "avoid adding [playwright]" in result.adapted_plan
+    assert len(receipts) == 2
+    assert receipts[0].decision_id == "playwright-optional-on-android"
+    assert receipts[0].adapted is True
+    assert receipts[0].before_summary == result.original_plan
+    assert receipts[0].after_summary == result.adapted_plan
+    assert receipts[1].adapted is False
 
 
 def test_proof_harness_returns_none_without_doctrine_conflict(

@@ -8,6 +8,7 @@ Sub-commands under ``/kennel``:
 * ``/kennel stats``           — Storage stats and totals
 * ``/kennel inventory``       — Wing/room growth summary
 * ``/kennel doctrine <id>``   — Explain one stored decision/doctrine item
+* ``/kennel receipts``        — Show recent doctrine warning/adaptation receipts
 * ``/kennel debug``           — Inspect recall de-echo keep/drop reasons
 * ``/kennel audit``           — Run hinge/follow-up/doctrine-gap audit
 * ``/kennel checkpoint``      — Friendly structured hinge capture path
@@ -26,6 +27,7 @@ from code_puppy.messaging import emit_error, emit_info, emit_success, emit_warni
 
 from . import kennel, packer
 from .decisions import get_decision
+from .doctrine_receipts import recent_doctrine_receipts, summarize_doctrine_receipts
 from .doctrine_render import render_decision_detail
 from .audit import (
     collect_decisions_missing_follow_up,
@@ -270,6 +272,32 @@ def _cmd_doctrine(rest: str) -> bool:
     return True
 
 
+def _cmd_receipts() -> bool:
+    summary = summarize_doctrine_receipts(top_n=5)
+    emit_info("Doctrine receipts:")
+    emit_info(f"  total     : {summary.total_count}")
+    emit_info(f"  adapted   : {summary.adapted_count}")
+    emit_info(f"  unchanged : {summary.unchanged_count}")
+    if summary.top_decisions:
+        emit_info("Top doctrines:")
+        for item in summary.top_decisions:
+            emit_info(
+                f"  {item.decision_id} — total {item.total_count}, adapted {item.adapted_count}"
+            )
+    recent = recent_doctrine_receipts(limit=5)
+    if recent:
+        emit_info("Recent receipts:")
+        for item in recent:
+            status = "adapted" if item.adapted else "warning-only"
+            emit_info(
+                f"  [{item.ts}] {item.decision_id} ({item.repo_family}) "
+                f"{status} -> {item.proposed_action}"
+            )
+    else:
+        emit_warning("  No doctrine receipts yet.")
+    return True
+
+
 def _cmd_inventory() -> bool:
     wings = kennel.list_wings()
     if not wings:
@@ -423,6 +451,7 @@ def _cmd_help() -> bool:
     emit_info("  /kennel stats           - storage stats + enabled state")
     emit_info("  /kennel inventory       - top wings/rooms by memory growth")
     emit_info("  /kennel doctrine <id>   - explain one stored decision/doctrine item")
+    emit_info("  /kennel receipts        - recent doctrine warning/adaptation receipts")
     emit_info("  /kennel debug [dropped|all] [n] - inspect echo-filter reasons")
     emit_info("  /kennel audit [scope] [n] - run hinge/follow-up/doctrine audit")
     emit_info("  /kennel checkpoint <what> || <why> [|| follow-up: <next>] ...")
@@ -462,6 +491,8 @@ def handle(command: str, name: str) -> Any:
         return _cmd_inventory()
     if sub in ("doctrine", "decision"):
         return _cmd_doctrine(rest)
+    if sub in ("receipts", "receipt"):
+        return _cmd_receipts()
     if sub == "debug":
         return _cmd_debug(rest)
     if sub == "audit":

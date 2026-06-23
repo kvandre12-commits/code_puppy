@@ -95,6 +95,22 @@ CREATE TABLE IF NOT EXISTS decision_evidence_artifacts (
 CREATE INDEX IF NOT EXISTS idx_decisions_status ON decisions(status);
 CREATE INDEX IF NOT EXISTS idx_decisions_reviewed ON decisions(last_reviewed_at);
 CREATE INDEX IF NOT EXISTS idx_decision_repos_repo_name ON decision_repos(repo_name);
+
+CREATE TABLE IF NOT EXISTS doctrine_receipts (
+    id              INTEGER PRIMARY KEY,
+    ts              TEXT NOT NULL,
+    decision_id     TEXT NOT NULL REFERENCES decisions(id) ON DELETE CASCADE,
+    repo_family     TEXT NOT NULL,
+    proposed_action TEXT NOT NULL,
+    warning_shown   INTEGER NOT NULL,
+    adapted         INTEGER NOT NULL,
+    before_summary  TEXT NOT NULL,
+    after_summary   TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_doctrine_receipts_ts ON doctrine_receipts(ts);
+CREATE INDEX IF NOT EXISTS idx_doctrine_receipts_decision_id ON doctrine_receipts(decision_id);
+CREATE INDEX IF NOT EXISTS idx_doctrine_receipts_repo_family ON doctrine_receipts(repo_family);
 """
 
 # PRAGMAs applied on every connection. WAL is the headline: one writer +

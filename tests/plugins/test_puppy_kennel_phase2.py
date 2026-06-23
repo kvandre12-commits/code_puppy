@@ -19,13 +19,19 @@ def kennel_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
     import importlib
 
+    from code_puppy.plugins.puppy_kennel import commands as commands_mod
     from code_puppy.plugins.puppy_kennel import config as kennel_config
+    from code_puppy.plugins.puppy_kennel import decisions as decisions_mod
+    from code_puppy.plugins.puppy_kennel import doctrine_receipts as receipts_mod
     from code_puppy.plugins.puppy_kennel import kennel as kennel_mod
     from code_puppy.plugins.puppy_kennel import state as state_mod
 
     importlib.reload(kennel_config)
     importlib.reload(state_mod)
     importlib.reload(kennel_mod)
+    importlib.reload(receipts_mod)
+    importlib.reload(decisions_mod)
+    importlib.reload(commands_mod)
     kennel_mod.initialize()
     return root
 
@@ -295,6 +301,59 @@ def test_kennel_default_overview_includes_active_doctrine(kennel_root: Path) -> 
     )
     assert "Active Doctrine" in rendered
     assert "Authority Validation Before Lease Issue" in rendered
+
+
+def test_kennel_receipts_renders_summary(kennel_root: Path) -> None:
+    from code_puppy.plugins.puppy_kennel import commands, decisions, doctrine_receipts
+
+    decisions.upsert_decision(
+        decisions.DecisionRecord(
+            id="playwright-optional-on-android",
+            title="Playwright Optional On Android",
+            status="active",
+            confidence="high",
+            summary="Browser automation dependencies remain optional for Android compatibility.",
+            rationale="Android/Termux environments cannot reliably assume Playwright availability.",
+            affected_repos=["code_puppy"],
+            evidence_artifact_ids=["PR-494"],
+            created_at="2026-06-23T20:00:00Z",
+            last_reviewed_at="2026-06-23",
+            supersedes=[],
+            superseded_by=[],
+        )
+    )
+    doctrine_receipts.record_doctrine_receipt(
+        decision_id="playwright-optional-on-android",
+        proposed_action="dependency-edit:pyproject.toml",
+        warning_shown=True,
+        adapted=False,
+        before_summary="Add dependency signal [playwright] in pyproject.toml.",
+        after_summary="Add dependency signal [playwright] in pyproject.toml.",
+        repo_family="code_puppy",
+    )
+    doctrine_receipts.record_doctrine_receipt(
+        decision_id="playwright-optional-on-android",
+        proposed_action="dependency-edit:pyproject.toml",
+        warning_shown=True,
+        adapted=True,
+        before_summary="Add dependency signal [playwright] in pyproject.toml.",
+        after_summary="replace_in_file is revised to avoid adding [playwright].",
+        repo_family="code_puppy",
+    )
+
+    with patch("code_puppy.plugins.puppy_kennel.commands.emit_info") as mock_info:
+        assert commands.handle("/kennel receipts", "kennel") is True
+
+    rendered = "\n".join(
+        str(call.args[0]) for call in mock_info.call_args_list if call.args
+    )
+    assert "Doctrine receipts:" in rendered
+    assert "total     : 2" in rendered
+    assert "adapted   : 1" in rendered
+    assert "unchanged : 1" in rendered
+    assert "playwright-optional-on-android — total 2, adapted 1" in rendered
+    assert "warning-only -> dependency-edit:pyproject.toml" in rendered
+    assert "adapted -> dependency-edit:pyproject.toml" in rendered
 
 
 def test_kennel_doctrine_renders_explanation_surface(kennel_root: Path) -> None:

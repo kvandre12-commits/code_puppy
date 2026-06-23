@@ -18,6 +18,7 @@ from typing import Any
 from code_puppy.messaging import emit_warning
 
 from .decisions import DecisionRecord, get_active_decisions_for_cwd
+from .doctrine_receipts import record_doctrine_receipt
 from .state import is_enabled
 
 _MUTATION_TOOLS = frozenset({"create_file", "replace_in_file"})
@@ -52,6 +53,15 @@ class DoctrineMutationCheck:
     @property
     def conflicting_packages(self) -> tuple[str, ...]:
         return tuple(conflict.package_name for conflict in self.conflicts)
+
+    @property
+    def proposed_action(self) -> str:
+        return f"dependency-edit:{self.file_path}"
+
+    @property
+    def before_summary(self) -> str:
+        packages = ", ".join(self.added_packages)
+        return f"Add dependency signal [{packages}] in {self.file_path}."
 
 
 def analyze_mutation(
@@ -97,6 +107,7 @@ def build_pre_tool_response(
     if check is None:
         return None
     emit_warning(check.warning_message)
+    _record_warning_receipts(check)
     return {"context_message": check.warning_message}
 
 
@@ -218,6 +229,18 @@ def _find_conflicts(
                 DoctrineConflict(package_name=package_name, decision=decision)
             )
     return conflicts
+
+
+def _record_warning_receipts(check: DoctrineMutationCheck) -> None:
+    for conflict in check.conflicts:
+        record_doctrine_receipt(
+            decision_id=conflict.decision.id,
+            proposed_action=check.proposed_action,
+            warning_shown=True,
+            adapted=False,
+            before_summary=check.before_summary,
+            after_summary=check.before_summary,
+        )
 
 
 def _render_warning(
