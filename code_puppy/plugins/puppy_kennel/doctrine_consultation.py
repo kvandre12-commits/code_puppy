@@ -11,6 +11,7 @@ No ontology growth. No hard blocks. Just a well-timed throat-clear.
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -35,11 +36,29 @@ _REQ_NAME_RE = re.compile(
 )
 
 
-def build_pre_tool_response(
+@dataclass(slots=True, frozen=True)
+class DoctrineConflict:
+    package_name: str
+    decision: DecisionRecord
+
+
+@dataclass(slots=True, frozen=True)
+class DoctrineMutationCheck:
+    file_path: str
+    added_packages: tuple[str, ...]
+    conflicts: tuple[DoctrineConflict, ...]
+    warning_message: str
+
+    @property
+    def conflicting_packages(self) -> tuple[str, ...]:
+        return tuple(conflict.package_name for conflict in self.conflicts)
+
+
+def analyze_mutation(
     tool_name: str,
     tool_args: dict[str, Any] | None,
-) -> dict[str, str] | None:
-    """Return a warning-only hook payload when doctrine challenges a mutation."""
+) -> DoctrineMutationCheck | None:
+    """Return structured doctrine-challenge data for a proposed mutation."""
     if not is_enabled() or tool_name not in _MUTATION_TOOLS:
         return None
 
@@ -57,13 +76,28 @@ def build_pre_tool_response(
     if not conflicts:
         return None
 
-    message = _render_warning(
+    return DoctrineMutationCheck(
         file_path=file_path,
-        added_packages=added_packages,
-        conflicts=conflicts,
+        added_packages=tuple(added_packages),
+        conflicts=tuple(conflicts),
+        warning_message=_render_warning(
+            file_path=file_path,
+            added_packages=added_packages,
+            conflicts=conflicts,
+        ),
     )
-    emit_warning(message)
-    return {"context_message": message}
+
+
+def build_pre_tool_response(
+    tool_name: str,
+    tool_args: dict[str, Any] | None,
+) -> dict[str, str] | None:
+    """Return a warning-only hook payload when doctrine challenges a mutation."""
+    check = analyze_mutation(tool_name, tool_args)
+    if check is None:
+        return None
+    emit_warning(check.warning_message)
+    return {"context_message": check.warning_message}
 
 
 def _extract_file_path(tool_args: dict[str, Any]) -> str:
@@ -157,8 +191,8 @@ def _find_conflicts(
     *,
     added_packages: list[str],
     decisions: list[DecisionRecord],
-) -> list[tuple[str, DecisionRecord]]:
-    conflicts: list[tuple[str, DecisionRecord]] = []
+) -> list[DoctrineConflict]:
+    conflicts: list[DoctrineConflict] = []
     seen: set[tuple[str, str]] = set()
     for package_name in added_packages:
         needle = re.compile(
@@ -180,7 +214,9 @@ def _find_conflicts(
             if key in seen:
                 continue
             seen.add(key)
-            conflicts.append((package_name, decision))
+            conflicts.append(
+                DoctrineConflict(package_name=package_name, decision=decision)
+            )
     return conflicts
 
 
@@ -188,7 +224,7 @@ def _render_warning(
     *,
     file_path: str,
     added_packages: list[str],
-    conflicts: list[tuple[str, DecisionRecord]],
+    conflicts: list[DoctrineConflict] | tuple[DoctrineConflict, ...],
 ) -> str:
     lines = [
         "[doctrine check] Potential conflict detected before dependency-file edit.",
@@ -196,7 +232,9 @@ def _render_warning(
         f"Proposed dependency signal: {', '.join(added_packages)}",
         "This is a warning only. The tool call will continue.",
     ]
-    for package_name, decision in conflicts:
+    for conflict in conflicts:
+        package_name = conflict.package_name
+        decision = conflict.decision
         evidence = ", ".join(decision.evidence_artifact_ids) or "none recorded"
         lines.extend(
             [
