@@ -24,6 +24,7 @@ READONLY_SHELL_BINARIES = {
     "wc",
     "which",
 }
+READONLY_SHELL_BUILTINS = {":", "echo", "false", "printf", "true"}
 READONLY_GIT_SUBCOMMANDS = {"branch", "diff", "log", "rev-parse", "show", "status"}
 READONLY_PYTHON_MODULES = {"pytest", "ruff"}
 READONLY_UV_TOOLS = {"pytest", "ruff"}
@@ -68,10 +69,23 @@ def _require_lease(capability: str, reason: str) -> ShellPolicyDecision:
     )
 
 
+def _contains_shell_write_operators(tokens: list[str]) -> bool:
+    for token in tokens:
+        if token == "|":
+            return True
+        if re.match(r"^(?:\d*>>?|\d*<<?|&>>?|&>)", token):
+            return True
+    return False
+
+
 def _safe_shell_segment(tokens: list[str]) -> bool:
     if not tokens:
         return True
+    if _contains_shell_write_operators(tokens):
+        return False
     binary = tokens[0]
+    if binary in READONLY_SHELL_BUILTINS:
+        return True
     if binary not in READONLY_SHELL_BINARIES:
         return False
     if binary == "git":

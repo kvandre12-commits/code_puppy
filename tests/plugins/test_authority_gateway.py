@@ -91,6 +91,20 @@ class TestShellAuthorityPolicy:
         assert not decision.blocked
         assert not decision.lease_required
 
+    def test_readonly_git_with_printf_separator_is_allowed_without_lease(self):
+        decision = assess_shell_command(
+            "git status && printf '\\n---\\n' && git log --oneline -5",
+            cwd=str(Path.cwd()),
+        )
+        assert not decision.blocked
+        assert not decision.lease_required
+
+    def test_workspace_redirect_requires_repo_write_lease(self):
+        decision = assess_shell_command("git status > status.txt", cwd=str(Path.cwd()))
+        assert not decision.blocked
+        assert decision.lease_required
+        assert decision.capability == "shell.repo.write"
+
     def test_dangerous_shell_command_is_blocked(self):
         decision = assess_shell_command("rm -rf /tmp/nope")
         assert decision.blocked
