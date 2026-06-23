@@ -81,6 +81,66 @@ uvx code-puppy
 uvx --from code-puppy code-puppy-bootstrap plan --profile auto --json
 ```
 
+#### Native Android / Termux
+
+**The one-command path (recommended):** let the interactive wizard detect the
+device and walk you through every step (uv, native packages, Code Puppy) with a
+confirmation prompt before each one, then verify the install for you:
+
+```bash
+uvx --from code-puppy code-puppy-bootstrap wizard
+```
+
+The wizard is stdlib-only, gates every state-changing step behind a `[Y/n]`
+prompt, and finishes with a verification + reconciliation summary. Add `--yes`
+to auto-confirm for scripted installs, or `--dry-run` to preview without
+executing anything.
+
+<details>
+<summary>Prefer to drive it by hand? Here is the manual flow the wizard runs.</summary>
+
+```bash
+# Inspect what the bootstrap planner sees on this device
+uvx --from code-puppy code-puppy-bootstrap detect --json
+
+# Build the recommended lean install plan for the current environment
+uvx --from code-puppy code-puppy-bootstrap plan --profile auto
+
+# Install suggested Termux-side system packages for the lean profile
+pkg install ripgrep proot
+
+# Attach the lean base runtime (no browser/image/fuzzy/search/provider extras)
+uv tool install --refresh code-puppy
+
+# Run Code Puppy
+code-puppy -i
+```
+
+</details>
+
+Why this flow exists:
+
+- `android-termux-lean` is the default auto-selected profile on Termux
+- it keeps Python dependencies minimal during the initial attach
+- browser/provider/image/fuzzy/search extras stay detached until the target
+  environment is known-good
+
+If you later want to attach optional capabilities, rerun the planner with an
+explicit profile or manifest override and use the emitted reattach command:
+
+```bash
+# Example: inspect a heavier profile before reattaching optional extras
+uvx --from code-puppy code-puppy-bootstrap plan --profile desktop-browser
+```
+
+You can also feed deployment policy overrides through a manifest:
+
+```bash
+uvx --from code-puppy code-puppy-bootstrap plan \
+  --profile android-termux-lean \
+  --manifest-json '{"extras_add": ["durable"], "notes": ["Enable only after validating the device."]}'
+```
+
 #### Windows
 
 On Windows, we recommend installing code-puppy as a global tool for the best experience with keyboard shortcuts (Ctrl+C/Ctrl+X cancellation):

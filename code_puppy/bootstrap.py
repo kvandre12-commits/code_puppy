@@ -46,6 +46,27 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     plan_parser.add_argument("--json", action="store_true", help="Print JSON output")
 
+    wizard_parser = subparsers.add_parser(
+        "wizard",
+        help="Interactively install Code Puppy step-by-step with confirmation",
+    )
+    wizard_parser.add_argument(
+        "--profile",
+        default="auto",
+        choices=["auto", *available_profiles()],
+        help="Builtin install profile to use",
+    )
+    wizard_parser.add_argument(
+        "--yes",
+        action="store_true",
+        help="Auto-confirm every step (non-interactive automation)",
+    )
+    wizard_parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Show what would run without executing anything",
+    )
+
     return parser
 
 
@@ -94,6 +115,15 @@ def main(argv: list[str] | None = None) -> int:
     command = args.command or "plan"
 
     try:
+        if command == "wizard":
+            from code_puppy.bootstrap_wizard import run_wizard
+
+            return run_wizard(
+                profile=getattr(args, "profile", "auto"),
+                assume_yes=getattr(args, "yes", False),
+                dry_run=getattr(args, "dry_run", False),
+            )
+
         if command == "detect":
             environment = detect_environment()
             if args.json:

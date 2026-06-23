@@ -89,6 +89,73 @@ def test_cli_plan_defaults_to_auto_json(capsys):
     assert payload["package_spec"].startswith("code-puppy")
 
 
+def test_build_install_plan_rejects_unknown_profile():
+    with pytest.raises(ValueError, match="unknown install profile"):
+        bootstrap_profiles.build_install_plan(requested_profile="not-a-real-profile")
+
+
+def test_build_install_plan_rejects_multiple_manifest_sources(tmp_path: Path):
+    manifest_path = tmp_path / "manifest.json"
+    manifest_path.write_text("{}")
+    with pytest.raises(ValueError, match="choose manifest_json or manifest_file"):
+        bootstrap_profiles.build_install_plan(
+            requested_profile="core",
+            manifest_json="{}",
+            manifest_file=str(manifest_path),
+        )
+
+
+def test_build_install_plan_falls_back_to_pip_without_uv(monkeypatch):
+    monkeypatch.setattr(
+        bootstrap_profiles,
+        "detect_environment",
+        lambda: {
+            "has_uv": False,
+            "has_uvx": False,
+            "has_proot": True,
+            "has_ripgrep": True,
+            "is_android": False,
+            "is_termux": False,
+            "is_linux": True,
+            "is_macos": False,
+            "is_windows": False,
+        },
+    )
+    plan = bootstrap_profiles.build_install_plan(requested_profile="core")
+    assert plan["install_command"] == "python -m pip install code-puppy"
+    assert plan["reattach_command"] == "python -m pip install --upgrade code-puppy"
+
+
+def test_build_install_plan_reports_missing_android_system_packages(monkeypatch):
+    monkeypatch.setattr(
+        bootstrap_profiles,
+        "detect_environment",
+        lambda: {
+            "has_uv": True,
+            "has_uvx": True,
+            "has_proot": False,
+            "has_ripgrep": False,
+            "is_android": True,
+            "is_termux": True,
+            "is_linux": True,
+            "is_macos": False,
+            "is_windows": False,
+        },
+    )
+    plan = bootstrap_profiles.build_install_plan(requested_profile="auto")
+    assert plan["profile"] == "android-termux-lean"
+    assert plan["missing_system_packages"] == ["ripgrep", "proot"]
+
+
+def test_cli_plan_human_output(capsys):
+    exit_code = bootstrap.main(["plan"])
+    assert exit_code == 0
+    output = capsys.readouterr().out
+    assert "Profile:" in output
+    assert "Install:" in output
+    assert "Run:" in output
+
+
 def test_cli_plan_rejects_bad_manifest_json(capsys):
     with pytest.raises(SystemExit) as exc_info:
         bootstrap.main(["plan", "--manifest-json", "[]"])
