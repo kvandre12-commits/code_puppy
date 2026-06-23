@@ -158,8 +158,18 @@ objects:
 
 Only `approval_decision` is authoritative permission in that doctrine.
 
+This checkout now adds two governed companion artifacts around that core:
+
+- `intent_handshake` — the raw operator request normalized into a durable,
+  bounded handshake before the chain reasons too far ahead
+- `workflow_commit` — a durable receipt freezing the current handshake, plan,
+  and approval posture so a workflow can later graduate into a skill or tool
+
+These two artifacts improve control flow, but they do not outrank
+`approval_decision`. A commit receipt is not fresh permission.
+
 That operator layer is mostly outside this checkout, but we adopt the rule here:
-**status, plans, and memory are not permission**.
+**status, plans, memory, handshakes, and commit receipts are not permission**.
 
 ## Repo-shipped governance agents
 

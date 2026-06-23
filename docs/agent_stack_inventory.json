@@ -1,0 +1,150 @@
+{
+  "inventory_version": "1.0.0",
+  "last_updated": "2026-06-20",
+  "checkout_identity": {
+    "name": "Code Puppy + DroidPuppy checkout",
+    "owns": [
+      "Code Puppy runtime infrastructure",
+      "plugin/tool framework",
+      "DroidPuppy Android capability layer",
+      "Project OS supervisor/operator surfaces",
+      "execution containment and authority gateway",
+      "Puppy Kennel shared memory substrate"
+    ],
+    "does_not_own": [
+      "SharpEdge signal truth",
+      "broker credentials",
+      "live broker execution authority",
+      "native SharpEdge product UI direction"
+    ]
+  },
+  "layers": [
+    {
+      "name": "sharpedge_intent_layer",
+      "role": "Defines domain goals and upstream intent.",
+      "paths": [],
+      "owner": "External SharpEdge / private prior art",
+      "allowed_to_decide": [
+        "what should happen"
+      ],
+      "not_allowed_to_decide": [
+        "exact Android execution route inside this checkout",
+        "implicit local permission bypass"
+      ]
+    },
+    {
+      "name": "code_puppy_runtime",
+      "role": "Agent runtime, tool execution, plugin loading.",
+      "paths": [
+        "code_puppy/agents/",
+        "code_puppy/callbacks.py"
+      ],
+      "owner": "This checkout",
+      "allowed_to_decide": [
+        "how agents are assembled and invoked",
+        "how plugins attach tools and callbacks"
+      ],
+      "not_allowed_to_decide": [
+        "domain truth",
+        "broker permission"
+      ]
+    },
+    {
+      "name": "droidpuppy_overlay",
+      "role": "Android-native orchestration and device capability exposure.",
+      "paths": [
+        "DroidPuppy/",
+        "code_puppy/plugins/"
+      ],
+      "owner": "This checkout",
+      "allowed_to_decide": [
+        "how Android-side work is performed"
+      ],
+      "not_allowed_to_decide": [
+        "whether the domain objective is justified"
+      ]
+    },
+    {
+      "name": "project_os_supervisor",
+      "role": "Manifest-driven local service orchestration and operator snapshots.",
+      "paths": [
+        "code_puppy/plugins/project_os_supervisor/"
+      ],
+      "owner": "This checkout",
+      "allowed_to_decide": [
+        "how local services are started, observed, and tailed"
+      ],
+      "not_allowed_to_decide": [
+        "domain authority",
+        "broker permission"
+      ]
+    },
+    {
+      "name": "authority_gateway",
+      "role": "Execution containment, lease enforcement, breaker/quarantine controls.",
+      "paths": [
+        "code_puppy/plugins/authority_gateway/",
+        "DroidPuppy/contracts/v2/"
+      ],
+      "owner": "This checkout + shared contracts",
+      "allowed_to_decide": [
+        "whether a tracked effectful action is currently permitted"
+      ],
+      "not_allowed_to_decide": [
+        "whether a business objective is good"
+      ]
+    },
+    {
+      "name": "puppy_kennel",
+      "role": "Durable cross-session memory substrate.",
+      "paths": [
+        "code_puppy/plugins/puppy_kennel/"
+      ],
+      "owner": "This checkout",
+      "allowed_to_decide": [
+        "what durable context is stored and recalled"
+      ],
+      "not_allowed_to_decide": [
+        "permission to act"
+      ]
+    },
+    {
+      "name": "broker_delegation_seam",
+      "role": "Packages downstream broker tasks for approved operator flows.",
+      "paths": [
+        "code_puppy/plugins/chatgpt_robinhood_delegate/"
+      ],
+      "owner": "This checkout for delegation only",
+      "allowed_to_decide": [
+        "how a broker request is packaged for downstream handling"
+      ],
+      "not_allowed_to_decide": [
+        "live autonomous broker execution"
+      ]
+    }
+  ],
+  "authoritative_runtime_controls": [
+    "execution lease state",
+    "authority gateway policy evaluation",
+    "breaker/quarantine state",
+    "contract-valid authority audit events"
+  ],
+  "non_authoritative_objects": [
+    "memory entries",
+    "operator notes",
+    "workflow summaries",
+    "support bundles",
+    "status dashboards",
+    "plans"
+  ],
+  "imported_operator_doctrine": {
+    "source": "SharpEdge operator layer doctrine referenced by repo skills/docs",
+    "canonical_objects": [
+      "workflow_state",
+      "execution_plan",
+      "approval_decision",
+      "journal"
+    ],
+    "authoritative_permission_object": "approval_decision"
+  }
+}
