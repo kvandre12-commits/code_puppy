@@ -6,6 +6,7 @@ import asyncio
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
+from unittest.mock import patch
 
 import pytest
 
@@ -258,6 +259,93 @@ def test_kennel_default_overview(kennel_root: Path) -> None:
     from code_puppy.plugins.puppy_kennel import commands
 
     assert commands.handle("/kennel", "kennel") is True
+
+
+def test_kennel_default_overview_includes_active_doctrine(kennel_root: Path) -> None:
+    from code_puppy.plugins.puppy_kennel import commands, decisions
+
+    decisions.upsert_decision(
+        decisions.DecisionRecord(
+            id="authority-validation-before-lease-issue",
+            title="Authority Validation Before Lease Issue",
+            status="active",
+            confidence="high",
+            summary="Authority checks must precede lease issuance.",
+            rationale="Governed execution breaks if validation is optional.",
+            affected_repos=["code_puppy"],
+            evidence_artifact_ids=["runtime-tests"],
+            created_at="",
+            last_reviewed_at="",
+            supersedes=[],
+            superseded_by=[],
+        )
+    )
+
+    with (
+        patch(
+            "code_puppy.plugins.puppy_kennel.commands.detect_cwd",
+            return_value="/tmp/code_puppy_backup_20260617",
+        ),
+        patch("code_puppy.plugins.puppy_kennel.commands.emit_info") as mock_info,
+    ):
+        assert commands.handle("/kennel", "kennel") is True
+
+    rendered = "\n".join(
+        str(call.args[0]) for call in mock_info.call_args_list if call.args
+    )
+    assert "Active Doctrine" in rendered
+    assert "Authority Validation Before Lease Issue" in rendered
+
+
+def test_kennel_doctrine_renders_explanation_surface(kennel_root: Path) -> None:
+    from code_puppy.plugins.puppy_kennel import commands, decisions
+
+    decisions.upsert_decision(
+        decisions.DecisionRecord(
+            id="playwright-optional-on-android",
+            title="Playwright Optional On Android",
+            status="active",
+            confidence="high",
+            summary="Browser automation dependencies remain optional for Android compatibility.",
+            rationale="Android/Termux environments cannot reliably assume Playwright availability.",
+            affected_repos=["code_puppy", "DroidPuppy"],
+            evidence_artifact_ids=[
+                "PR-483",
+                "PR-494",
+                "PR-496",
+                "clean-install-validation-runs",
+            ],
+            created_at="2026-06-23T20:00:00Z",
+            last_reviewed_at="2026-06-23",
+            supersedes=[],
+            superseded_by=[],
+        )
+    )
+
+    with patch("code_puppy.plugins.puppy_kennel.commands.emit_info") as mock_info:
+        assert (
+            commands.handle("/kennel doctrine playwright-optional-on-android", "kennel")
+            is True
+        )
+
+    rendered = "\n".join(
+        str(call.args[0]) for call in mock_info.call_args_list if call.args
+    )
+    assert "Decision: Playwright Optional On Android" in rendered
+    assert "Decision ID: playwright-optional-on-android" in rendered
+    assert "Status: active" in rendered
+    assert "Confidence: high" in rendered
+    assert (
+        "Summary: Browser automation dependencies remain optional for Android compatibility."
+        in rendered
+    )
+    assert (
+        "Rationale: Android/Termux environments cannot reliably assume Playwright availability."
+        in rendered
+    )
+    assert "Evidence: PR-483 PR-494 PR-496 clean-install-validation-runs" in rendered
+    assert "Affected Repos: code_puppy DroidPuppy" in rendered
+    assert "Last Reviewed: 2026-06-23" in rendered
 
 
 def test_kennel_unknown_subcommand_falls_through_to_help(kennel_root: Path) -> None:

@@ -180,6 +180,60 @@ def test_all_three_tiers_render_in_order(kennel_root: Path) -> None:
     assert "ASSISTANT_RESPONSE_MARKER" in block
 
 
+def test_active_doctrine_renders_before_other_memory_sections(
+    kennel_root: Path,
+) -> None:
+    from code_puppy.plugins.puppy_kennel import decisions, kennel, packer
+    from code_puppy.plugins.puppy_kennel.wings import repo_wing
+
+    decisions.upsert_decision(
+        decisions.DecisionRecord(
+            id="playwright-optional-on-android",
+            title="Playwright Optional On Android",
+            status="active",
+            confidence="high",
+            summary="Browser automation dependencies stay optional.",
+            rationale="Android/Termux cannot reliably assume Playwright.",
+            affected_repos=["code_puppy"],
+            evidence_artifact_ids=["PR-494"],
+            created_at="",
+            last_reviewed_at="",
+            supersedes=[],
+            superseded_by=[],
+        )
+    )
+    kennel.write_note(
+        wing_name="user:default",
+        room_name="preferences",
+        content=_long("USER_PREFERENCE_MARKER prefers tabs over spaces ", 200),
+        role="note",
+    )
+    target_cwd = "/tmp/code_puppy_backup_20260617"
+    target_repo_wing = repo_wing(target_cwd)
+    kennel.write_note(
+        wing_name=target_repo_wing,
+        room_name="decisions",
+        content=_long("STICKY_NOTE_MARKER says we use INSERT OR IGNORE ", 200),
+        role="note",
+    )
+    kennel.write_note(
+        wing_name=target_repo_wing,
+        room_name="session-alpha",
+        content=_long("ASSISTANT_RESPONSE_MARKER did the thing ", 200),
+        role="assistant",
+    )
+
+    block = packer.pack(cwd_override=target_cwd)
+    assert block is not None
+    pos_doctrine = block.find("Active Doctrine")
+    pos_user = block.find("User Preferences")
+    pos_sticky = block.find("Project Decisions")
+    pos_recent = block.find("Recent Context")
+    assert 0 <= pos_doctrine < pos_user < pos_sticky < pos_recent, block
+    assert "Playwright Optional On Android" in block
+    assert "status: active, confidence: high" in block
+
+
 # --------------------------------------------------------------------------- #
 # Budget enforcement
 # --------------------------------------------------------------------------- #

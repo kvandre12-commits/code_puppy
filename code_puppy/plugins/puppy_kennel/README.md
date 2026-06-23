@@ -42,6 +42,9 @@ isolation for a sensitive-data agent, run that agent with
 **Phase 1 — passive memory:**
 - **`load_prompt`** — injects a tiered, budget-aware recall block (see
   [the packer](#the-packer) below) into the system prompt.
+- **`pre_tool_call`** — on dependency-file edits, surfaces warning-only
+  doctrine challenges when an active repo decision appears relevant to
+  the proposed package addition.
 - **`agent_run_end`** — writes the agent's response to a single drawer
   in the current ``repo:<cwd>`` wing.
 
@@ -98,6 +101,10 @@ Agent-callable tools registered via ``register_tools``:
 | `kennel_recall(query, wing?, top_k=5, scope=?)` | BM25 search across wings, deduplicated. |
 | `kennel_remember(content, wing="repo", room="notes")` | Explicit verbatim write to a chosen wing. |
 | `kennel_capture_decision(what, why, evidence?, outcome?, follow_up?, who?, when?, wing="repo", room="decisions")` | Structured checkpoint write for who/what/when/why moments. |
+| `kennel_upsert_decision(title, rationale, id?, status?, confidence?, summary?, affected_repos?, evidence_artifact_ids?, created_at?, last_reviewed_at?, supersedes?, superseded_by?)` | Decision v0 durable knowledge write. |
+| `kennel_list_decisions(limit=50)` | List Decision v0 records, active first. |
+| `kennel_get_decision(decision_id)` | Render one decision's rationale/evidence explanation surface. |
+| `kennel_get_active_decisions(repo, limit=50)` | Query active Decision v0 records that constrain a repo. |
 | `kennel_recent(wing?, top_k=5, scope=?)` | Time-ordered drawer browsing (no query needed). |
 | `kennel_recent_hinges(wing?, top_k=10, scope=?)` | Newest durable hinge-point captures. |
 | `kennel_decisions_missing_follow_up(wing?, top_k=10, scope=?)` | Decision captures with no explicit next-step trail. |
@@ -123,6 +130,7 @@ Plus a **`/kennel`** slash command suite for humans:
 | `/kennel wings` | list wings + drawer counts |
 | `/kennel stats` | DB size, totals, current enabled state |
 | `/kennel inventory` | top wings/rooms by memory growth |
+| `/kennel doctrine <id>` | render one decision's rationale/evidence drill-down |
 | `/kennel audit [scope] [n]` | run recent-hinges / missing-follow-up / doctrine-gap audit |
 | `/kennel checkpoint <what> \|\| <why> [\|\| follow-up: <next>] ...` | friendly structured hinge capture path |
 | `/kennel status` | is memory currently on or off? |

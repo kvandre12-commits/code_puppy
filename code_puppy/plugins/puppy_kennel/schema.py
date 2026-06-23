@@ -66,6 +66,35 @@ CREATE TRIGGER IF NOT EXISTS drawers_au AFTER UPDATE ON drawers BEGIN
         VALUES('delete', old.id, old.content);
     INSERT INTO drawers_fts(rowid, content) VALUES (new.id, new.content);
 END;
+
+CREATE TABLE IF NOT EXISTS decisions (
+    id                 TEXT PRIMARY KEY,
+    title              TEXT NOT NULL,
+    status             TEXT NOT NULL,
+    confidence         TEXT NOT NULL,
+    summary            TEXT NOT NULL,
+    rationale          TEXT NOT NULL,
+    created_at         TEXT NOT NULL,
+    last_reviewed_at   TEXT NOT NULL,
+    supersedes_json    TEXT NOT NULL DEFAULT '[]',
+    superseded_by_json TEXT NOT NULL DEFAULT '[]'
+);
+
+CREATE TABLE IF NOT EXISTS decision_repos (
+    decision_id TEXT NOT NULL REFERENCES decisions(id) ON DELETE CASCADE,
+    repo_name   TEXT NOT NULL,
+    PRIMARY KEY(decision_id, repo_name)
+);
+
+CREATE TABLE IF NOT EXISTS decision_evidence_artifacts (
+    decision_id TEXT NOT NULL REFERENCES decisions(id) ON DELETE CASCADE,
+    artifact_id TEXT NOT NULL,
+    PRIMARY KEY(decision_id, artifact_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_decisions_status ON decisions(status);
+CREATE INDEX IF NOT EXISTS idx_decisions_reviewed ON decisions(last_reviewed_at);
+CREATE INDEX IF NOT EXISTS idx_decision_repos_repo_name ON decision_repos(repo_name);
 """
 
 # PRAGMAs applied on every connection. WAL is the headline: one writer +

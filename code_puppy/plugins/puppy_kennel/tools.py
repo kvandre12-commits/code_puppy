@@ -10,6 +10,10 @@ Full tool surface:
 * ``kennel_inventory``  — wing/room inventory for governance
 * ``kennel_debug_echo`` — inspect why recent assistant drawers were kept/dropped
 * ``kennel_capture_decision`` — structured who/what/when/why checkpoint write
+* ``kennel_upsert_decision`` — Decision v0 durable knowledge write
+* ``kennel_list_decisions`` — list Decision v0 records
+* ``kennel_get_decision`` — one Decision v0 explanation surface
+* ``kennel_get_active_decisions`` — active Decision v0 records for a repo
 * ``kennel_recent_hinges`` — newest durable hinge-point captures
 * ``kennel_decisions_missing_follow_up`` — decisions without explicit next-step trail
 * ``kennel_doctrine_gaps`` — session-heavy wings with thin doctrine capture
@@ -31,6 +35,12 @@ from .audit import (
     register_kennel_recent_hinges,
 )
 from .capture import register_kennel_capture_decision
+from .decisions import (
+    register_kennel_get_active_decisions,
+    register_kennel_get_decision,
+    register_kennel_list_decisions,
+    register_kennel_upsert_decision,
+)
 from .echo_debug import register_kennel_debug_echo
 from .config import DB_PATH
 from .state import DISABLED_TOOL_ERROR, is_enabled
@@ -503,6 +513,10 @@ _TOOL_SPECS: tuple[tuple[str, Any], ...] = (
     ("kennel_inventory", register_kennel_inventory),
     ("kennel_debug_echo", register_kennel_debug_echo),
     ("kennel_capture_decision", register_kennel_capture_decision),
+    ("kennel_upsert_decision", register_kennel_upsert_decision),
+    ("kennel_list_decisions", register_kennel_list_decisions),
+    ("kennel_get_decision", register_kennel_get_decision),
+    ("kennel_get_active_decisions", register_kennel_get_active_decisions),
     ("kennel_recent_hinges", register_kennel_recent_hinges),
     (
         "kennel_decisions_missing_follow_up",

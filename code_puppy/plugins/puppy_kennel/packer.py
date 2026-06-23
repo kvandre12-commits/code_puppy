@@ -29,6 +29,7 @@ from .config import (
     STICKY_QUOTA,
     USER_PREFS_QUOTA,
 )
+from .decisions import render_active_decision_lines_for_cwd
 from .kennel import Drawer
 from .wings import USER_WING, detect_cwd, repo_wing
 
@@ -42,6 +43,11 @@ _FETCH_LIMIT = 50
 # How many chars of remaining budget is too little to bother starting a new
 # drawer with. Avoids "...truncated]" being most of the rendered line.
 _MIN_REMAINING_CHARS = 120
+
+# Active doctrine should surface before generic repo chatter, but the section
+# is intentionally compact: titles plus status/confidence, not mini-essays.
+_ACTIVE_DOCTRINE_LIMIT = 5
+_ACTIVE_DOCTRINE_MAX_CHARS = 700
 
 # Assistant recaps about durable notes are often the first thing to become
 # prompt-budget confetti. If a recent assistant drawer is mostly narrating
@@ -326,6 +332,25 @@ def _pack_class(
     return PackSection(title="", lines=lines, used_chars=used)
 
 
+def _pack_rendered_lines(
+    lines: list[str],
+    budget_chars: int,
+) -> PackSection:
+    """Greedily pack already-rendered lines into ``budget_chars``."""
+    kept: list[str] = []
+    used = 0
+    for line in lines:
+        rendered = line.strip()
+        if not rendered:
+            continue
+        needed = len(rendered) + 1
+        if used + needed > budget_chars:
+            break
+        kept.append(rendered)
+        used += needed
+    return PackSection(title="", lines=kept, used_chars=used)
+
+
 def pack(cwd_override: str | None = None) -> str | None:
     """Build the system-prompt recall block under the configured budget.
 
@@ -337,8 +362,19 @@ def pack(cwd_override: str | None = None) -> str | None:
     repo_w = repo_wing(cwd)
 
     total_budget = max(0, PROMPT_BUDGET_CHARS - _HEADER_SLACK_CHARS)
-    p0_budget = int(total_budget * USER_PREFS_QUOTA)
-    p1_budget = int(total_budget * STICKY_QUOTA)
+
+    active_doctrine = _pack_rendered_lines(
+        render_active_decision_lines_for_cwd(
+            cwd,
+            limit=_ACTIVE_DOCTRINE_LIMIT,
+        ),
+        budget_chars=min(_ACTIVE_DOCTRINE_MAX_CHARS, total_budget),
+    )
+    active_doctrine.title = "Active Doctrine"
+
+    remaining_budget = max(0, total_budget - active_doctrine.used_chars)
+    p0_budget = int(remaining_budget * USER_PREFS_QUOTA)
+    p1_budget = int(remaining_budget * STICKY_QUOTA)
 
     # P0 - user preferences. We pull every role; user-wing drawers tend to
     # be ``role='note'`` (explicit) but allow assistant too just in case.
@@ -352,13 +388,13 @@ def pack(cwd_override: str | None = None) -> str | None:
     p1.title = "Project Decisions"
 
     # P2 - recent assistant responses fill whatever budget remains.
-    p2_budget = total_budget - p0.used_chars - p1.used_chars
+    p2_budget = remaining_budget - p0.used_chars - p1.used_chars
     assistant = kennel.recent_drawers(repo_w, limit=_FETCH_LIMIT, role="assistant")
     assistant = _filter_assistant_echo(assistant, sticky)
     p2 = _pack_class(assistant, max(0, p2_budget))
     p2.title = "Recent Context"
 
-    sections = [s for s in (p0, p1, p2) if s.lines]
+    sections = [s for s in (active_doctrine, p0, p1, p2) if s.lines]
     if not sections:
         return None
 

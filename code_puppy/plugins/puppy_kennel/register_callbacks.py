@@ -2,6 +2,7 @@
 
 Hooks wired:
 * ``load_prompt``         -> passive recall block in the system prompt
+* ``pre_tool_call``       -> warning-only doctrine challenge on dependency edits
 * ``agent_run_end``       -> record the agent's response as a verbatim drawer
 * ``register_tools``      -> defines kennel tools in ``TOOL_REGISTRY``
 * ``register_agent_tools``-> advertises kennel tools to every agent's tool list
@@ -14,7 +15,7 @@ from __future__ import annotations
 from code_puppy.callbacks import register_callback
 from code_puppy.messaging.bus import emit_debug
 
-from . import commands, kennel, tools
+from . import commands, doctrine_consultation, kennel, tools
 from .recorder import record_run_end
 from .retriever import build_recall_block
 from .state import is_enabled
@@ -36,6 +37,20 @@ def _on_load_prompt() -> str | None:
         return build_recall_block()
     except Exception as exc:  # noqa: BLE001
         emit_debug(f"[puppy_kennel] load_prompt skipped: {exc!r}")
+        return None
+
+
+async def _on_pre_tool_call(
+    tool_name: str,
+    tool_args: dict,
+    context: object | None = None,
+) -> dict | None:
+    """Warning-only doctrine consultation before dependency-file mutations."""
+    del context
+    try:
+        return doctrine_consultation.build_pre_tool_response(tool_name, tool_args)
+    except Exception as exc:  # noqa: BLE001 - never block tool execution.
+        emit_debug(f"[puppy_kennel] pre_tool_call skipped: {exc!r}")
         return None
 
 
@@ -79,6 +94,7 @@ def _advertise_tools_to_agent(agent_name: str | None = None) -> list[str]:
 
 if _initialize_once():
     register_callback("load_prompt", _on_load_prompt)
+    register_callback("pre_tool_call", _on_pre_tool_call)
     register_callback("agent_run_end", _on_agent_run_end)
     register_callback("register_tools", tools.register_tools_callback)
     register_callback("register_agent_tools", _advertise_tools_to_agent)
