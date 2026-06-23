@@ -122,8 +122,8 @@ def register_authority_gateway_grant_lease(agent: Any) -> None:
     @agent.tool
     async def authority_gateway_grant_lease(
         context: RunContext,
-        principal_id: str,
-        capabilities: list[str],
+        principal_id: str = "",
+        capabilities: list[str] | None = None,
         reason: str = "Manual operator lease grant.",
         granted_by: str = "operator",
         allowed_tools: list[str] | None = None,
@@ -137,6 +137,8 @@ def register_authority_gateway_grant_lease(agent: Any) -> None:
         delegated_by_actor_id: str = "",
         delegated_to_actor_ids: list[str] | None = None,
         run_id: str = "",
+        repo_root: str = "",
+        allow_nondefault_principal: bool = False,
     ) -> dict[str, Any]:
         """Mint a narrow execution lease.
 
@@ -144,11 +146,15 @@ def register_authority_gateway_grant_lease(agent: Any) -> None:
         (PROJECT_OS_AUTHORITY_PRINCIPAL_ID / canonical repo authority), not an
         ephemeral agent or run id. Use requested/delegated actor fields plus
         run_id as shared-authority audit breadcrumbs.
+
+        For shell.repo.write, repo_root defaults the allowed path scope when no
+        explicit allowed_paths constraint is supplied. Nondefault principals are
+        blocked unless allow_nondefault_principal=True.
         """
         del context
         return authority_gateway_grant_lease_impl(
             principal_id=principal_id,
-            capabilities=capabilities,
+            capabilities=capabilities or [],
             reason=reason,
             granted_by=granted_by,
             allowed_tools=allowed_tools,
@@ -162,6 +168,8 @@ def register_authority_gateway_grant_lease(agent: Any) -> None:
             delegated_by_actor_id=delegated_by_actor_id,
             delegated_to_actor_ids=delegated_to_actor_ids,
             run_id=run_id,
+            repo_root=repo_root,
+            allow_nondefault_principal=allow_nondefault_principal,
         )
 
 

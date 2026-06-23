@@ -298,6 +298,63 @@ class TestAuthorityGatewayTooling:
         audit_result = tooling.authority_gateway_recent_audit(limit=10)
         assert any("[MINTED]" in line for line in audit_result["lines"])
 
+    def test_grant_lease_defaults_repo_write_scope_to_repo_root_and_stable_principal(
+        self, monkeypatch, tmp_path
+    ):
+        monkeypatch.setenv("PROJECT_OS_EYES_ROOT", str(tmp_path))
+        monkeypatch.setenv("PROJECT_OS_AUTHORITY_PRINCIPAL_ID", "stable-authority")
+        repo_root = tmp_path / "repo-root"
+        repo_root.mkdir()
+
+        result = tooling.authority_gateway_grant_lease(
+            principal_id="",
+            capabilities=["shell.repo.write"],
+            reason="Operator granted repo write access for this repo only.",
+            allowed_tools=["agent_run_shell_command"],
+            repo_root=str(repo_root),
+            lease_id="repo-write-defaulted",
+        )
+
+        assert result["success"] is True
+        assert result["principal_id"] == "stable-authority"
+        assert result["constraints"]["allowed_paths"] == [str(repo_root.resolve())]
+
+    def test_grant_lease_rejects_nondefault_principal_without_explicit_override(
+        self, monkeypatch, tmp_path
+    ):
+        monkeypatch.setenv("PROJECT_OS_EYES_ROOT", str(tmp_path))
+        monkeypatch.setenv("PROJECT_OS_AUTHORITY_PRINCIPAL_ID", "stable-authority")
+        monkeypatch.setenv("PROJECT_OS_ACTOR_ID", "code-puppy-91db11")
+
+        result = tooling.authority_gateway_grant_lease(
+            principal_id="code-puppy-6905b7",
+            capabilities=["shell.repo.write"],
+            reason="Oops, wrong puppy badge.",
+            repo_root=str(tmp_path),
+        )
+
+        assert result["success"] is False
+        assert result["granted"] is False
+        assert "allow_nondefault_principal=True" in result["reason"]
+        assert "stable authority principal='stable-authority'" in result["reason"]
+
+    def test_grant_lease_allows_nondefault_principal_with_explicit_override(
+        self, monkeypatch, tmp_path
+    ):
+        monkeypatch.setenv("PROJECT_OS_EYES_ROOT", str(tmp_path))
+        monkeypatch.setenv("PROJECT_OS_AUTHORITY_PRINCIPAL_ID", "stable-authority")
+
+        result = tooling.authority_gateway_grant_lease(
+            principal_id="other-principal",
+            capabilities=["shell.process.exec"],
+            reason="Intentional alternate principal.",
+            allow_nondefault_principal=True,
+            lease_id="other-principal-lease",
+        )
+
+        assert result["success"] is True
+        assert result["principal_id"] == "other-principal"
+
     def test_revoke_all_vaporizes_every_active_lease(self, monkeypatch, tmp_path):
         monkeypatch.setenv("PROJECT_OS_EYES_ROOT", str(tmp_path))
         lease_one = _write_lease(tmp_path, _v2_lease("lease-one"))

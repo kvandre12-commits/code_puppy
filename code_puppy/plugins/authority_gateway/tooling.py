@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from typing import Any
 
 from .anomaly import get_active_quarantines, release_quarantine
@@ -20,6 +21,7 @@ from .lease_store import (
 
 STATUS_WINDOW_SECONDS = 300
 DEFAULT_AUDIT_LIMIT = 20
+_REPO_WRITE_CAPABILITIES = {"shell.repo.write"}
 
 
 def _serialize_lease(record: Any) -> dict[str, Any]:
@@ -283,6 +285,58 @@ def authority_gateway_release_quarantine(
     return {"success": bool(result.get("released")), **result}
 
 
+def _resolve_grant_principal(
+    principal_id: str,
+    *,
+    allow_nondefault_principal: bool,
+) -> tuple[str, str | None]:
+    stable_principal_id = get_default_principal_id()
+    requested_principal_id = str(principal_id or "").strip()
+    if not requested_principal_id:
+        return stable_principal_id, None
+    if requested_principal_id == stable_principal_id:
+        return requested_principal_id, None
+
+    identity = get_execution_identity()
+    suspicious_values = {
+        value for value in (identity.actor_id, identity.run_id) if value
+    }
+    if requested_principal_id in suspicious_values:
+        mismatch_reason = "requested principal matches the current actor/run identity"
+    else:
+        mismatch_reason = (
+            "requested principal differs from the stable authority principal"
+        )
+
+    if not allow_nondefault_principal:
+        return "", (
+            "Refusing to mint a lease for a nondefault principal without an explicit "
+            "override. Requested principal_id="
+            f"{requested_principal_id!r}; stable authority principal={stable_principal_id!r}; "
+            f"reason={mismatch_reason}. Pass allow_nondefault_principal=True if you "
+            "really mean to bypass the repo's normal authority wiring."
+        )
+    return requested_principal_id, None
+
+
+def _normalize_grant_constraints(
+    capabilities: list[str],
+    constraints: dict[str, Any],
+    *,
+    repo_root: str,
+) -> dict[str, Any]:
+    normalized = dict(constraints)
+    if _REPO_WRITE_CAPABILITIES & set(capabilities):
+        allowed_paths = normalized.get("allowed_paths")
+        if not isinstance(allowed_paths, list) or not any(
+            str(value).strip() for value in allowed_paths
+        ):
+            normalized["allowed_paths"] = [
+                str(Path(repo_root or ".").expanduser().resolve())
+            ]
+    return normalized
+
+
 def authority_gateway_grant_lease(
     principal_id: str,
     capabilities: list[str],
@@ -299,15 +353,22 @@ def authority_gateway_grant_lease(
     delegated_by_actor_id: str = "",
     delegated_to_actor_ids: list[str] | None = None,
     run_id: str = "",
+    repo_root: str = "",
+    allow_nondefault_principal: bool = True,
 ) -> dict[str, Any]:
     """Mint a narrow execution lease.
 
     Prefer the stable authority principal (PROJECT_OS_AUTHORITY_PRINCIPAL_ID /
     canonical repo authority) for principal_id. Keep actor and run identities
     in delegation metadata so authority survives sub-agent/session rotation.
+
+    For shell.repo.write, default allowed_paths to repo_root (or cwd) when the
+    operator did not supply an explicit path constraint.
     """
     try:
-        constraints = json.loads(constraints_json) if constraints_json.strip() else {}
+        parsed_constraints = (
+            json.loads(constraints_json) if constraints_json.strip() else {}
+        )
     except json.JSONDecodeError as exc:
         return {
             "success": False,
@@ -315,9 +376,26 @@ def authority_gateway_grant_lease(
             "reason": f"constraints_json must be valid JSON: {exc}",
         }
 
+    resolved_principal_id, principal_error = _resolve_grant_principal(
+        principal_id,
+        allow_nondefault_principal=allow_nondefault_principal,
+    )
+    if principal_error:
+        return {
+            "success": False,
+            "granted": False,
+            "reason": principal_error,
+        }
+
+    constraints = _normalize_grant_constraints(
+        capabilities,
+        parsed_constraints,
+        repo_root=repo_root,
+    )
+
     try:
         record = mint_lease(
-            principal_id=principal_id or get_default_principal_id(),
+            principal_id=resolved_principal_id,
             capabilities=capabilities,
             reason=reason,
             granted_by=granted_by,
