@@ -337,6 +337,26 @@ class TestInjectCacheControl:
         body = json.dumps({"messages": ["not a dict"]}).encode()
         assert ClaudeCacheAsyncClient._inject_cache_control(body) is None
 
+    def test_targets_latest_user_message_not_last_overall_message(self):
+        body = json.dumps(
+            {
+                "messages": [
+                    {"role": "user", "content": [{"type": "text", "text": "hi"}]},
+                    {
+                        "role": "assistant",
+                        "content": [{"type": "text", "text": "tool call"}],
+                    },
+                ]
+            }
+        ).encode()
+        result = ClaudeCacheAsyncClient._inject_cache_control(body)
+        assert result is not None
+        data = json.loads(result)
+        assert data["messages"][0]["content"][0]["cache_control"] == {
+            "type": "ephemeral"
+        }
+        assert "cache_control" not in data["messages"][1]["content"][0]
+
     def test_system_prompt_list_gets_cached(self):
         body = json.dumps(
             {
@@ -566,6 +586,19 @@ class TestInjectCacheControlInPayload:
     def test_last_message_not_dict(self):
         payload = {"messages": ["not a dict"]}
         _inject_cache_control_in_payload(payload)
+
+    def test_targets_latest_user_message_not_last_overall_message(self):
+        payload = {
+            "messages": [
+                {"role": "user", "content": [{"type": "text", "text": "hi"}]},
+                {"role": "assistant", "content": [{"type": "text", "text": "later"}]},
+            ]
+        }
+        _inject_cache_control_in_payload(payload)
+        assert payload["messages"][0]["content"][0]["cache_control"] == {
+            "type": "ephemeral"
+        }
+        assert "cache_control" not in payload["messages"][1]["content"][0]
 
     def test_system_prompt_list(self):
         payload = {

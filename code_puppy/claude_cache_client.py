@@ -701,7 +701,7 @@ class ClaudeCacheAsyncClient(httpx.AsyncClient):
         # doesn't change between turns is independently cached:
         #   1. System prompt  – static across the whole session
         #   2. Tool definitions – static across the whole session
-        #   3. Last message    – caches the growing conversation prefix
+        #   3. Latest user msg – caches the growing conversation prefix
 
         # 1. System prompt
         system = data.get("system")
@@ -726,20 +726,10 @@ class ClaudeCacheAsyncClient(httpx.AsyncClient):
                 last_tool["cache_control"] = {"type": "ephemeral"}
                 modified = True
 
-        # 3. Last message content block
-        messages = data.get("messages")
-        if isinstance(messages, list) and messages:
-            last = messages[-1]
-            if isinstance(last, dict):
-                content = last.get("content")
-                if isinstance(content, list) and content:
-                    last_block = content[-1]
-                    if (
-                        isinstance(last_block, dict)
-                        and "cache_control" not in last_block
-                    ):
-                        last_block["cache_control"] = {"type": "ephemeral"}
-                        modified = True
+        # 3. Latest user message content block
+        latest_user = _find_latest_user_message(data.get("messages"))
+        if _attach_ephemeral_to_last_content_block(latest_user):
+            modified = True
 
         # 4. Opus 4.7 adaptive-thinking requires display=summarized on the
         # thinking dict. Enforce at the wire level so the request can't go
@@ -760,7 +750,7 @@ def _inject_cache_control_in_payload(payload: dict[str, Any]) -> None:
     valuable, stable prefixes:
       1. System prompt  – never changes between turns
       2. Tool defs      – never changes between turns
-      3. Last message   – caches the growing conversation prefix
+      3. Latest user msg – caches the growing conversation prefix
     """
 
     # 1. System prompt
@@ -781,21 +771,40 @@ def _inject_cache_control_in_payload(payload: dict[str, Any]) -> None:
         if isinstance(last_tool, dict) and "cache_control" not in last_tool:
             last_tool["cache_control"] = {"type": "ephemeral"}
 
-    # 3. Last message content block
-    messages = payload.get("messages")
-    if isinstance(messages, list) and messages:
-        last = messages[-1]
-        if isinstance(last, dict):
-            content = last.get("content")
-            if isinstance(content, list) and content:
-                last_block = content[-1]
-                if isinstance(last_block, dict) and "cache_control" not in last_block:
-                    last_block["cache_control"] = {"type": "ephemeral"}
+    # 3. Latest user message content block
+    latest_user = _find_latest_user_message(payload.get("messages"))
+    _attach_ephemeral_to_last_content_block(latest_user)
 
     # 4. Opus 4.7 adaptive-thinking requires display=summarized on the
     # thinking dict. Enforce here as well so the AsyncAnthropic client
     # patch path matches the raw httpx path.
     _enforce_thinking_display_summary(payload)
+
+
+def _find_latest_user_message(messages: Any) -> MutableMapping[str, Any] | None:
+    """Return the latest user-role message dict from a payload, if any."""
+    if not isinstance(messages, list):
+        return None
+    for message in reversed(messages):
+        if isinstance(message, dict) and message.get("role") == "user":
+            return message
+    return None
+
+
+def _attach_ephemeral_to_last_content_block(
+    message: MutableMapping[str, Any] | None,
+) -> bool:
+    """Attach Anthropic ephemeral cache control to a message's last content block."""
+    if not isinstance(message, dict):
+        return False
+    content = message.get("content")
+    if not isinstance(content, list) or not content:
+        return False
+    last_block = content[-1]
+    if not isinstance(last_block, dict) or "cache_control" in last_block:
+        return False
+    last_block["cache_control"] = {"type": "ephemeral"}
+    return True
 
 
 def _make_cache_wrapper(original_create: Callable[..., Any]) -> Callable[..., Any]:
