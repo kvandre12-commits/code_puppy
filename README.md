@@ -92,6 +92,22 @@ powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | ie
 uvx code-puppy
 ```
 
+#### Android / Termux lean bootstrap
+
+Fresh Android/Termux installs should stay lean first and attach optional extras
+later:
+
+```bash
+uvx --from code-puppy code-puppy-bootstrap detect --json
+uvx --from code-puppy code-puppy-bootstrap plan --profile auto
+uvx --from code-puppy code-puppy-bootstrap wizard
+```
+
+On Termux this auto-selects the `android-termux-lean` profile so browser,
+image, fuzzy, search, and provider extras do not get dragged into the first
+install by accident. See `docs/ANDROID.md` for the bare-bones Android path and
+optional DroidPuppy overlay attach.
+
 #### Optional: model-provider SDKs
 
 Core installs avoid heavyweight provider SDKs by default. Install only the model
