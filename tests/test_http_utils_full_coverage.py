@@ -534,13 +534,15 @@ class TestFindAvailablePort:
     def test_returns_none_when_all_busy(self):
         from code_puppy.http_utils import find_available_port
 
-        # Use a very narrow range and bind to all ports
+        # Use a very narrow range and fully occupy all ports.
+        # On Android/Linux, bind()+SO_REUSEADDR without listen() can still allow
+        # another bind probe to succeed, so make these sockets actual listeners.
         socks = []
         try:
             for p in range(49900, 49903):
                 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
                 s.bind(("127.0.0.1", p))
+                s.listen(1)
                 socks.append(s)
             result = find_available_port(start_port=49900, end_port=49902)
             assert result is None
