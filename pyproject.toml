@@ -18,7 +18,6 @@ dependencies = [
     "python-dotenv>=1.0.0",
     "prompt-toolkit>=3.0.52",
     "json-repair>=0.46.2",
-    "pyfiglet>=0.8.post1",
     "termflow-md>=0.1.11",
 ]
 dev-dependencies = [
