@@ -169,6 +169,7 @@ async def _invoke_agent_impl(
 
             # Create a temporary agent instance to avoid interfering with current agent state
             instructions = agent_config.get_full_system_prompt()
+            runtime_prompt_block = agent_config.format_runtime_prompt_additions()
 
             # Add AGENTS.md content to subagents.
             # ``load_puppy_rules`` lives on the builder module since the
@@ -179,10 +180,12 @@ async def _invoke_agent_impl(
             if puppy_rules:
                 instructions += f"\n\n{puppy_rules}"
 
-            # NOTE: ``load_prompt`` fragments (file-permission handling, kennel
-            # memory, ...) are already baked into ``get_full_system_prompt``
-            # via BaseAgent, so we must NOT append them again here — doing so
-            # double-injected them for class-based agents.
+            # ``load_prompt`` fragments are runtime/user-turn context, not
+            # stable system instructions. Keep them on the delegated prompt so
+            # Anthropic prompt caching can reuse the system prefix.
+            if runtime_prompt_block:
+                prompt = f"{runtime_prompt_block}\n\n{prompt}"
+
             from code_puppy.model_utils import prepare_prompt_for_model
 
             # Handle claude-code models: swap instructions, and prepend system prompt only on first message

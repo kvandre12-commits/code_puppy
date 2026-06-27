@@ -422,13 +422,12 @@ def test_format_usage_report_omits_breakdown_block_when_all_zero():
 # ---------------------------------------------------------------------------
 # Kennel context carve-out
 # ---------------------------------------------------------------------------
-def test_overhead_breakdown_carves_kennel_memory_out_of_system_prompt():
-    """Kennel context tokens are subtracted from the system prompt bucket.
+def test_overhead_breakdown_reports_kennel_memory_separately():
+    """Kennel context tokens live outside the system prompt bucket now.
 
-    The resolved system prompt already contains the kennel recall block
-    (because ``load_prompt`` callbacks are folded into it at assembly
-    time). To avoid double-counting we report ``system_prompt = resolved
-    - kennel`` and surface ``kennel_memory`` as its own additive bucket.
+    Runtime ``load_prompt`` fragments ride on the current user turn, so the
+    system bucket stays stable while the kennel block is surfaced as its own
+    additive bucket.
     """
     mod = _usage_module()
 
@@ -448,10 +447,8 @@ def test_overhead_breakdown_carves_kennel_memory_out_of_system_prompt():
         breakdown = mod.compute_overhead_breakdown(fake_agent)
 
     assert breakdown.kennel_memory_tokens == 100
-    # 400 (raw resolved) - 100 (kennel) == 300 tokens left in system prompt.
-    assert breakdown.system_prompt_tokens == 300
-    # Carve-out preserves additive total.
-    assert breakdown.total == 400
+    assert breakdown.system_prompt_tokens == 400
+    assert breakdown.total == 500
 
 
 def test_overhead_breakdown_kennel_zero_when_block_empty():
@@ -474,13 +471,8 @@ def test_overhead_breakdown_kennel_zero_when_block_empty():
     assert breakdown.total == 400
 
 
-def test_overhead_breakdown_kennel_clamps_when_block_larger_than_resolved():
-    """Defensive: kennel bigger than resolved prompt clamps system_prompt to 0.
-
-    Should never happen in practice (the kennel block is part of the
-    resolved prompt), but guard against custom agents that override
-    ``get_system_prompt`` and skip ``on_load_prompt``.
-    """
+def test_overhead_breakdown_counts_large_kennel_block_independently():
+    """A large kennel block no longer distorts the system prompt bucket."""
     mod = _usage_module()
     resolved_prompt = "S" * 100  # 40 raw tokens
     kennel_block = "P" * 1000  # 400 raw tokens
@@ -495,7 +487,7 @@ def test_overhead_breakdown_kennel_clamps_when_block_larger_than_resolved():
     ):
         breakdown = mod.compute_overhead_breakdown(fake_agent)
 
-    assert breakdown.system_prompt_tokens == 0
+    assert breakdown.system_prompt_tokens == 40
     assert breakdown.kennel_memory_tokens == 400
 
 

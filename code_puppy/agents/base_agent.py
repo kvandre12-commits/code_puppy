@@ -157,25 +157,37 @@ class BaseAgent(ABC):
             "such as claiming task ownership or coordination with other agents."
         )
 
-    def get_full_system_prompt(self) -> str:
-        """Assemble the runtime system prompt.
+    def get_runtime_prompt_additions(self) -> List[str]:
+        """Return per-turn prompt fragments from ``load_prompt`` callbacks.
 
-        Layered as: authored prompt (``get_system_prompt``) + per-turn
-        ``load_prompt`` plugin fragments + this instance's identity.
-
-        The ``load_prompt`` fragments (live timestamp/CWD, file-permission
-        rules, kennel memory, ...) and the identity ID are *runtime* concerns.
-        They live here — not in ``get_system_prompt`` — so they're recomputed
-        fresh every run and never get persisted into static agent definitions
-        (e.g. when an agent is cloned to JSON). See ``clone_agent``.
+        These are intentionally *not* part of the system prompt anymore.
+        They are runtime/user-turn context (kennel recall, cwd-ish hints,
+        ephemeral workflow notes, etc.), so keeping them out of ``system``
+        preserves Anthropic prompt-cache reuse across turns.
         """
         from code_puppy import callbacks
 
-        prompt = self.get_system_prompt()
-        prompt_additions = callbacks.on_load_prompt()
-        if prompt_additions:
-            prompt += "\n" + "\n".join(prompt_additions)
-        return prompt + self.get_identity_prompt()
+        return callbacks.on_load_prompt()
+
+    def format_runtime_prompt_additions(self) -> str:
+        """Render ``load_prompt`` fragments as a user-turn context block."""
+        additions = [
+            part.strip() for part in self.get_runtime_prompt_additions() if part
+        ]
+        if not additions:
+            return ""
+        joined = "\n\n".join(additions)
+        return f"[Runtime context]\n{joined}\n[/Runtime context]"
+
+    def get_full_system_prompt(self) -> str:
+        """Assemble the runtime system prompt.
+
+        Layered as: authored prompt (``get_system_prompt``) + this instance's
+        identity. Per-turn ``load_prompt`` fragments are kept OUT of ``system``
+        and injected into the current user turn instead so provider-side prompt
+        caching can reuse the stable system prefix.
+        """
+        return self.get_system_prompt() + self.get_identity_prompt()
 
     # ---- Message history (plain dict-level access) ------------------------
     def get_message_history(self) -> List[Any]:

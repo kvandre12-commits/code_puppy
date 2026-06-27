@@ -193,11 +193,9 @@ def _raw_tokens_for_mcp_servers(mcp_servers: Optional[List[Any]]) -> int:
 class OverheadBreakdown:
     """Per-bucket overhead estimate. All values are RAW (no multiplier).
 
-    The buckets form an additive partition of ``total``: ``kennel_memory``
-    is *carved out* of the resolved system prompt (since that's where the
-    kennel context block actually lives at runtime), so summing all five fields
-    still equals the true overhead — just with the kennel context chunk surfaced
-    as its own line so users can see what the kennel is packing.
+    The buckets form an additive partition of ``total``. ``kennel_memory`` is
+    tracked separately because the runtime recall block now rides on the
+    current user turn instead of being folded into ``system``.
     """
 
     system_prompt_tokens: int
@@ -325,26 +323,21 @@ def compute_overhead_breakdown(agent) -> OverheadBreakdown:
     """
     from code_puppy.agents._builder import load_puppy_rules
 
-    # System prompt (resolved for the active model). NB: this already
-    # includes any ``load_prompt`` plugin fragments — most notably the
-    # kennel context block — so we'll carve those out below to avoid
-    # double-counting.
+    # System prompt (resolved for the active model). Runtime ``load_prompt``
+    # fragments no longer live here, which keeps provider-side prompt caching
+    # stable across turns.
     try:
         resolved = _resolved_system_prompt(agent)
         system_tokens = _raw_estimate_tokens(resolved)
     except Exception:
         system_tokens = 0
 
-    # Kennel context block — carved out of the system prompt so it gets
-    # its own line in /context. Clamp the subtraction to zero in the
-    # paranoid case where the resolved prompt somehow doesn't contain the
-    # block (e.g. agent overrode get_system_prompt without calling
-    # ``on_load_prompt``).
+    # Kennel context block — measured separately because it is injected into
+    # the active user turn rather than the system prompt.
     try:
         kennel_tokens = _raw_estimate_tokens(_kennel_memory_block())
     except Exception:
         kennel_tokens = 0
-    system_tokens = max(0, system_tokens - kennel_tokens)
 
     # AGENTS.md / puppy rules — separate bucket so users can see how much of
     # their context budget is being eaten by project rules.
