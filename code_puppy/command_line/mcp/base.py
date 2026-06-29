@@ -6,10 +6,17 @@ Provides base classes and common utilities used across all MCP command modules.
 
 import logging
 
-from code_puppy.mcp_.manager import get_mcp_manager
+from code_puppy.mcp_optional import has_mcp_support
 
 # Configure logging
 logger = logging.getLogger(__name__)
+
+
+def get_mcp_manager():
+    """Compatibility wrapper for tests and lazy optional imports."""
+    from code_puppy.mcp_.manager import get_mcp_manager as _get_mcp_manager
+
+    return _get_mcp_manager()
 
 
 class MCPCommandBase:
@@ -22,7 +29,9 @@ class MCPCommandBase:
 
     def __init__(self):
         """Initialize the base command handler."""
-        self.manager = get_mcp_manager()
+        self.manager = None
+        if has_mcp_support():
+            self.manager = get_mcp_manager()
         logger.debug(f"Initialized {self.__class__.__name__}")
 
     def generate_group_id(self) -> str:

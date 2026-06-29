@@ -607,6 +607,12 @@ def handle_model_settings_command(command: str) -> bool:
 )
 def handle_mcp_command(command: str) -> bool:
     """Handle MCP server management."""
+    from code_puppy.mcp_optional import get_mcp_install_hint, has_mcp_support
+
+    if not has_mcp_support():
+        emit_info(get_mcp_install_hint("/mcp commands"))
+        return True
+
     from code_puppy.command_line.mcp import MCPCommandHandler
 
     handler = MCPCommandHandler()

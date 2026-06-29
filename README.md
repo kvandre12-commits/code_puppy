@@ -83,9 +83,48 @@ uvx --from code-puppy code-puppy-bootstrap plan --profile auto --json
 
 #### Native Android / Termux
 
-**The one-command path (recommended):** let the interactive wizard detect the
-device and walk you through every step (uv, native packages, Code Puppy) with a
-confirmation prompt before each one, then verify the install for you:
+**Fresh-user path (recommended):** use the Android onboarding script. It owns
+the milestone-1 Android journey: core Termux install, lean Code Puppy setup,
+optional DroidPuppy overlay attach, `adb` detection/install, and a staged
+readiness summary.
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/mpfaffenberger/code_puppy/main/scripts/onboard_android.sh | bash -s -- --yes
+```
+
+Want to test an exact published artifact instead of “latest”? Pin it:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/mpfaffenberger/code_puppy/main/scripts/onboard_android.sh | \
+  bash -s -- --yes --version 0.0.569
+```
+
+If you only want the lean core installer without the broader Android onboarding
+journey, use:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/mpfaffenberger/code_puppy/main/scripts/install_termux.sh | bash -s -- --yes
+```
+
+Trying to **ship/share Android from main Code Puppy** instead of starting in the
+overlay repo? Use [`docs/ANDROID_MAIN_FIRST_SHARE.md`](docs/ANDROID_MAIN_FIRST_SHARE.md)
+for the main-first story, and [`docs/ANDROID_BUILD_HANDOFF.md`](docs/ANDROID_BUILD_HANDOFF.md)
+for the exact build/handoff lanes and pre-push validation packet.
+
+**Testing a PR branch or git ref instead of a published artifact?** Do **not**
+use the published-package installer and call it branch evidence. Use the
+source-checkout Termux flow so the checked-out code is what actually runs:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/mpfaffenberger/code_puppy/main/scripts/install_termux_checkout.sh | \
+  bash -s -- --yes --repo-url https://github.com/mpfaffenberger/code_puppy.git --ref main --require-clean
+```
+
+That flow clones the requested repo/ref, runs `uv sync --no-dev`, and verifies
+`code-puppy` plus `code-puppy-bootstrap` from the checkout itself.
+
+**Already have `uv`/`uvx` and want a guided attach flow?** Use the interactive
+wizard:
 
 ```bash
 uvx --from code-puppy code-puppy-bootstrap wizard
@@ -97,22 +136,16 @@ to auto-confirm for scripted installs, or `--dry-run` to preview without
 executing anything.
 
 <details>
-<summary>Prefer to drive it by hand? Here is the manual flow the wizard runs.</summary>
+<summary>Prefer to drive it by hand? Here is the manual flow the installer follows.</summary>
 
 ```bash
-# Inspect what the bootstrap planner sees on this device
+pkg update && pkg upgrade
+pkg install python git
+pkg install uv
 uvx --from code-puppy code-puppy-bootstrap detect --json
-
-# Build the recommended lean install plan for the current environment
 uvx --from code-puppy code-puppy-bootstrap plan --profile auto
-
-# Install suggested Termux-side system packages for the lean profile
 pkg install ripgrep proot
-
-# Attach the lean base runtime (no browser/image/fuzzy/search/provider extras)
 uv tool install --refresh code-puppy
-
-# Run Code Puppy
 code-puppy -i
 ```
 

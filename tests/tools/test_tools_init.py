@@ -54,6 +54,73 @@ class TestLoadPluginTools:
             _load_plugin_tools()  # should not raise
 
 
+class TestPluginToolRegistrationValidator:
+    def test_accepts_single_matching_tool(self):
+        from code_puppy.tools import (
+            _VALIDATED_PLUGIN_TOOL_CONNECTIONS,
+            _validate_plugin_tool_registration,
+        )
+
+        def register_good(agent):
+            @agent.tool
+            async def expected_tool():
+                return None
+
+        _VALIDATED_PLUGIN_TOOL_CONNECTIONS.clear()
+        try:
+            with patch("code_puppy.tools.emit_warning") as mock_warn:
+                _validate_plugin_tool_registration("expected_tool", register_good)
+                mock_warn.assert_not_called()
+        finally:
+            _VALIDATED_PLUGIN_TOOL_CONNECTIONS.clear()
+
+    def test_warns_when_register_func_adds_multiple_tools(self):
+        from code_puppy.tools import (
+            _VALIDATED_PLUGIN_TOOL_CONNECTIONS,
+            _validate_plugin_tool_registration,
+        )
+
+        def register_many(agent):
+            @agent.tool
+            async def first_tool():
+                return None
+
+            @agent.tool
+            async def second_tool():
+                return None
+
+        _VALIDATED_PLUGIN_TOOL_CONNECTIONS.clear()
+        try:
+            with patch("code_puppy.tools.emit_warning") as mock_warn:
+                _validate_plugin_tool_registration("expected_tool", register_many)
+                mock_warn.assert_called_once()
+                assert "registered 2 tool functions" in mock_warn.call_args[0][0]
+        finally:
+            _VALIDATED_PLUGIN_TOOL_CONNECTIONS.clear()
+
+    def test_warns_when_registered_tool_name_does_not_match(self):
+        from code_puppy.tools import (
+            _VALIDATED_PLUGIN_TOOL_CONNECTIONS,
+            _validate_plugin_tool_registration,
+        )
+
+        def register_wrong_name(agent):
+            @agent.tool
+            async def actual_tool_name():
+                return None
+
+        _VALIDATED_PLUGIN_TOOL_CONNECTIONS.clear()
+        try:
+            with patch("code_puppy.tools.emit_warning") as mock_warn:
+                _validate_plugin_tool_registration(
+                    "expected_tool_name", register_wrong_name
+                )
+                mock_warn.assert_called_once()
+                assert "instead of 'expected_tool_name'" in mock_warn.call_args[0][0]
+        finally:
+            _VALIDATED_PLUGIN_TOOL_CONNECTIONS.clear()
+
+
 class TestHasExtendedThinkingActive:
     @patch("code_puppy.config.get_global_model_name", return_value=None)
     def test_no_model(self, mock_model):

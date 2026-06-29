@@ -185,6 +185,83 @@ TOOL_EXPANSIONS: dict[str, list[str]] = {
 # that still work should stay in TOOL_REGISTRY.
 REMOVED_LEGACY_TOOLS: set[str] = set()
 
+_VALIDATED_PLUGIN_TOOL_CONNECTIONS: set[tuple[str, str, str]] = set()
+
+
+class _ToolRegistrationProbeAgent:
+    """Minimal agent stub for validating plugin tool registration contracts."""
+
+    def __init__(self) -> None:
+        self.registered_tool_names: list[str] = []
+
+    def tool(self, func=None):
+        def decorator(fn):
+            self.registered_tool_names.append(getattr(fn, "__name__", "<unknown>"))
+            return fn
+
+        if func is None:
+            return decorator
+        return decorator(func)
+
+
+def _validate_plugin_tool_registration(tool_name: str, register_func) -> None:
+    """Best-effort validator for the plugin register_func -> tool_name seam.
+
+    The canonical contract is one tool definition per tool name, where each
+    ``register_func(agent)`` call registers exactly one ``@agent.tool`` with the
+    same public function name as ``tool_name``.
+
+    Validation is warning-only so plugin contract issues are surfaced without
+    breaking startup or agent construction.
+    """
+
+    module_name = getattr(register_func, "__module__", "<unknown>")
+    qualname = getattr(
+        register_func,
+        "__qualname__",
+        getattr(register_func, "__name__", "<unknown>"),
+    )
+    cache_key = (tool_name, module_name, qualname)
+    if cache_key in _VALIDATED_PLUGIN_TOOL_CONNECTIONS:
+        return
+    _VALIDATED_PLUGIN_TOOL_CONNECTIONS.add(cache_key)
+
+    probe_agent = _ToolRegistrationProbeAgent()
+    try:
+        register_func(probe_agent)
+    except Exception as exc:
+        emit_warning(
+            "Warning: Plugin tool registration probe failed for "
+            f"'{tool_name}' via {module_name}.{qualname}: {exc}"
+        )
+        return
+
+    registered_names = probe_agent.registered_tool_names
+    if not registered_names:
+        emit_warning(
+            "Warning: Plugin tool registration contract issue for "
+            f"'{tool_name}' via {module_name}.{qualname}: register_func "
+            "did not register any @agent.tool functions."
+        )
+        return
+
+    if len(registered_names) > 1:
+        emit_warning(
+            "Warning: Plugin tool registration contract issue for "
+            f"'{tool_name}' via {module_name}.{qualname}: register_func "
+            f"registered {len(registered_names)} tool functions "
+            f"{registered_names}. Expected exactly one."
+        )
+        return
+
+    registered_name = registered_names[0]
+    if registered_name != tool_name:
+        emit_warning(
+            "Warning: Plugin tool registration contract issue for "
+            f"'{tool_name}' via {module_name}.{qualname}: register_func "
+            f"registered tool '{registered_name}' instead of '{tool_name}'."
+        )
+
 
 def _load_plugin_tools() -> None:
     """Load tools registered by plugins via the register_tools callback.
@@ -208,6 +285,7 @@ def _load_plugin_tools() -> None:
                     tool_name = tool_def["name"]
                     register_func = tool_def["register_func"]
                     if callable(register_func):
+                        _validate_plugin_tool_registration(tool_name, register_func)
                         TOOL_REGISTRY[tool_name] = register_func
     except Exception:
         # Don't let plugin failures break core functionality

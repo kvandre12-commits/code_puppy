@@ -13,71 +13,102 @@ capabilities later, only if you actually want them.
 - **Extras** (browser/image/fuzzy/search/provider) are opt-in, not mandatory.
   The phone install stays small by default.
 
+If the goal is to **share or ship the Android story from main Code Puppy**,
+start with [`ANDROID_MAIN_FIRST_SHARE.md`](ANDROID_MAIN_FIRST_SHARE.md). That
+keeps the launch surface, proof path, and optional overlay attach in the right
+order.
+
+If the goal is specifically **build/handoff readiness** — meaning another human
+should be able to run the correct Android validation lane without guessing — use
+[`ANDROID_BUILD_HANDOFF.md`](ANDROID_BUILD_HANDOFF.md) for the exact commands,
+pre-push checks, and handoff packet.
+
 ## Base install
 
 ### Step 0 — Get Termux properly
 
 Install **Termux from F-Droid or GitHub**, not the Play Store version (that one
-is stale). Then update it:
+is stale).
+
+### Step 1 — Recommended: run the Android onboarding command
+
+This is the best fresh-user path. It owns the milestone-1 Android journey:
+core Termux install, lean Code Puppy setup, optional DroidPuppy overlay attach,
+`adb` detection/install, and a staged readiness summary.
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/mpfaffenberger/code_puppy/main/scripts/onboard_android.sh | bash -s -- --yes
+```
+
+For Mike-style acceptance runs against an exact published artifact:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/mpfaffenberger/code_puppy/main/scripts/onboard_android.sh | \
+  bash -s -- --yes --version 0.0.569
+```
+
+Useful flags:
+
+- `--dry-run` — preview the exact commands
+- `--skip-overlay` — keep it core-only for now
+- `--skip-adb-install` — detect adb only, do not install `android-tools`
+- `--skip-upgrade` — skip `pkg update && pkg upgrade`
+- `--launch` — open `code-puppy -i` after the final summary
+
+### Step 1b — Want only the lean core installer?
+
+If you only want the engine install without the broader Android onboarding
+journey, use the dedicated Termux installer directly:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/mpfaffenberger/code_puppy/main/scripts/install_termux.sh | bash -s -- --yes
+```
+
+### Step 1c — Testing a PR branch or git ref instead of a published package?
+
+Use the **source-checkout** installer instead. This is the honest path for
+branch/ref validation because it actually clones and runs the requested code.
+It is not the same thing as installing the latest published package and hoping
+nobody notices.
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/mpfaffenberger/code_puppy/main/scripts/install_termux_checkout.sh | \
+  bash -s -- --yes --repo-url https://github.com/mpfaffenberger/code_puppy.git --ref main --require-clean
+```
+
+That flow installs lean Termux prerequisites, clones the target ref, runs
+`uv sync --no-dev`, and verifies `code-puppy` plus
+`code-puppy-bootstrap` from the checkout itself.
+
+### Step 2 — Prefer to drive it by hand?
+
+Use this exact manual flow:
 
 ```bash
 pkg update && pkg upgrade
-```
-
-### Step 1 — Install the basics Termux needs
-
-```bash
 pkg install python git
-```
-
-### Step 2 — Install uv (recommended installer)
-
-```bash
 pkg install uv
-```
-
-If `pkg install uv` is unavailable on your Termux, use the official installer:
-
-```bash
-curl -LsSf https://astral.sh/uv/install.sh | sh
-```
-
-### Step 3 — Let the bootstrap planner inspect your device
-
-This installs nothing; it only inspects the environment.
-
-```bash
 uvx --from code-puppy code-puppy-bootstrap detect --json
-```
-
-### Step 4 — Get the recommended lean install plan
-
-```bash
 uvx --from code-puppy code-puppy-bootstrap plan --profile auto
+pkg install ripgrep proot
+uv tool install --refresh code-puppy
+code-puppy -i
 ```
 
 On a phone this auto-selects the **`android-termux-lean`** profile, which keeps
 the install small by leaving heavy optional extras detached until you want them.
 
-### Step 5 — Install the recommended system packages
+### Step 3 — Already have `uv` and want prompts?
+
+Use the bootstrap wizard once `uvx` is available:
 
 ```bash
-pkg install ripgrep proot
+uvx --from code-puppy code-puppy-bootstrap wizard
 ```
 
-### Step 6 — Install Code Puppy (lean)
-
-```bash
-uv tool install --refresh code-puppy
-```
-
-### Step 7 — Run it
-
-```bash
-code-puppy -i
-```
-
-You now have a working, lean Code Puppy on Android.
+That guided flow is great after `uv` exists, but it is not the true from-zero
+installer because `uvx` itself has to exist first. Cute little bootstrap snake
+eating its own tail otherwise.
 
 ## Optional — Android-native superpowers (DroidPuppy)
 
