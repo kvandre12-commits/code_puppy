@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import subprocess
 import urllib.error
@@ -11,6 +12,21 @@ from code_puppy.plugins.android_brave_bridge.tooling import get_android_browser_
 
 DEFAULT_CDP_PORT = 9222
 DEFAULT_HTTP_TIMEOUT = 5
+DEFAULT_RAW_LIMIT = 20_000
+MAX_PROBE_TARGETS = 25
+_BROWSER_DEVTOOLS_SOCKET_RE = re.compile(r"@(?P<name>\S*devtools_remote(?:_\d+)?)")
+_BROWSER_SOCKET_PREFIXES = (
+    "chrome_devtools_remote",
+    "com.android.chrome_devtools_remote",
+    "com.chrome.beta_devtools_remote",
+    "com.chrome.dev_devtools_remote",
+    "com.chrome.canary_devtools_remote",
+    "com.microsoft.emmx_devtools_remote",
+    "com.sec.android.app.sbrowser_devtools_remote",
+    "brave_devtools_remote",
+    "com.brave.browser_devtools_remote",
+    "com.brave.browser_beta_devtools_remote",
+)
 SOCKET_CANDIDATES = [
     "chrome_devtools_remote",
     "com.brave.browser_devtools_remote",
@@ -19,6 +35,8 @@ SOCKET_CANDIDATES = [
     "com.chrome.beta_devtools_remote",
     "com.chrome.dev_devtools_remote",
     "com.chrome.canary_devtools_remote",
+    "com.microsoft.emmx_devtools_remote",
+    "com.sec.android.app.sbrowser_devtools_remote",
 ]
 
 
@@ -73,7 +91,8 @@ def _http_get_json(url: str, timeout: int = DEFAULT_HTTP_TIMEOUT) -> dict[str, A
             "url": url,
             "status": 200,
             "json": parsed,
-            "raw": body,
+            "raw": body[:DEFAULT_RAW_LIMIT],
+            "raw_truncated": len(body) > DEFAULT_RAW_LIMIT,
         }
     except urllib.error.HTTPError as exc:
         body = exc.read().decode("utf-8", errors="replace")
@@ -82,7 +101,8 @@ def _http_get_json(url: str, timeout: int = DEFAULT_HTTP_TIMEOUT) -> dict[str, A
             "url": url,
             "status": exc.code,
             "error": str(exc),
-            "raw": body,
+            "raw": body[:DEFAULT_RAW_LIMIT],
+            "raw_truncated": len(body) > DEFAULT_RAW_LIMIT,
         }
     except Exception as exc:
         return {
@@ -92,6 +112,77 @@ def _http_get_json(url: str, timeout: int = DEFAULT_HTTP_TIMEOUT) -> dict[str, A
             "error": str(exc),
             "raw": "",
         }
+
+
+def _is_browser_devtools_socket(socket_name: str) -> bool:
+    return any(socket_name.startswith(prefix) for prefix in _BROWSER_SOCKET_PREFIXES)
+
+
+def _discover_browser_devtools_sockets_from_unix(unix_socket_table: str) -> list[str]:
+    """Return browser CDP socket names discovered from ``/proc/net/unix``.
+
+    Android Chrome often exposes PID-specific sockets such as
+    ``@chrome_devtools_remote_2730`` while the generic socket times out. We keep
+    PID-specific sockets first because those are the least ambiguous.
+    """
+    seen: set[str] = set()
+    pid_specific: list[str] = []
+    generic: list[str] = []
+    for match in _BROWSER_DEVTOOLS_SOCKET_RE.finditer(unix_socket_table):
+        name = match.group("name")
+        if name in seen or not _is_browser_devtools_socket(name):
+            continue
+        seen.add(name)
+        if re.search(r"_\d+$", name):
+            pid_specific.append(name)
+        else:
+            generic.append(name)
+    return [*pid_specific, *generic]
+
+
+def _discover_browser_devtools_sockets(adb: str) -> dict[str, Any]:
+    result = _run_command([adb, "shell", "cat", "/proc/net/unix"], timeout=10)
+    discovered = []
+    if result.get("exit_code") == 0:
+        discovered = _discover_browser_devtools_sockets_from_unix(
+            str(result.get("stdout") or "")
+        )
+    return {"command": result, "sockets": discovered}
+
+
+def _merge_socket_candidates(discovered: list[str], configured: list[str]) -> list[str]:
+    merged: list[str] = []
+    for socket_name in [*discovered, *configured]:
+        if socket_name not in merged:
+            merged.append(socket_name)
+    return merged
+
+
+def _trim_target_list_result(result: dict[str, Any]) -> dict[str, Any]:
+    targets = result.get("json")
+    if not isinstance(targets, list):
+        return result
+    if len(targets) <= MAX_PROBE_TARGETS:
+        return result
+    trimmed = dict(result)
+    trimmed["json"] = targets[:MAX_PROBE_TARGETS]
+    trimmed["json_count"] = len(targets)
+    trimmed["json_truncated"] = True
+    trimmed["note"] = (
+        f"Probe target list trimmed to {MAX_PROBE_TARGETS}; use "
+        "android_cdp_list_targets for explicit target selection."
+    )
+    return trimmed
+
+
+def _skipped_json_list(local_port: int, reason: str) -> dict[str, Any]:
+    return {
+        "success": False,
+        "url": f"http://127.0.0.1:{local_port}/json/list",
+        "status": None,
+        "error": reason,
+        "raw": "",
+    }
 
 
 def _command_help() -> dict[str, str]:
@@ -139,6 +230,7 @@ def android_cdp_doctor() -> dict[str, Any]:
             browser_status["platform"].get("android_version")
         ),
         "socket_candidates": SOCKET_CANDIDATES,
+        "pid_socket_discovery": "/proc/net/unix browser devtools sockets",
         "commands": _command_help(),
         "guidance": guidance,
     }
@@ -232,7 +324,16 @@ def android_cdp_probe(
             "commands": _command_help(),
         }
 
-    sockets = socket_candidates or SOCKET_CANDIDATES
+    discovery = None
+    configured_sockets = socket_candidates or SOCKET_CANDIDATES
+    if socket_candidates is None:
+        discovery = _discover_browser_devtools_sockets(adb)
+        sockets = _merge_socket_candidates(
+            discovery.get("sockets", []),
+            configured_sockets,
+        )
+    else:
+        sockets = configured_sockets
     attempts: list[dict[str, Any]] = []
 
     for socket_name in sockets:
@@ -241,7 +342,15 @@ def android_cdp_probe(
             [adb, "forward", f"tcp:{local_port}", f"localabstract:{socket_name}"]
         )
         version_result = _http_get_json(f"http://127.0.0.1:{local_port}/json/version")
-        list_result = _http_get_json(f"http://127.0.0.1:{local_port}/json/list")
+        if version_result.get("success") is True:
+            list_result = _trim_target_list_result(
+                _http_get_json(f"http://127.0.0.1:{local_port}/json/list")
+            )
+        else:
+            list_result = _skipped_json_list(
+                local_port,
+                "skipped because /json/version did not succeed",
+            )
         remove_after = None
         if cleanup_forward:
             remove_after = _run_command(
@@ -268,6 +377,7 @@ def android_cdp_probe(
                 "matched_socket": socket_name,
                 "local_port": local_port,
                 "attempts": attempts,
+                "socket_discovery": discovery,
                 "websocket_debugger_url": (version_result.get("json", {}) or {}).get(
                     "webSocketDebuggerUrl"
                 ),
@@ -281,6 +391,7 @@ def android_cdp_probe(
         "success": False,
         "local_port": local_port,
         "attempts": attempts,
+        "socket_discovery": discovery,
         "error": (
             "No candidate DevTools socket produced a working /json/version response. "
             "Possible causes: adb not paired, browser not running, wireless debugging off, or Brave uses a different socket name."
