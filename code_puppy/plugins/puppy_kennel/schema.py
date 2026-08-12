@@ -113,15 +113,8 @@ CREATE INDEX IF NOT EXISTS idx_doctrine_receipts_decision_id ON doctrine_receipt
 CREATE INDEX IF NOT EXISTS idx_doctrine_receipts_repo_family ON doctrine_receipts(repo_family);
 """
 
-# PRAGMAs applied on every connection. WAL is the headline: one writer +
-# unlimited readers, multi-process safe, the whole reason we picked SQLite.
-#
-# ORDER MATTERS: ``busy_timeout`` must come FIRST. Switching ``journal_mode``
-# to WAL takes a brief exclusive lock, and the very first concurrent
-# ``initialize()`` from N processes can collide on it. If the busy handler
-# isn't armed yet, that collision surfaces as an immediate
-# ``OperationalError: database is locked`` instead of politely waiting.
-# Arm the 5s grace BEFORE we attempt the WAL switch (or any write).
+# Apply PRAGMAs on every connection. Set busy_timeout first: WAL's exclusive
+# lock can collide during concurrent initialization and otherwise raises immediately.
 PRAGMAS = (
     "PRAGMA busy_timeout=5000",  # 5s grace for writers waiting on the lock.
     "PRAGMA journal_mode=WAL",

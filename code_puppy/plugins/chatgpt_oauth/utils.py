@@ -342,9 +342,8 @@ def exchange_code_for_tokens(
     return None
 
 
-# Default models available via ChatGPT Codex API
-# These are the known models that work with ChatGPT OAuth tokens
-# Based on codex-rs CLI and shell-scripts/codex-call.sh
+# Models known to work with ChatGPT OAuth tokens (sourced from codex-rs CLI
+# and shell-scripts/codex-call.sh).
 DEFAULT_CODEX_MODELS = [
     "gpt-5.6-sol",
     "gpt-5.6-terra",
@@ -483,9 +482,12 @@ def add_models_to_extra_config(models: List[str]) -> bool:
         for model_name in models:
             prefixed = f"{CHATGPT_OAUTH_CONFIG['prefix']}{model_name}"
 
-            # ChatGPT/Codex OAuth models use the Responses API, so they support
-            # reasoning effort, reasoning summaries, and text verbosity.
+            # Responses-API models support reasoning effort, summaries, and
+            # verbosity. GPT-5.6 additionally supports context and mode.
             supported_settings = ["reasoning_effort", "summary", "verbosity"]
+            if model_name.lower().startswith("gpt-5.6"):
+                supported_settings.extend(["reasoning_context", "reasoning_mode"])
+
             model_config: Dict[str, Any] = {
                 "type": "chatgpt_oauth",
                 "name": model_name,

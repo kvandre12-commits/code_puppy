@@ -22,9 +22,8 @@ import pytest
 
 @pytest.fixture
 def kennel_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    # ``PUPPY_KENNEL_ROOT`` now ONLY controls where the SQLite DB lives;
-    # it has nothing to do with the on/off toggle, which lives in
-    # puppy.cfg (isolated to a temp file by the root tests/conftest.py).
+    # ``PUPPY_KENNEL_ROOT`` only sets the SQLite DB location, NOT the on/off
+    # toggle (that lives in puppy.cfg, isolated by tests/conftest.py).
     root = tmp_path / "kennel"
     monkeypatch.setenv("PUPPY_KENNEL_ROOT", str(root))
 
@@ -240,11 +239,11 @@ def test_slash_disable_when_already_disabled_is_noop(kennel_root: Path) -> None:
 
 
 def test_advertise_tools_returns_full_list_when_enabled(kennel_root: Path) -> None:
-    from code_puppy.plugins.puppy_kennel import register_callbacks, state
+    from code_puppy.plugins.puppy_kennel import register_callbacks, state, tools
 
     state.set_enabled(True)
     advertised = register_callbacks._advertise_tools_to_agent("code-puppy")
-    assert set(advertised) == set(register_callbacks._KENNEL_TOOL_NAMES)
+    assert set(advertised) == set(tools.kennel_tool_names())
 
 
 def test_advertise_tools_returns_empty_when_disabled(kennel_root: Path) -> None:

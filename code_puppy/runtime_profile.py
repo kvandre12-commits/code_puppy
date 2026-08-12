@@ -90,10 +90,10 @@ def _config_runtime_profile() -> str:
 def get_runtime_profile() -> str:
     """Resolve the active runtime profile.
 
-    ``android-minimal`` remains available as an explicit opt-in via env/config,
-    but auto-detection now prefers the full runtime even on Android/Termux.
-    The minimal overlay proved too destructive as a default because it stripped
-    most plugin-registered tools and custom command surfaces.
+    Android/Termux defaults to ``android-minimal`` so a lean installation does
+    not eagerly load desktop-oriented built-ins or the full model inventory.
+    User and project overlays remain separately discoverable, and operators can
+    explicitly select ``full`` via environment or config when needed.
     """
     env_choice = _normalize_profile(os.environ.get(RUNTIME_PROFILE_ENV))
     if env_choice != _AUTO:
@@ -103,6 +103,9 @@ def get_runtime_profile() -> str:
     if config_choice != _AUTO:
         return config_choice
 
+    environment = detect_runtime_environment()
+    if environment["is_android"]:
+        return _ANDROID_MINIMAL
     return _FULL
 
 

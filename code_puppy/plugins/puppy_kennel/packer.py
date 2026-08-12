@@ -33,15 +33,13 @@ from .decisions import render_active_decision_lines_for_cwd
 from .kennel import Drawer
 from .wings import USER_WING, detect_cwd, repo_wing
 
-# Reserve a little slack so the rendered header/scaffolding doesn't push us
-# over the requested budget. Headers + section dividers eat ~50 tokens.
+# Reserve ~50 tokens for rendered headers and section dividers.
 _HEADER_SLACK_CHARS = 50 * CHARS_PER_TOKEN
 
 # We over-fetch from SQLite then truncate to fit. Cheap, simple.
 _FETCH_LIMIT = 50
 
-# How many chars of remaining budget is too little to bother starting a new
-# drawer with. Avoids "...truncated]" being most of the rendered line.
+# Below this remainder, a new drawer would be mostly "...truncated]".
 _MIN_REMAINING_CHARS = 120
 
 # Active doctrine should surface before generic repo chatter, but the section
@@ -376,18 +374,18 @@ def pack(cwd_override: str | None = None) -> str | None:
     p0_budget = int(remaining_budget * USER_PREFS_QUOTA)
     p1_budget = int(remaining_budget * STICKY_QUOTA)
 
-    # P0 - user preferences. We pull every role; user-wing drawers tend to
-    # be ``role='note'`` (explicit) but allow assistant too just in case.
+    # P0: user preferences; include every role because user notes may be assistant-authored.
     user_drawers = kennel.recent_drawers(USER_WING, limit=_FETCH_LIMIT)
     p0 = _pack_class(user_drawers, p0_budget)
     p0.title = "User Preferences"
 
-    # P1 - sticky notes for this repo (role='note' only).
+    # P1: repo sticky notes (role='note' only).
     sticky = kennel.recent_drawers(repo_w, limit=_FETCH_LIMIT, role="note")
     p1 = _pack_class(sticky, p1_budget)
     p1.title = "Project Decisions"
 
-    # P2 - recent assistant responses fill whatever budget remains.
+    # P2: recent assistant responses fill the budget left after doctrine,
+    # user preferences, and project decisions.
     p2_budget = remaining_budget - p0.used_chars - p1.used_chars
     assistant = kennel.recent_drawers(repo_w, limit=_FETCH_LIMIT, role="assistant")
     assistant = _filter_assistant_echo(assistant, sticky)
