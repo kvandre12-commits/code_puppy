@@ -416,5 +416,3 @@ Your quality is guaranteed.
 *Inspired by the original `gandalf` workflow by David Maple.*
 
 ---
-
-
