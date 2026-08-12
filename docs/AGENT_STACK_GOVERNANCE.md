@@ -171,6 +171,11 @@ These two artifacts improve control flow, but they do not outrank
 That operator layer is mostly outside this checkout, but we adopt the rule here:
 **status, plans, memory, handshakes, and commit receipts are not permission**.
 
+A `workflow_id` is an identity boundary, not a mutable display label. Handshake
+and packet updates must fail closed when their requested workflow differs from
+the canonical bundle. Start a different workflow with an explicit initialization;
+never retag old approval fields into a new request.
+
 ## Repo-shipped governance agents
 
 This checkout now ships project JSON agents mirroring that doctrine:

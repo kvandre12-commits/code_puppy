@@ -134,6 +134,13 @@ def _workflow_id_from_governance(governance: dict[str, dict[str, Any]]) -> str:
     return "default-workflow"
 
 
+def _workflow_mismatch_reason(requested: str, existing: str) -> str:
+    return (
+        f"workflow_id mismatch: requested {requested!r}, canonical bundle uses "
+        f"{existing!r}; initialize the new workflow explicitly before applying it"
+    )
+
+
 def _touch_governance(
     governance: dict[str, dict[str, Any]],
     *,
@@ -523,9 +530,18 @@ def droidpuppy_context_handshake(
         workflow_id=workflow_id or _workflow_id_from_bundle(bundle),
         requester=requester,
     )
+    existing_workflow_id = _workflow_id_from_bundle(bundle)
+    requested_workflow_id = workflow_id.strip()
+    if requested_workflow_id and requested_workflow_id != existing_workflow_id:
+        return {
+            "success": False,
+            "reason": _workflow_mismatch_reason(
+                requested_workflow_id, existing_workflow_id
+            ),
+        }
     resolved_workflow_id = (
-        workflow_id.strip()
-        or _workflow_id_from_bundle(bundle)
+        requested_workflow_id
+        or existing_workflow_id
         or _workflow_id_from_governance(governance)
     )
     handshake = governance["intent_handshake"]
@@ -677,10 +693,31 @@ def droidpuppy_context_apply_packet(
             patches[key] = patch
 
     bundle = load_bundle(root)
+    existing_workflow_id = _workflow_id_from_bundle(bundle)
+    requested_workflow_ids = {
+        str(patch.get("workflow_id") or "").strip()
+        for patch in patches.values()
+        if str(patch.get("workflow_id") or "").strip()
+    }
+    if len(requested_workflow_ids) > 1:
+        return {
+            "success": False,
+            "reason": "packet patches contain conflicting workflow_id values",
+        }
+    if requested_workflow_ids:
+        requested_workflow_id = requested_workflow_ids.pop()
+        if requested_workflow_id != existing_workflow_id:
+            return {
+                "success": False,
+                "reason": _workflow_mismatch_reason(
+                    requested_workflow_id, existing_workflow_id
+                ),
+            }
+
     for key, patch in patches.items():
         bundle[key] = _merge(bundle[key], patch)
 
-    resolved_workflow_id = _workflow_id_from_bundle(bundle)
+    resolved_workflow_id = existing_workflow_id
     bundle = _touch_bundle(bundle, workflow_id=resolved_workflow_id)
     save_bundle(root, bundle)
     event = _append_event(

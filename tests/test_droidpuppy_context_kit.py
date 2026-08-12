@@ -65,6 +65,63 @@ def test_context_handshake_and_commit_pending_approval(tmp_path) -> None:
     assert commit["workflow_commit"]["approval_status"] == "review_required"
 
 
+def test_handshake_rejects_cross_workflow_retagging(tmp_path) -> None:
+    root = str(tmp_path / "ctx")
+    droidpuppy_context_init(root=root, workflow_id="existing-workflow")
+
+    result = droidpuppy_context_handshake(
+        root=root,
+        workflow_id="different-workflow",
+        requester="mike",
+        raw_request="start unrelated work",
+    )
+
+    assert result["success"] is False
+    assert "workflow_id mismatch" in result["reason"]
+    packet = droidpuppy_context_packet(root=root)
+    assert packet["workflow_id"] == "existing-workflow"
+    assert packet["intent_handshake"]["workflow_id"] == "existing-workflow"
+
+
+def test_apply_packet_rejects_cross_workflow_authority_merge(tmp_path) -> None:
+    root = str(tmp_path / "ctx")
+    droidpuppy_context_init(root=root, workflow_id="existing-workflow")
+
+    result = droidpuppy_context_apply_packet(
+        root=root,
+        approval_decision_json=json.dumps(
+            {
+                "workflow_id": "different-workflow",
+                "status": "approved",
+                "allowed_actions": ["unrelated action"],
+            }
+        ),
+    )
+
+    assert result["success"] is False
+    assert "workflow_id mismatch" in result["reason"]
+    approval = droidpuppy_context_packet(root=root)["packet"]["approval_decision"]
+    assert approval["workflow_id"] == "existing-workflow"
+    assert approval["status"] == "review_required"
+    assert approval["allowed_actions"] == []
+
+
+def test_apply_packet_rejects_conflicting_workflow_ids(tmp_path) -> None:
+    root = str(tmp_path / "ctx")
+    droidpuppy_context_init(root=root, workflow_id="existing-workflow")
+
+    result = droidpuppy_context_apply_packet(
+        root=root,
+        workflow_state_json=json.dumps({"workflow_id": "first-workflow"}),
+        approval_decision_json=json.dumps({"workflow_id": "second-workflow"}),
+    )
+
+    assert result == {
+        "success": False,
+        "reason": "packet patches contain conflicting workflow_id values",
+    }
+
+
 def test_context_commit_ready_after_approval_and_packet_surfaces_artifacts(
     tmp_path,
 ) -> None:
