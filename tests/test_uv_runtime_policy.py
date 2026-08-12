@@ -22,6 +22,9 @@ def test_ci_explicitly_requests_test_capabilities() -> None:
 
     assert "uv sync --group dev" in ci
     assert "uv run --no-sync pytest" in ci
-    assert "uv sync --group dev --extra durable" in publish
+    assert (
+        "uv sync --python 3.13 --group dev --extra durable --extra all-bridges"
+        in publish
+    )
     assert "uv run --no-sync pytest" in publish
     assert "uv run twine" not in publish

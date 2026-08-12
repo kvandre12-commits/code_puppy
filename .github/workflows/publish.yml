@@ -32,9 +32,11 @@ jobs:
         run: pip install uv
 
       - name: Sync test environment
-        # Runtime defaults stay lean. CI explicitly requests the dev capability
-        # group plus dbos for tests/integration/test_dbos_enabled.py.
-        run: uv sync --group dev --extra durable
+        # Runtime defaults stay lean. The full publish suite explicitly requests
+        # dev tooling, dbos integration support, and provider/MCP bridge extras.
+        # Pin the interpreter selected by setup-python; only-managed otherwise
+        # lets uv silently replace the 3.13 matrix target with managed 3.14.
+        run: uv sync --python 3.13 --group dev --extra durable --extra all-bridges
 
       - name: Provision CI model (lilac synthetic GLM-5.1)
         # models.json ships empty. CI gets its model from extra_models.json,
