@@ -16,6 +16,7 @@ from __future__ import annotations
 from typing import Tuple
 
 from code_puppy.command_line.set_menu_schema import Setting, SettingsCategory
+from code_puppy.callbacks import get_feature_capability
 from code_puppy.command_line.set_menu_shims import (
     get_disable_mcp_servers_effective,
     get_goal_max_iterations_effective,
@@ -43,9 +44,6 @@ from code_puppy.config import (
     get_mcp_disabled,
     get_mcp_unbound_warning_silenced,
     get_message_limit,
-    get_openai_reasoning_effort,
-    get_openai_reasoning_summary,
-    get_openai_verbosity,
     get_output_level,
     get_owner_name,
     get_pack_agents_enabled,
@@ -53,9 +51,15 @@ from code_puppy.config import (
     get_puppy_name,
     get_puppy_token,
     get_resume_message_count,
+    get_retry_main_max_attempts,
+    get_retry_main_strategy,
+    get_retry_subagent_max_attempts,
+    get_retry_subagent_strategy,
     get_safety_permission_level,
     get_smooth_response_stream,
     get_smooth_thinking_stream,
+    get_subagent_recursion_limit,
+    get_subagent_recursion_limit_gpt_5_6,
     get_subagent_verbose,
     get_summarization_model_name,
     get_suppress_informational_messages,
@@ -64,8 +68,7 @@ from code_puppy.config import (
     get_universal_constructor_enabled,
     get_yolo_mode,
 )
-from code_puppy.keymap import get_cancel_agent_key, get_pause_agent_key
-from code_puppy.plugins.dbos_durable_exec.config import is_enabled as get_dbos_enabled
+from code_puppy.keymap import get_cancel_agent_key
 
 
 # ---------------------------------------------------------------------------
@@ -156,6 +159,29 @@ _BEHAVIOR = SettingsCategory(
             description="Stream model responses token-by-token.",
             type_hint="bool",
             effective_getter=get_enable_streaming,
+        ),
+        Setting(
+            key="subagent_recursion_limit",
+            display_name="Sub-agent Recursion Limit",
+            description=(
+                "Maximum nested sub-agent depth. The main agent is depth 0; "
+                "directly invoked sub-agents are depth 1. Set to 0 to disable "
+                "sub-agent invocation."
+            ),
+            type_hint="int",
+            effective_getter=get_subagent_recursion_limit,
+        ),
+        Setting(
+            key="subagent_recursion_limit_gpt_5_6",
+            display_name="Sub-agent Recursion Limit (GPT-5.6)",
+            description=(
+                "Overlay cap that applies only when the immediate caller is on a "
+                "GPT-5.6 model. Defaults to 2 to prevent GPT-5.6's runaway-delegation "
+                "pattern. Whichever fires first between this and the generic limit wins. "
+                "Raising it re-opens the runaway-chain risk; do so knowingly."
+            ),
+            type_hint="int",
+            effective_getter=get_subagent_recursion_limit_gpt_5_6,
         ),
         Setting(
             key="subagent_verbose",
@@ -263,37 +289,6 @@ _COMPACTION = SettingsCategory(
 )
 
 
-_OPENAI = SettingsCategory(
-    name="OpenAI",
-    settings=(
-        Setting(
-            key="openai_reasoning_effort",
-            display_name="Reasoning Effort",
-            description="How much reasoning effort GPT-5 models should use.",
-            type_hint="choice",
-            valid_values=("minimal", "low", "medium", "high", "xhigh"),
-            effective_getter=get_openai_reasoning_effort,
-        ),
-        Setting(
-            key="openai_reasoning_summary",
-            display_name="Reasoning Summary",
-            description="Style of reasoning summary shown to the user.",
-            type_hint="choice",
-            valid_values=("auto", "concise", "detailed"),
-            effective_getter=get_openai_reasoning_summary,
-        ),
-        Setting(
-            key="openai_verbosity",
-            display_name="Verbosity",
-            description="How verbose GPT-5 model responses should be.",
-            type_hint="choice",
-            valid_values=("low", "medium", "high"),
-            effective_getter=get_openai_verbosity,
-        ),
-    ),
-)
-
-
 _FEATURES = SettingsCategory(
     name="Features",
     settings=(
@@ -318,7 +313,7 @@ _FEATURES = SettingsCategory(
             display_name="DBOS Durable Execution",
             description="Enable DBOS durable execution plugin.",
             type_hint="bool",
-            effective_getter=get_dbos_enabled,
+            effective_getter=lambda: get_feature_capability("dbos_durable_exec"),
             requires_restart=True,
         ),
         Setting(
@@ -373,14 +368,6 @@ _KEYBOARD = SettingsCategory(
             requires_restart=True,
         ),
         Setting(
-            key="pause_agent_key",
-            display_name="Pause Agent Key",
-            description="Key combination to pause a running agent task.",
-            type_hint="choice",
-            valid_values=("ctrl+c", "ctrl+k", "ctrl+q"),
-            effective_getter=get_pause_agent_key,
-        ),
-        Setting(
             key="max_pause_seconds",
             display_name="Max Pause Seconds",
             description=(
@@ -423,6 +410,61 @@ _DIFF = SettingsCategory(
             ),
             type_hint="string",
             effective_getter=get_diff_deletion_color,
+        ),
+    ),
+)
+
+
+_RETRY = SettingsCategory(
+    name="Retry",
+    settings=(
+        Setting(
+            key="retry_main_strategy",
+            display_name="Main Backoff Strategy",
+            description=(
+                "Backoff curve for the main agent loop when a transient "
+                "provider error (rate limit, gateway 5xx, dropped stream) is "
+                "retried. All strategies are exponential-with-jitter, capped at "
+                "30s between retries. 'gentle' eases up slowly, 'balanced' is "
+                "the default, 'aggressive' jumps to the 30s cap fast (best for "
+                "hard rate limits). Per-model overrides take precedence."
+            ),
+            type_hint="choice",
+            valid_values=("gentle", "balanced", "aggressive"),
+            effective_getter=get_retry_main_strategy,
+        ),
+        Setting(
+            key="retry_main_max_attempts",
+            display_name="Main Max Attempts",
+            description=(
+                "How many times the main agent loop attempts a streaming call "
+                "before giving up (1-100, clamped). Includes the first try."
+            ),
+            type_hint="int",
+            effective_getter=get_retry_main_max_attempts,
+        ),
+        Setting(
+            key="retry_subagent_strategy",
+            display_name="Sub-agent Backoff Strategy",
+            description=(
+                "Backoff curve for sub-agent runs. Same three strategies as the "
+                "main loop, capped at 30s between retries. Sub-agents default to "
+                "more attempts because losing their accumulated work to a "
+                "transient blip is never acceptable. Per-model overrides apply."
+            ),
+            type_hint="choice",
+            valid_values=("gentle", "balanced", "aggressive"),
+            effective_getter=get_retry_subagent_strategy,
+        ),
+        Setting(
+            key="retry_subagent_max_attempts",
+            display_name="Sub-agent Max Attempts",
+            description=(
+                "How many times a sub-agent run is attempted before giving up "
+                "(1-100, clamped). Includes the first try."
+            ),
+            type_hint="int",
+            effective_getter=get_retry_subagent_max_attempts,
         ),
     ),
 )
@@ -596,12 +638,12 @@ SETTINGS_CATEGORIES: Tuple[SettingsCategory, ...] = (
     _SESSION,
     _COMPACTION,
     _OUTPUT,
-    _OPENAI,
     _FEATURES,
     _MCP,
     _GOAL,
     _KEYBOARD,
     _DIFF,
+    _RETRY,
     _HOOKS,
     _API_KEYS,
 )

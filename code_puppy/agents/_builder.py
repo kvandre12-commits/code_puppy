@@ -164,6 +164,12 @@ def load_mcp_servers(
     by the time the agent runs.
     """
     del extra_headers  # accepted for API compatibility; manager owns headers
+    from code_puppy.tools import tools_disabled
+
+    if tools_disabled():
+        # --no-tools implies no MCP toolsets either (issue #182).
+        return []
+
     mcp_disabled = get_value("disable_mcp_servers")
     if mcp_disabled and str(mcp_disabled).lower() in ("1", "true", "yes", "on"):
         return []
@@ -302,29 +308,134 @@ def reload_mcp_servers(agent_name: Optional[str] = None) -> List[Any]:
     return manager.get_servers_for_agent(agent_name=agent_name)
 
 
+# (conversation_scope, agent_name, requested_model_name) combos we've
+# already warned about this conversation. ``conversation_scope`` lets
+# independent conversations sharing one process (concurrent ACP sessions,
+# notably) keep separate warning state, so one session's warning can't
+# silently suppress -- or a reset silently un-suppress -- another's; see
+# ``subagent_invocation.py`` (passes the parent conversation's session id)
+# and ``build_pydantic_agent``/``build_tool_probe_for_agent`` (leave it
+# ``None``, matching the pre-existing single-main-agent-per-process model).
+# Deliberately NOT cleared when a model finally loads again -- only
+# reset_model_fallback_warnings() resets it, so a still-broken pin doesn't
+# re-nag on every agent rebuild within one conversation, but a fresh
+# conversation gets the reminder again. We deliberately do NOT auto-clear
+# the pin itself -- see config.clear_agent_pinned_model; that stays a human
+# decision.
+_warned_model_fallbacks: Set[Tuple[Optional[str], Optional[str], str]] = set()
+
+# Sentinel distinguishing "reset() called with no args" (nuke everything --
+# the CLI's /clear, a genuinely fresh process-wide start) from
+# "reset(scope=X)" (clear only that conversation's bucket -- e.g. ACP session
+# creation clearing just the shared main-agent-build bucket without touching
+# other live sessions' own scoped sub-agent warnings). ``None`` is itself a
+# valid, meaningful scope (the unscoped/main-agent bucket), so it can't
+# double as "unset".
+_UNSET = object()
+
+
+def reset_model_fallback_warnings(scope: Any = _UNSET) -> None:
+    """Forget which fallback warnings have already fired.
+
+    Called with no arguments on a genuinely fresh conversation (the CLI's
+    ``/clear``) to clear every scope's warning state.
+
+    Called with an explicit ``scope`` (e.g. an ACP session boundary) to
+    clear only that conversation's bucket -- notably ``scope=None`` clears
+    just the shared main-agent-build bucket without wiping the per-session
+    warning state other live conversations already earned via
+    ``load_model_with_fallback(..., conversation_scope=<their own id>)``.
+    """
+    if scope is _UNSET:
+        _warned_model_fallbacks.clear()
+        return
+    stale = {key for key in _warned_model_fallbacks if key[0] == scope}
+    _warned_model_fallbacks.difference_update(stale)
+
+
+def _model_fallback_fix_hint(agent_name: Optional[str]) -> str:
+    """Build the how-to-fix tail appended to model fallback warnings."""
+    if agent_name:
+        return (
+            f"Fix it with `/pin {agent_name} <model>` once a working model is "
+            f"available, or `/unpin {agent_name}` to just track the global "
+            "default from now on. Run `/model` to see configured models."
+        )
+    return "Set a valid model with `/model`, or check your models configuration."
+
+
 def load_model_with_fallback(
     requested_model_name: str,
     models_config: Dict[str, Any],
     message_group: str,
+    agent_name: Optional[str] = None,
+    conversation_scope: Optional[str] = None,
 ) -> Tuple[Any, str]:
     """Load the requested model, or fall back to a sensible alternative.
 
     Falls back in order: the globally configured model, then any other
     configured model. Raises ``ValueError`` only if nothing loads.
+
+    ``agent_name``, when given, scopes the model-unavailable warning to fire
+    once per (conversation, agent, requested model) combo per conversation
+    (see ``reset_model_fallback_warnings``) and tailors the fix instructions
+    to that agent's ``/pin``/``/unpin`` commands. The agent's pinned model is
+    never auto-cleared -- that stays a deliberate, human-initiated action.
+
+    ``conversation_scope`` identifies the conversation this call belongs to
+    (e.g. an ACP session id) so independent conversations sharing one
+    process don't share warning-dedup state -- one session's warning must
+    not silently suppress the identical warning for a completely different
+    session. Leave ``None`` for the single main-agent-per-process case
+    (default; unaffected by this parameter).
     """
     try:
-        return ModelFactory.get_model(
-            requested_model_name, models_config
-        ), requested_model_name
+        model = ModelFactory.get_model(requested_model_name, models_config)
+        if model is None:
+            raise ValueError(
+                f"Model '{requested_model_name}' was found in configuration but "
+                f"could not be instantiated (handler returned None)."
+            )
+        return model, requested_model_name
     except ValueError as exc:
         available = list(models_config.keys())
         available_str = (
             ", ".join(sorted(available)) if available else "no configured models"
         )
-        emit_warning(
-            f"Model '{requested_model_name}' not found. Available models: {available_str}",
-            message_group=message_group,
-        )
+        warn_key = (conversation_scope, agent_name, requested_model_name)
+        already_warned = warn_key in _warned_model_fallbacks
+        _warned_model_fallbacks.add(warn_key)
+        fix_hint = _model_fallback_fix_hint(agent_name)
+
+        # Distinguish between "key missing", "type unsupported", and "creation failed"
+        exc_msg = str(exc)
+        if already_warned:
+            pass
+        elif "not found in configuration" in exc_msg:
+            emit_warning(
+                f"Model '{requested_model_name}' not found. Available models: "
+                f"{available_str}. {fix_hint}",
+                message_group=message_group,
+            )
+        elif "Unsupported model type" in exc_msg:
+            model_type = models_config.get(requested_model_name, {}).get("type", "?")
+            emit_warning(
+                f"Model type '{model_type}' is not supported (model '{requested_model_name}'). "
+                f"Available models: {available_str}. {fix_hint}",
+                message_group=message_group,
+            )
+        elif "could not be instantiated" in exc_msg:
+            emit_warning(
+                f"Model '{requested_model_name}' could not be instantiated. "
+                f"Available models: {available_str}. {fix_hint}",
+                message_group=message_group,
+            )
+        else:
+            emit_warning(
+                f"Model '{requested_model_name}' failed: {exc_msg}. "
+                f"Available models: {available_str}. {fix_hint}",
+                message_group=message_group,
+            )
 
         candidates: List[str] = []
         global_candidate = get_global_model_name()
@@ -392,6 +503,51 @@ def filter_conflicting_mcp_tools(
     return filtered
 
 
+def _build_gpt_5_6_invoke_agent_guard_text() -> str:
+    """Compose the GPT-5.6 delegation guard, interpolating the live cap.
+
+    Reading the limit at prompt-assembly time (rather than baking it into a
+    module constant) guarantees the model-facing guidance and the runtime
+    enforcement in ``subagent_invocation._gpt_5_6_recursion_blocked`` can
+    never drift out of sync -- they both resolve to
+    ``get_subagent_recursion_limit_gpt_5_6()``.
+    """
+    # Local import to avoid a top-level ``code_puppy.config`` cycle -- this
+    # module is imported very early during agent construction.
+    from code_puppy.config import get_subagent_recursion_limit_gpt_5_6
+
+    limit = get_subagent_recursion_limit_gpt_5_6()
+    return (
+        "\n\n## Sub-Agent Delegation (GPT-5.6)\n"
+        "Use `invoke_agent` only for focused work that benefits from separate "
+        "context or specialized tools. Handle work directly when you can. "
+        "Never invoke `planning-agent`. "
+        f"Hard cap: as a GPT-5.6 caller you may only invoke a sub-agent while "
+        f"the resulting chain depth stays at or below {limit} "
+        f"(main agent = depth 0). Do not attempt deeper chains.\n"
+    )
+
+
+_GPT_5_6_RUN_SHELL_COMMAND_GUARD_TEXT = """
+
+## Shell Safety (GPT-5.6)
+Before using `agent_run_shell_command`, prefer inspection and dry runs. Confirm
+with the user before irreversible deletion, overwrites, history rewrites,
+database or production mutations, or other actions without a clear rollback.
+"""
+
+
+def _is_gpt_5_6_family(model_name: Optional[str]) -> bool:
+    return bool(model_name and "gpt-5.6" in model_name.lower())
+
+
+def _agent_exposes_tool(agent: Any, tool_name: str) -> bool:
+    try:
+        return tool_name in (agent.get_available_tools() or ())
+    except Exception:
+        return False
+
+
 def _assemble_instructions(agent: Any, resolved_model_name: str) -> str:
     """Compose full system prompt + puppy rules + extended-thinking note."""
     from code_puppy.model_utils import prepare_prompt_for_model
@@ -407,6 +563,12 @@ def _assemble_instructions(agent: Any, resolved_model_name: str) -> str:
 
     if has_extended_thinking_active(resolved_model_name):
         instructions += EXTENDED_THINKING_PROMPT_NOTE
+
+    if _is_gpt_5_6_family(resolved_model_name):
+        if _agent_exposes_tool(agent, "invoke_agent"):
+            instructions += _build_gpt_5_6_invoke_agent_guard_text()
+        if _agent_exposes_tool(agent, "agent_run_shell_command"):
+            instructions += _GPT_5_6_RUN_SHELL_COMMAND_GUARD_TEXT
 
     prepared = prepare_prompt_for_model(
         agent.get_model_name(), instructions, "", prepend_system_to_user=False
@@ -444,7 +606,10 @@ def build_pydantic_agent(
 
     models_config = ModelFactory.load_config()
     model, resolved_model_name = load_model_with_fallback(
-        agent.get_model_name(), models_config, message_group
+        agent.get_model_name(),
+        models_config,
+        message_group,
+        agent_name=getattr(agent, "name", None),
     )
     instructions = _assemble_instructions(agent, resolved_model_name)
     mcp_servers = load_mcp_servers(agent_name=getattr(agent, "name", None))
@@ -536,6 +701,7 @@ def build_tool_probe_for_agent(agent: Any) -> Optional[Any]:
             agent.get_model_name() or "",
             models_config,
             message_group=str(uuid.uuid4()),
+            agent_name=getattr(agent, "name", None),
         )
     except Exception:
         return None

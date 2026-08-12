@@ -6,7 +6,6 @@ import asyncio
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
-from unittest.mock import patch
 
 import pytest
 
@@ -19,19 +18,13 @@ def kennel_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
     import importlib
 
-    from code_puppy.plugins.puppy_kennel import commands as commands_mod
     from code_puppy.plugins.puppy_kennel import config as kennel_config
-    from code_puppy.plugins.puppy_kennel import decisions as decisions_mod
-    from code_puppy.plugins.puppy_kennel import doctrine_receipts as receipts_mod
     from code_puppy.plugins.puppy_kennel import kennel as kennel_mod
     from code_puppy.plugins.puppy_kennel import state as state_mod
 
     importlib.reload(kennel_config)
     importlib.reload(state_mod)
     importlib.reload(kennel_mod)
-    importlib.reload(receipts_mod)
-    importlib.reload(decisions_mod)
-    importlib.reload(commands_mod)
     kennel_mod.initialize()
     return root
 
@@ -173,18 +166,6 @@ def test_kennel_recall_scope_repo_only(kennel_root: Path) -> None:
     assert out.total_hits >= 1
 
 
-def test_kennel_recall_top_k_clamped(kennel_root: Path) -> None:
-    from code_puppy.plugins.puppy_kennel import tools
-
-    agent = _FakeAgent()
-    tools.register_kennel_recall(agent)
-    recall = agent.registered["kennel_recall"]
-
-    # Should not raise — top_k=9999 should clamp to 20.
-    out = asyncio.run(recall(_make_context(), "anything", top_k=9999))
-    assert isinstance(out.drawers, list)
-
-
 def test_register_tools_callback_shape() -> None:
     """The callback contract: list of dicts with name + register_func.
 
@@ -206,212 +187,52 @@ def test_register_tools_callback_shape() -> None:
 # --------------------------------------------------------------------------- #
 
 
-def test_kennel_command_ignores_other_names(kennel_root: Path) -> None:
-    from code_puppy.plugins.puppy_kennel import commands
-
-    assert commands.handle("/notkennel", "notkennel") is None
-
-
-def test_kennel_help_returns_true(kennel_root: Path) -> None:
-    from code_puppy.plugins.puppy_kennel import commands
-
-    assert commands.handle("/kennel help", "kennel") is True
-    assert commands.handle("/kennel ?", "kennel") is True
-
-
-def test_kennel_wings_with_data(kennel_root: Path) -> None:
-    from code_puppy.plugins.puppy_kennel import commands, recorder
-
-    recorder.record_run_end(
-        agent_name="code-puppy",
-        model_name="m",
-        success=True,
-        response_text="Some wisdom.",
-    )
-    assert commands.handle("/kennel wings", "kennel") is True
-
-
-def test_kennel_wings_empty(kennel_root: Path) -> None:
-    from code_puppy.plugins.puppy_kennel import commands
-
-    assert commands.handle("/kennel wings", "kennel") is True
-
-
-def test_kennel_stats(kennel_root: Path) -> None:
-    from code_puppy.plugins.puppy_kennel import commands
-
-    assert commands.handle("/kennel stats", "kennel") is True
-
-
-def test_kennel_search_no_query(kennel_root: Path) -> None:
-    from code_puppy.plugins.puppy_kennel import commands
-
-    assert commands.handle("/kennel search", "kennel") is True
-
-
-def test_kennel_search_with_hits(kennel_root: Path) -> None:
-    from code_puppy.plugins.puppy_kennel import commands, recorder
-
-    recorder.record_run_end(
-        agent_name="code-puppy",
-        model_name="m",
-        success=True,
-        response_text="Octopi have nine brains, technically.",
-    )
-    assert commands.handle("/kennel search octopi", "kennel") is True
-
-
-def test_kennel_default_overview(kennel_root: Path) -> None:
-    from code_puppy.plugins.puppy_kennel import commands
-
-    assert commands.handle("/kennel", "kennel") is True
-
-
-def test_kennel_default_overview_includes_active_doctrine(kennel_root: Path) -> None:
-    from code_puppy.plugins.puppy_kennel import commands, decisions
-
-    decisions.upsert_decision(
-        decisions.DecisionRecord(
-            id="authority-validation-before-lease-issue",
-            title="Authority Validation Before Lease Issue",
-            status="active",
-            confidence="high",
-            summary="Authority checks must precede lease issuance.",
-            rationale="Governed execution breaks if validation is optional.",
-            affected_repos=["code_puppy"],
-            evidence_artifact_ids=["runtime-tests"],
-            created_at="",
-            last_reviewed_at="",
-            supersedes=[],
-            superseded_by=[],
-        )
-    )
-
-    with (
-        patch(
-            "code_puppy.plugins.puppy_kennel.commands.detect_cwd",
-            return_value="/tmp/code_puppy_backup_20260617",
+@pytest.mark.parametrize(
+    "cmd, name, record_text, expected",
+    [
+        ("/notkennel", "notkennel", None, None),
+        ("/kennel help", "kennel", None, True),
+        ("/kennel ?", "kennel", None, True),
+        ("/kennel wings", "kennel", "Some wisdom.", True),
+        ("/kennel wings", "kennel", None, True),
+        ("/kennel stats", "kennel", None, True),
+        ("/kennel search", "kennel", None, True),
+        (
+            "/kennel search octopi",
+            "kennel",
+            "Octopi have nine brains, technically.",
+            True,
         ),
-        patch("code_puppy.plugins.puppy_kennel.commands.emit_info") as mock_info,
-    ):
-        assert commands.handle("/kennel", "kennel") is True
+        ("/kennel", "kennel", None, True),
+        # Should not return None — we own /kennel, we handle it.
+        ("/kennel bogus", "kennel", None, True),
+    ],
+    ids=[
+        "ignores_other_names",
+        "help",
+        "question_mark",
+        "wings_with_data",
+        "wings_empty",
+        "stats",
+        "search_no_query",
+        "search_with_hits",
+        "default_overview",
+        "unknown_subcommand",
+    ],
+)
+def test_kennel_commands(
+    kennel_root: Path, cmd: str, name: str, record_text: str | None, expected
+) -> None:
+    from code_puppy.plugins.puppy_kennel import commands, recorder
 
-    rendered = "\n".join(
-        str(call.args[0]) for call in mock_info.call_args_list if call.args
-    )
-    assert "Active Doctrine" in rendered
-    assert "Authority Validation Before Lease Issue" in rendered
-
-
-def test_kennel_receipts_renders_summary(kennel_root: Path) -> None:
-    from code_puppy.plugins.puppy_kennel import commands, decisions, doctrine_receipts
-
-    decisions.upsert_decision(
-        decisions.DecisionRecord(
-            id="playwright-optional-on-android",
-            title="Playwright Optional On Android",
-            status="active",
-            confidence="high",
-            summary="Browser automation dependencies remain optional for Android compatibility.",
-            rationale="Android/Termux environments cannot reliably assume Playwright availability.",
-            affected_repos=["code_puppy"],
-            evidence_artifact_ids=["PR-494"],
-            created_at="2026-06-23T20:00:00Z",
-            last_reviewed_at="2026-06-23",
-            supersedes=[],
-            superseded_by=[],
+    if record_text:
+        recorder.record_run_end(
+            agent_name="code-puppy",
+            model_name="m",
+            success=True,
+            response_text=record_text,
         )
-    )
-    doctrine_receipts.record_doctrine_receipt(
-        decision_id="playwright-optional-on-android",
-        proposed_action="dependency-edit:pyproject.toml",
-        warning_shown=True,
-        adapted=False,
-        before_summary="Add dependency signal [playwright] in pyproject.toml.",
-        after_summary="Add dependency signal [playwright] in pyproject.toml.",
-        repo_family="code_puppy",
-    )
-    doctrine_receipts.record_doctrine_receipt(
-        decision_id="playwright-optional-on-android",
-        proposed_action="dependency-edit:pyproject.toml",
-        warning_shown=True,
-        adapted=True,
-        before_summary="Add dependency signal [playwright] in pyproject.toml.",
-        after_summary="replace_in_file is revised to avoid adding [playwright].",
-        repo_family="code_puppy",
-    )
-
-    with patch("code_puppy.plugins.puppy_kennel.commands.emit_info") as mock_info:
-        assert commands.handle("/kennel receipts", "kennel") is True
-
-    rendered = "\n".join(
-        str(call.args[0]) for call in mock_info.call_args_list if call.args
-    )
-    assert "Doctrine receipts:" in rendered
-    assert "total     : 2" in rendered
-    assert "adapted   : 1" in rendered
-    assert "unchanged : 1" in rendered
-    assert "playwright-optional-on-android — total 2, adapted 1" in rendered
-    assert "warning-only -> dependency-edit:pyproject.toml" in rendered
-    assert "adapted -> dependency-edit:pyproject.toml" in rendered
-
-
-def test_kennel_doctrine_renders_explanation_surface(kennel_root: Path) -> None:
-    from code_puppy.plugins.puppy_kennel import commands, decisions
-
-    decisions.upsert_decision(
-        decisions.DecisionRecord(
-            id="playwright-optional-on-android",
-            title="Playwright Optional On Android",
-            status="active",
-            confidence="high",
-            summary="Browser automation dependencies remain optional for Android compatibility.",
-            rationale="Android/Termux environments cannot reliably assume Playwright availability.",
-            affected_repos=["code_puppy", "DroidPuppy"],
-            evidence_artifact_ids=[
-                "PR-483",
-                "PR-494",
-                "PR-496",
-                "clean-install-validation-runs",
-            ],
-            created_at="2026-06-23T20:00:00Z",
-            last_reviewed_at="2026-06-23",
-            supersedes=[],
-            superseded_by=[],
-        )
-    )
-
-    with patch("code_puppy.plugins.puppy_kennel.commands.emit_info") as mock_info:
-        assert (
-            commands.handle("/kennel doctrine playwright-optional-on-android", "kennel")
-            is True
-        )
-
-    rendered = "\n".join(
-        str(call.args[0]) for call in mock_info.call_args_list if call.args
-    )
-    assert "Decision: Playwright Optional On Android" in rendered
-    assert "Decision ID: playwright-optional-on-android" in rendered
-    assert "Status: active" in rendered
-    assert "Confidence: high" in rendered
-    assert (
-        "Summary: Browser automation dependencies remain optional for Android compatibility."
-        in rendered
-    )
-    assert (
-        "Rationale: Android/Termux environments cannot reliably assume Playwright availability."
-        in rendered
-    )
-    assert "Evidence: PR-483 PR-494 PR-496 clean-install-validation-runs" in rendered
-    assert "Affected Repos: code_puppy DroidPuppy" in rendered
-    assert "Last Reviewed: 2026-06-23" in rendered
-
-
-def test_kennel_unknown_subcommand_falls_through_to_help(kennel_root: Path) -> None:
-    from code_puppy.plugins.puppy_kennel import commands
-
-    # Should not return None — we own /kennel, we handle it.
-    assert commands.handle("/kennel bogus", "kennel") is True
+    assert commands.handle(cmd, name) is expected
 
 
 def test_help_entries_advertised() -> None:

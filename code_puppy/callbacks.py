@@ -15,6 +15,7 @@ PhaseType = Literal[
     "delete_snippet",
     "delete_file",
     "run_shell_command",
+    "run_shell_command_output",
     "load_model_config",
     "load_models_config",
     "load_model_descriptions",
@@ -22,15 +23,23 @@ PhaseType = Literal[
     "agent_reload",
     "custom_command",
     "custom_command_help",
+    "usage_status",
     "file_permission",
     "pre_tool_call",
     "post_tool_call",
     "stream_event",
+    "thinking_display_filter",
+    "termflow_style",
+    "prompt_toolkit_style",
+    "termflow_highlighter",
+    "prompt_text_color",
     "register_tools",
     "register_agent_tools",
     "register_agents",
     "register_model_type",
     "register_skills",
+    "register_cli_args",
+    "handle_cli_args",
     "get_model_system_prompt",
     "prepare_model_prompt",
     "agent_run_start",
@@ -39,6 +48,11 @@ PhaseType = Literal[
     "register_mcp_catalog_servers",
     "register_browser_types",
     "register_model_providers",
+    "register_completion_provider",
+    "check_claude_oauth_token_expiry",
+    "refresh_claude_oauth_token",
+    "load_claude_oauth_models",
+    "claude_oauth_authenticate",
     "message_history_processor_start",
     "message_history_processor_end",
     "on_message",
@@ -49,15 +63,30 @@ PhaseType = Literal[
     "pre_mcp_autostart",
     "interactive_turn_end",
     "interactive_turn_cancel",
-    "agent_pause_requested",
     "user_prompt_submit",
     "pre_compact",
     "session_end",
+    "post_autosave",
     "notification",
-    "register_cli_args",
-    "handle_cli_args",
+    "awaiting_user_input",
+    "git_branch_provider",
+    "feature_capability",
 ]
 CallbackFunc = Callable[..., Any]
+
+
+class CustomCommandResult:
+    """Custom command content that should be processed as user input."""
+
+    def __init__(self, content: str):
+        self.content = content
+
+    def __str__(self) -> str:
+        return self.content
+
+    def __repr__(self) -> str:
+        return f"CustomCommandResult({len(self.content)} chars)"
+
 
 _callbacks: Dict[PhaseType, List[CallbackFunc]] = {
     "startup": [],
@@ -71,6 +100,7 @@ _callbacks: Dict[PhaseType, List[CallbackFunc]] = {
     "delete_snippet": [],
     "delete_file": [],
     "run_shell_command": [],
+    "run_shell_command_output": [],
     "load_model_config": [],
     "load_models_config": [],
     "load_model_descriptions": [],
@@ -78,15 +108,23 @@ _callbacks: Dict[PhaseType, List[CallbackFunc]] = {
     "agent_reload": [],
     "custom_command": [],
     "custom_command_help": [],
+    "usage_status": [],
     "file_permission": [],
     "pre_tool_call": [],
     "post_tool_call": [],
     "stream_event": [],
+    "thinking_display_filter": [],
+    "termflow_style": [],
+    "prompt_toolkit_style": [],
+    "termflow_highlighter": [],
+    "prompt_text_color": [],
     "register_tools": [],
     "register_agent_tools": [],
     "register_agents": [],
     "register_model_type": [],
     "register_skills": [],
+    "register_cli_args": [],
+    "handle_cli_args": [],
     "get_model_system_prompt": [],
     "prepare_model_prompt": [],
     "agent_run_start": [],
@@ -95,6 +133,11 @@ _callbacks: Dict[PhaseType, List[CallbackFunc]] = {
     "register_mcp_catalog_servers": [],
     "register_browser_types": [],
     "register_model_providers": [],
+    "register_completion_provider": [],
+    "check_claude_oauth_token_expiry": [],
+    "refresh_claude_oauth_token": [],
+    "load_claude_oauth_models": [],
+    "claude_oauth_authenticate": [],
     "message_history_processor_start": [],
     "message_history_processor_end": [],
     "on_message": [],
@@ -105,13 +148,14 @@ _callbacks: Dict[PhaseType, List[CallbackFunc]] = {
     "pre_mcp_autostart": [],
     "interactive_turn_end": [],
     "interactive_turn_cancel": [],
-    "agent_pause_requested": [],
     "user_prompt_submit": [],
     "pre_compact": [],
     "session_end": [],
+    "post_autosave": [],
     "notification": [],
-    "register_cli_args": [],
-    "handle_cli_args": [],
+    "awaiting_user_input": [],
+    "git_branch_provider": [],
+    "feature_capability": [],
 }
 
 logger = logging.getLogger(__name__)
@@ -143,6 +187,11 @@ def clear_loading_context() -> None:
     """Clear the current plugin loading context."""
     global _current_loading_plugin
     _current_loading_plugin = None
+
+
+def get_loading_context() -> Optional[str]:
+    """Return the plugin currently being loaded, if any."""
+    return _current_loading_plugin
 
 
 def get_callback_owner(func: CallbackFunc) -> Optional[str]:
@@ -211,6 +260,11 @@ def clear_callbacks(phase: Optional[PhaseType] = None) -> None:
             logger.debug(f"Cleared async callbacks for phase '{phase}'")
 
 
+def is_callback_owner_enabled(owner: Optional[str]) -> bool:
+    """Return whether callbacks and providers owned by *owner* are enabled."""
+    return owner is None or owner not in _get_disabled_plugins()
+
+
 def get_callbacks(
     phase: PhaseType, *, include_disabled: bool = False
 ) -> List[CallbackFunc]:
@@ -223,11 +277,24 @@ def get_callbacks(
     if include_disabled:
         return all_cbs
 
-    disabled = _get_disabled_plugins()
-    if not disabled:
-        return all_cbs
+    return [
+        callback
+        for callback in all_cbs
+        if is_callback_owner_enabled(_callback_owners.get(callback))
+    ]
 
-    return [cb for cb in all_cbs if _callback_owners.get(cb) not in disabled]
+
+def get_completion_providers() -> List[Any]:
+    """Build completers contributed by enabled plugins.
+
+    Provider failures are isolated by the normal callback machinery, and
+    ``None`` lets an optional provider decline registration at runtime.
+    """
+    return [
+        completer
+        for completer in _trigger_callbacks_sync("register_completion_provider")
+        if completer is not None
+    ]
 
 
 def count_callbacks(phase: Optional[PhaseType] = None) -> int:
@@ -236,9 +303,26 @@ def count_callbacks(phase: Optional[PhaseType] = None) -> int:
     return len(_callbacks.get(phase, []))
 
 
+def get_feature_capability(name: str) -> bool:
+    """Return the last plugin-provided state for *name*, or safely default false."""
+    results = _trigger_callbacks_sync("feature_capability", name)
+    return next(
+        (result for result in reversed(results) if isinstance(result, bool)), False
+    )
+
+
 def _trigger_callbacks_sync(
     phase: PhaseType, *args, raise_on_error: bool = False, **kwargs
 ) -> List[Any]:
+    """Run all sync callbacks for ``phase`` and collect their results.
+
+    By default each callback is wrapped in its own try/except so a single
+    misbehaving plugin can't take down the app (error isolation). For phases
+    where a callback failure is a *fatal* developer error that must surface
+    immediately (e.g. ``register_cli_args`` adding a duplicate/conflicting
+    option string), pass ``raise_on_error=True`` to disable the isolation and
+    let the exception propagate (fail-fast).
+    """
     callbacks = get_callbacks(phase)
     if not callbacks:
         logger.debug(f"No callbacks registered for phase '{phase}'")
@@ -258,6 +342,10 @@ def _trigger_callbacks_sync(
                     logger.warning(
                         f"Async callback {callback.__name__} called from async context in sync trigger"
                     )
+                    # The sync dispatcher cannot await while its event loop is
+                    # already running. Explicitly close the coroutine so this
+                    # safe fallback never leaks an unawaited-coroutine warning.
+                    result.close()
                     results.append(None)
                     continue
                 except RuntimeError:
@@ -267,12 +355,12 @@ def _trigger_callbacks_sync(
             results.append(result)
             logger.debug(f"Successfully executed callback {callback.__name__}")
         except Exception as e:
-            if raise_on_error:
-                raise
             logger.error(
                 f"Callback {callback.__name__} failed in phase '{phase}': {e}\n"
                 f"{traceback.format_exc()}"
             )
+            if raise_on_error:
+                raise
             results.append(None)
 
     return results
@@ -329,6 +417,14 @@ def on_load_model_config(*args, **kwargs) -> List[Any]:
     return _trigger_callbacks_sync("load_model_config", *args, **kwargs)
 
 
+def get_git_branch(cwd: str) -> Optional[str]:
+    """Return a branch from the first plugin provider that can detect one."""
+    for branch in _trigger_callbacks_sync("git_branch_provider", cwd):
+        if branch:
+            return str(branch)
+    return None
+
+
 def on_load_models_config() -> List[Any]:
     """Trigger callbacks to load additional model configurations.
 
@@ -355,48 +451,6 @@ def on_load_model_descriptions() -> List[Any]:
     return _trigger_callbacks_sync("load_model_descriptions")
 
 
-def on_register_cli_args(parser: Any) -> List[Any]:
-    """Let plugins mutate the live top-level CLI parser before ``parse_args()``.
-
-    This hook is intentionally fail-fast and not error-isolated. If a plugin
-    adds a duplicate option string or otherwise misconfigures the parser, the
-    exception should surface immediately instead of leaving startup in a weird
-    half-mutated state.
-    """
-    return _trigger_callbacks_sync("register_cli_args", parser, raise_on_error=True)
-
-
-async def on_handle_cli_args(args: Any) -> Optional[Dict[str, Any]]:
-    """Let plugins handle parsed CLI args and short-circuit startup.
-
-    Callback contract: ``(args) -> dict | None`` where a handled result looks
-    like ``{"handled": True, "exit_code": 0}``. The first handled dict wins
-    and later callbacks are skipped.
-    """
-    callbacks = get_callbacks("handle_cli_args")
-    if not callbacks:
-        logger.debug("No callbacks registered for phase 'handle_cli_args'")
-        return None
-
-    for callback in callbacks:
-        try:
-            result = callback(args)
-            if asyncio.iscoroutine(result):
-                result = await result
-            if isinstance(result, dict) and result.get("handled") is True:
-                logger.debug(
-                    f"CLI args handled by callback {callback.__name__}; short-circuiting startup"
-                )
-                return result
-        except Exception as e:
-            logger.error(
-                f"Async callback {callback.__name__} failed in phase 'handle_cli_args': {e}\n"
-                f"{traceback.format_exc()}"
-            )
-
-    return None
-
-
 def on_edit_file(*args, **kwargs) -> Any:
     return _trigger_callbacks_sync("edit_file", *args, **kwargs)
 
@@ -421,8 +475,22 @@ async def on_run_shell_command(*args, **kwargs) -> Any:
     return await _trigger_callbacks("run_shell_command", *args, **kwargs)
 
 
+async def on_run_shell_command_output(*args, **kwargs) -> Any:
+    return await _trigger_callbacks("run_shell_command_output", *args, **kwargs)
+
+
 def on_agent_reload(*args, **kwargs) -> Any:
     return _trigger_callbacks_sync("agent_reload", *args, **kwargs)
+
+
+async def on_post_autosave(*args, **kwargs) -> List[Any]:
+    """Fire after an auto-save successfully writes a session.
+
+    Receives the autosave ``SessionMetadata`` so plugins can render
+    follow-up info lines (e.g. remaining token quota) without having
+    to reach back into the autosave plumbing themselves.
+    """
+    return await _trigger_callbacks("post_autosave", *args, **kwargs)
 
 
 def on_load_prompt():
@@ -465,6 +533,21 @@ def on_custom_command(command: str, name: str) -> List[Any]:
     return _trigger_callbacks_sync("custom_command", command, name)
 
 
+def get_usage_status() -> str:
+    """Return cached provider quota status supplied by plugins.
+
+    Plugins (e.g. ``chatgpt_oauth``) register a ``usage_status`` callback that
+    returns a short cached-quota string and never performs I/O. The first
+    non-empty result wins; ``""`` is returned when no handler is registered or
+    none produced output. Sync and error-isolated, so it is safe on rendering
+    hot paths and can never raise.
+    """
+    for result in _trigger_callbacks_sync("usage_status"):
+        if result:
+            return str(result)
+    return ""
+
+
 def on_file_permission(
     context: Any,
     file_path: str,
@@ -473,10 +556,13 @@ def on_file_permission(
     message_group: str | None = None,
     operation_data: Any = None,
 ) -> List[Any]:
-    """Trigger file permission callbacks.
+    """Trigger file permission callbacks synchronously.
 
-    This allows plugins to register handlers for file permission checks
-    before file operations are performed.
+    This preserves the original sync ``file_permission`` hook contract for
+    terminal/CLI plugins. If a callback is async and no event loop is running,
+    it is executed with ``asyncio.run`` by ``_trigger_callbacks_sync``. If an
+    event loop is already running, callers that need async callbacks to be
+    awaited should use :func:`on_file_permission_async` instead.
 
     Args:
         context: The operation context
@@ -487,13 +573,65 @@ def on_file_permission(
         operation_data: Operation-specific data for preview generation (recommended)
 
     Returns:
-        List of boolean results from permission handlers.
-        Returns True if permission should be granted, False if denied.
+        List of permission results. Callers should treat explicit ``False`` as
+        denial, ``True`` as approval, and ``None`` as no opinion.
     """
     # For backward compatibility, if operation_data is provided, prefer it over preview
     if operation_data is not None:
         preview = None
     return _trigger_callbacks_sync(
+        "file_permission",
+        context,
+        file_path,
+        operation,
+        preview,
+        message_group,
+        operation_data,
+    )
+
+
+def on_awaiting_user_input(awaiting: bool) -> List[Any]:
+    """Fired whenever code-puppy starts or stops waiting on the human.
+
+    This is the single, authoritative signal for "the agent is parked on a
+    human" -- it fires from ``command_runner.set_awaiting_user_input()``, the
+    one process-wide choke-point every interactive wait already passes through
+    (shell-command approval, file-permission approval, ``ask_user_question``,
+    and every menu/picker). ``awaiting`` is ``True`` when a prompt takes over
+    the terminal and ``False`` the instant control returns to the agent.
+    Notification intent is available through
+    ``command_runner.should_notify_awaiting_user_input()`` without changing
+    this callback's backward-compatible signature.
+
+    Observers only (e.g. the herdr reporter mapping it to blocked/working);
+    return values are ignored. Sync, because the callers are sync and on hot
+    paths.
+    """
+    return _trigger_callbacks_sync("awaiting_user_input", awaiting)
+
+
+async def on_file_permission_async(
+    context: Any,
+    file_path: str,
+    operation: str,
+    preview: str | None = None,
+    message_group: str | None = None,
+    operation_data: Any = None,
+) -> List[Any]:
+    """Trigger file permission callbacks from async tool execution.
+
+    This uses the existing ``file_permission`` hook phase and awaits async
+    callbacks while still supporting sync callbacks unchanged. It is intended
+    for async file tools, including WebSocket/browser approval flows, where the
+    tool must wait for a permission decision without dropping an unawaited
+    coroutine. Sync callbacks still run inline, matching existing behavior.
+
+    Return semantics match :func:`on_file_permission`: explicit ``False``
+    denies, ``True`` approves, and ``None`` means no opinion.
+    """
+    if operation_data is not None:
+        preview = None
+    return await _trigger_callbacks(
         "file_permission",
         context,
         file_path,
@@ -548,6 +686,90 @@ async def on_post_tool_call(
     return await _trigger_callbacks(
         "post_tool_call", tool_name, tool_args, result, duration_ms, context
     )
+
+
+def on_thinking_display_filter(
+    text: str,
+    *,
+    stream_id: object,
+    part_index: int,
+    final: bool = False,
+) -> str:
+    """Synchronously chain filters before thinking text reaches the display.
+
+    Filters may retain incomplete streaming syntax between calls, keyed by
+    ``stream_id`` and ``part_index``. They must release or discard that state
+    when ``final`` is true. A callback failure or non-string return leaves the
+    current text unchanged so display plugins can never break agent runs.
+    """
+    current = text
+    for callback in get_callbacks("thinking_display_filter"):
+        try:
+            result = callback(
+                current,
+                stream_id=stream_id,
+                part_index=part_index,
+                final=final,
+            )
+            if isinstance(result, str):
+                current = result
+            else:
+                logger.warning(
+                    "Thinking display filter %s returned %s; ignoring it",
+                    callback.__name__,
+                    type(result).__name__,
+                )
+        except Exception as exc:
+            logger.error(
+                "Thinking display filter %s failed: %s\n%s",
+                callback.__name__,
+                exc,
+                traceback.format_exc(),
+            )
+    return current
+
+
+def _chain_value_callbacks(phase: PhaseType, default: Any) -> Any:
+    """Chain callbacks that optionally replace a single value."""
+    current = default
+    for callback in get_callbacks(phase):
+        try:
+            result = callback(current)
+            if result is not None:
+                current = result
+        except Exception as exc:
+            logger.error(
+                "%s callback %s failed: %s\n%s",
+                phase,
+                callback.__name__,
+                exc,
+                traceback.format_exc(),
+            )
+    return current
+
+
+def on_termflow_style(default_style: Any) -> Any:
+    """Let plugins replace Termflow's Markdown rendering style.
+
+    Callbacks are chained in registration order. Returning ``None`` leaves the
+    current style unchanged, and failures degrade safely to the prior style.
+    """
+    return _chain_value_callbacks("termflow_style", default_style)
+
+
+def on_prompt_toolkit_style(default_style: Any = None) -> Any:
+    """Let plugins replace a prompt_toolkit Application style."""
+    return _chain_value_callbacks("prompt_toolkit_style", default_style)
+
+
+def on_termflow_highlighter(default_highlighter: Any) -> Any:
+    """Let plugins replace Termflow's syntax highlighter."""
+    return _chain_value_callbacks("termflow_highlighter", default_highlighter)
+
+
+def on_prompt_text_color(default_color: str | None = None) -> str | None:
+    """Resolve the persistent prompt buffer's truecolor foreground."""
+    return _chain_value_callbacks("prompt_text_color", default_color)
 
 
 async def on_stream_event(
@@ -627,6 +849,51 @@ def on_register_agents() -> List[Dict[str, Any]]:
     return _trigger_callbacks_sync("register_agents")
 
 
+def on_register_cli_args(parser: Any) -> List[Any]:
+    """Let plugins contribute top-level arguments to the ``code-puppy`` CLI.
+
+    Called once during CLI bootstrap, *before* arguments are parsed. Each
+    callback receives the shared ``argparse.ArgumentParser`` (or an
+    argument group) and should register its own flags via the usual
+    ``parser.add_argument(...)`` calls. Plugins must use unique, namespaced
+    option strings (e.g. ``--myplugin-foo``) to avoid colliding with core
+    flags or one another.
+
+    Callback contract: ``(parser: argparse.ArgumentParser) -> None``.
+    Return values are ignored; mutate the parser in place.
+
+    Unlike most hooks, this phase does **not** isolate callback errors: a
+    duplicate/conflicting option string (or any other failure while building
+    the parser) is a fatal developer error, so the exception propagates
+    (fail-fast) instead of being swallowed.
+
+    Returns the list of (typically ``None``) callback results.
+    """
+    return _trigger_callbacks_sync("register_cli_args", parser, raise_on_error=True)
+
+
+def on_handle_cli_args(args: Any) -> List[Any]:
+    """Let plugins act on parsed CLI arguments before the app proceeds.
+
+    Called once after ``parse_args``, giving each plugin a chance to inspect
+    the parsed ``argparse.Namespace`` and react to its own flags. A plugin
+    that fully handles the invocation (and wants the process to exit instead
+    of continuing into the normal run) should return the sentinel dict::
+
+        {"handled": True, "exit_code": int}
+
+    The CLI runner scans the collected results for the first entry with
+    ``handled == True`` and exits with the supplied ``exit_code``. Plugins
+    that merely observe the args (without short-circuiting) should return
+    ``None``.
+
+    Callback contract: ``(args: argparse.Namespace) -> dict | None``.
+
+    Returns the list of callback results for the runner to scan.
+    """
+    return _trigger_callbacks_sync("handle_cli_args", args)
+
+
 def on_register_model_types() -> List[Dict[str, Any]]:
     """Collect custom model type registrations from plugins.
 
@@ -661,8 +928,10 @@ def on_register_skills() -> List[Dict[str, Any]]:
     - "name": str, "skill_md_path": str | Path
     - "name": str, "skill_md": str
     - "name": str, "frontmatter": dict, "body": str
+    - "provider": object implementing the neutral SkillProvider contract
 
-    Optional keys on every variant:
+    Provider entries expose an optional skills integration to core and are not
+    materialized as skill files. Optional keys on every skill variant:
     - "tags": list[str]
     - "description": str
     - "version": str
@@ -910,17 +1179,17 @@ def on_register_browser_types() -> List[Any]:
 
     Plugins can register callbacks that return a dict mapping browser type names
     to initialization functions. This allows plugins to provide custom browser
-    implementations (like Camoufox for stealth browsing).
+    implementations (such as stealth-focused or hardened browsers).
 
     Each callback should return a dict with:
-    - key: str - the browser type name (e.g., "camoufox", "firefox-stealth")
+    - key: str - the browser type name (e.g., "firefox-stealth", "hardened")
     - value: callable - async initialization function that takes (manager, **kwargs)
                         and sets up the browser on the manager instance
 
     Example callback:
         def register_my_browser_types():
             return {
-                "camoufox": initialize_camoufox,
+                "firefox-stealth": initialize_firefox_stealth,
                 "my-stealth-browser": initialize_my_stealth,
             }
 
@@ -934,12 +1203,65 @@ def on_register_model_providers() -> List[Any]:
     """Trigger callbacks to register custom model provider classes.
 
     Plugins can register callbacks that return a dict mapping provider names
-    to model classes. Example: {"walmart_gemini": WalmartGeminiModel}
+    to model classes. Example: {"my_provider": MyCustomModel}
 
     Returns:
         List of dicts from all registered callbacks.
     """
     return _trigger_callbacks_sync("register_model_providers")
+
+
+def on_check_claude_oauth_token_expiry() -> List[Any]:
+    """Ask the claude_code_oauth plugin whether the stored token is expiring.
+
+    The plugin self-registers this capability; core consumes it so it never
+    imports the plugin directly. An empty result (plugin not loaded) means
+    ``False`` to callers.
+
+    Returns:
+        List of bool results from registered callbacks.
+    """
+    return _trigger_callbacks_sync("check_claude_oauth_token_expiry")
+
+
+async def on_check_claude_oauth_token_expiry_async() -> List[Any]:
+    """Async variant for consumers already running inside an event loop."""
+    return await _trigger_callbacks("check_claude_oauth_token_expiry")
+
+
+def on_refresh_claude_oauth_token() -> List[Any]:
+    """Ask the claude_code_oauth plugin to force a refresh-token exchange.
+
+    Returns:
+        List containing the refreshed access token (or ``None``) from
+        registered callbacks; empty when the plugin is not loaded.
+    """
+    return _trigger_callbacks_sync("refresh_claude_oauth_token")
+
+
+async def on_refresh_claude_oauth_token_async() -> List[Any]:
+    """Async variant for consumers already running inside an event loop."""
+    return await _trigger_callbacks("refresh_claude_oauth_token")
+
+
+def on_load_claude_oauth_models() -> List[Any]:
+    """Load the claude_code_oauth plugin's own Claude model configurations.
+
+    Returns:
+        List of model-config dicts from registered callbacks; empty when the
+        plugin is not loaded (core then falls back to plain JSON loading).
+    """
+    return _trigger_callbacks_sync("load_claude_oauth_models")
+
+
+def on_claude_oauth_authenticate() -> List[Any]:
+    """Run the claude_code_oauth plugin's interactive authentication flow.
+
+    Returns:
+        List of results from registered callbacks; empty when the plugin is
+        not loaded (core skips authentication).
+    """
+    return _trigger_callbacks_sync("claude_oauth_authenticate")
 
 
 def on_message_history_processor_start(
@@ -1184,14 +1506,3 @@ async def on_notification(
     idle waits, etc.). Fire-and-forget; return values are ignored.
     """
     return await _trigger_callbacks("notification", message, level, context)
-
-
-async def on_agent_pause_requested() -> List[Any]:
-    """Fired when the user presses the pause key while the agent is running.
-
-    Plugins are expected to handle the pause UX (collect steering input,
-    send ``PauseAgentCommand`` → ``SteerAgentCommand`` → ``ResumeAgentCommand``
-    via the message bus). Core does not provide a fallback UI; if no plugin
-    is registered, pressing the pause key is a no-op.
-    """
-    return await _trigger_callbacks("agent_pause_requested")

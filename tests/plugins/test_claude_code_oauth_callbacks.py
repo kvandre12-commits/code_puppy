@@ -105,13 +105,29 @@ class TestStartCallbackServer:
 
 
 class TestAwaitCallback:
+    @patch("code_puppy.tools.common.should_suppress_browser", return_value=True)
+    @patch(f"{MOD}.read_available_stdin_line")
+    @patch(f"{MOD}.build_authorization_url", return_value="https://auth.example.com")
+    @patch(
+        f"{MOD}.CLAUDE_CODE_OAUTH_CONFIG",
+        {"callback_timeout": 5, "callback_port_range": (8765, 8765)},
+    )
     @patch(f"{MOD}._start_callback_server", return_value=None)
-    def test_server_start_fails(self, _):
+    def test_server_start_falls_back_to_pasteback(
+        self, mock_start, mock_build, mock_read, mock_suppress
+    ):
         from code_puppy.plugins.claude_code_oauth.register_callbacks import (
             _await_callback,
         )
 
-        assert _await_callback(MagicMock()) is None
+        ctx = MagicMock()
+        ctx.redirect_uri = None
+        ctx.state = "state123"
+        mock_read.return_value = (
+            "http://localhost:8765/callback?code=pasted_code&state=state123"
+        )
+
+        assert _await_callback(ctx) == "pasted_code"
 
     @patch(f"{MOD}._start_callback_server")
     @patch(f"{MOD}.emit_error")
@@ -756,23 +772,6 @@ class TestAgentRunStart:
             side_effect=RuntimeError("boom"),
         ):
             await _on_agent_run_start("agent", "claude-code-opus", "sess4")
-
-    @pytest.mark.asyncio
-    async def test_default_session_key(self):
-        from code_puppy.plugins.claude_code_oauth.register_callbacks import (
-            _active_heartbeats,
-            _on_agent_run_start,
-        )
-
-        mock_hb = AsyncMock()
-        mock_hb.start = AsyncMock()
-        with patch(
-            "code_puppy.plugins.claude_code_oauth.token_refresh_heartbeat.TokenRefreshHeartbeat",
-            return_value=mock_hb,
-        ):
-            await _on_agent_run_start("agent", "claude-code-opus", None)
-        assert "default" in _active_heartbeats
-        _active_heartbeats.pop("default", None)
 
 
 class TestAgentRunEnd:

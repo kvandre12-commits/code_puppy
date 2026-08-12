@@ -74,7 +74,7 @@ def mock_interactive_imports(
                 return_value=agent,
             ),
             patch(
-                "code_puppy.config.set_current_autosave_from_session_name",
+                "code_puppy.config.pin_current_session_name",
                 MagicMock(),
             ),
         ]
@@ -315,17 +315,25 @@ class TestRestoreAutosaveUserSelection:
     """Test user input selection flows."""
 
     @pytest.mark.asyncio
-    async def test_numeric_selection_loads_session(self, tmp_path):
-        """User selecting 1-5 should load the corresponding session."""
+    @pytest.mark.parametrize(
+        "input_text,session_stem,history_content",
+        [
+            ("1", "test_session", "test message"),
+            ("my_specific_session", "my_specific_session", "named session"),
+        ],
+    )
+    async def test_user_selection_loads_session(
+        self, tmp_path, input_text, session_stem, history_content
+    ):
+        """Numeric index or exact-name input loads the matching session."""
         import pickle
 
-        # Create a valid session with proper pickle content
-        history = [{"role": "user", "content": "test message"}]
+        history = [{"role": "user", "content": history_content}]
         _pkl = pickle.dumps(history)
-        (tmp_path / "test_session.pkl").write_bytes(
+        (tmp_path / f"{session_stem}.pkl").write_bytes(
             _LEGACY_SIGNED_HEADER + (b"x" * _LEGACY_SIGNATURE_SIZE) + _pkl
         )
-        (tmp_path / "test_session_meta.json").write_text(
+        (tmp_path / f"{session_stem}_meta.json").write_text(
             json.dumps({"timestamp": "2024-01-01T00:00:00", "message_count": 1}),
             encoding="utf-8",
         )
@@ -334,36 +342,11 @@ class TestRestoreAutosaveUserSelection:
         mock_agent.estimate_tokens_for_message.return_value = 10
 
         async with mock_interactive_imports(
-            mock_input_return="1", mock_agent=mock_agent
+            mock_input_return=input_text, mock_agent=mock_agent
         ):
             await restore_autosave_interactively(tmp_path)
 
         # Agent should have received the history
-        mock_agent.set_message_history.assert_called_once_with(history)
-
-    @pytest.mark.asyncio
-    async def test_direct_name_selection(self, tmp_path):
-        """User typing exact session name should load that session."""
-        import pickle
-
-        history = [{"role": "user", "content": "named session"}]
-        _pkl = pickle.dumps(history)
-        (tmp_path / "my_specific_session.pkl").write_bytes(
-            _LEGACY_SIGNED_HEADER + (b"x" * _LEGACY_SIGNATURE_SIZE) + _pkl
-        )
-        (tmp_path / "my_specific_session_meta.json").write_text(
-            json.dumps({"timestamp": "2024-01-01T00:00:00", "message_count": 1}),
-            encoding="utf-8",
-        )
-
-        mock_agent = MagicMock()
-        mock_agent.estimate_tokens_for_message.return_value = 5
-
-        async with mock_interactive_imports(
-            mock_input_return="my_specific_session", mock_agent=mock_agent
-        ):
-            await restore_autosave_interactively(tmp_path)
-
         mock_agent.set_message_history.assert_called_once_with(history)
 
     @pytest.mark.asyncio
@@ -526,8 +509,15 @@ class TestRestoreAutosaveErrorHandling:
         assert any("Failed to load" in w for w in warnings)
 
     @pytest.mark.asyncio
-    async def test_set_autosave_id_failure_ignored(self, tmp_path):
-        """Failure to set autosave ID should be silently ignored."""
+    async def test_pin_session_name_failure_ignored(self, tmp_path):
+        """Failure to pin the session name post-load should be silently ignored.
+
+        Post-LEAN-Phase-2 the config-mutation step in
+        ``restore_autosave_interactively`` is ``pin_current_session_name``
+        (it replaced the pre-Phase-2 ``set_current_autosave_from_session_name``).
+        The restore path wraps that call in ``try/except`` so a bad name
+        won't tank an otherwise-successful pickle load.
+        """
         import pickle
 
         history = [{"role": "user", "content": "test"}]
@@ -543,9 +533,9 @@ class TestRestoreAutosaveErrorHandling:
         mock_agent = MagicMock()
         mock_agent.estimate_tokens_for_message.return_value = 5
 
-        # Patch set_current_autosave_from_session_name to raise an exception
+        # Patch pin_current_session_name to raise an exception
         with patch(
-            "code_puppy.config.set_current_autosave_from_session_name",
+            "code_puppy.config.pin_current_session_name",
             side_effect=Exception("Config error"),
         ):
             async with mock_interactive_imports(

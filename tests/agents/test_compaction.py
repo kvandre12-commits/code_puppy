@@ -13,6 +13,9 @@ from __future__ import annotations
 from typing import List
 from unittest.mock import patch
 
+from pydantic_ai.models import ModelRequestParameters
+from pydantic_ai.models.openai import OpenAIResponsesModel
+from pydantic_ai.providers.openai import OpenAIProvider
 from pydantic_ai.messages import (
     ModelMessage,
     ModelRequest,
@@ -248,6 +251,25 @@ class TestCompact:
         assert new_msgs is msgs, "under threshold must return the input unchanged"
         assert dropped == []
 
+    def test_force_bypasses_threshold(self):
+        msgs = _build_long_history(n_turns=20)
+        with patch.multiple(
+            _compaction,
+            get_compaction_threshold=lambda: 0.95,
+            get_compaction_strategy=lambda: "truncation",
+            get_protected_token_count=lambda: 500,
+        ):
+            new_msgs, dropped = compact(
+                agent=None,
+                messages=msgs,
+                model_max=1_000_000,
+                context_overhead=0,
+                force=True,
+            )
+
+        assert len(new_msgs) < len(msgs)
+        assert dropped
+
     def test_over_threshold_truncation_strategy(self):
         msgs = _build_long_history(n_turns=20)
         with patch.multiple(
@@ -276,8 +298,6 @@ class TestCompact:
         The user-visible symptom was "Summarization deferred: pending tool
         call(s) detected" firing on every turn, with history growing unbounded.
         """
-        summary_msg = ModelRequest(parts=[UserPromptPart(content="SUMMARY")])
-
         # Build a huge history with a permanent orphan tool_call at the start —
         # the kind of thing that lives in a long-running session after a
         # cancelled command.
@@ -291,7 +311,7 @@ class TestCompact:
             get_compaction_threshold=lambda: 0.01,
             get_compaction_strategy=lambda: "summarization",
             get_protected_token_count=lambda: 500,
-            run_summarization_sync=lambda instructions, message_history: [summary_msg],
+            run_summarization_sync=lambda instructions, message_history: "SUMMARY",
         ):
             new_msgs, dropped = compact(
                 agent=None, messages=msgs, model_max=10_000, context_overhead=0
@@ -302,7 +322,9 @@ class TestCompact:
             "Summarization was deferred due to stale orphan tool_call — "
             "the bug is back. Check has_pending_tool_calls() ordering."
         )
-        assert summary_msg in new_msgs, "summarizer output missing from result"
+        assert any(
+            getattr(p, "content", None) == "SUMMARY" for m in new_msgs for p in m.parts
+        ), "summarizer output missing from result"
         # The orphan tool_call should be gone (pruned)
         for m in new_msgs:
             for p in m.parts:
@@ -337,14 +359,13 @@ class TestCompact:
     def test_summarization_path_invokes_summarizer(self):
         """Verify compact() routes to summarize() and gets reasonable result."""
         msgs = _build_long_history(n_turns=20)
-        summary_msg = ModelRequest(parts=[UserPromptPart(content="SUMMARY")])
 
         with patch.multiple(
             _compaction,
             get_compaction_threshold=lambda: 0.01,
             get_compaction_strategy=lambda: "summarization",
             get_protected_token_count=lambda: 500,
-            run_summarization_sync=lambda instructions, message_history: [summary_msg],
+            run_summarization_sync=lambda instructions, message_history: "SUMMARY",
         ):
             new_msgs, dropped = compact(
                 agent=None, messages=msgs, model_max=10_000, context_overhead=0
@@ -353,7 +374,9 @@ class TestCompact:
         assert len(new_msgs) < len(msgs)
         assert new_msgs[0] is msgs[0], "system msg preserved"
         # The injected summary should appear in the result
-        assert summary_msg in new_msgs
+        assert any(
+            getattr(p, "content", None) == "SUMMARY" for m in new_msgs for p in m.parts
+        )
         assert len(dropped) > 0
 
     def test_summarization_failure_falls_back_to_truncation(self):
@@ -578,7 +601,7 @@ class TestSummarize:
         assert result == msgs, "failure must return original messages unchanged"
         assert dropped == []
 
-    def test_non_list_output_is_wrapped(self):
+    async def test_non_list_output_is_wrapped(self):
         """If summarizer returns a string, it should be wrapped into a message."""
         msgs = _build_long_history(n_turns=10)
 
@@ -589,6 +612,21 @@ class TestSummarize:
         ):
             result, dropped = summarize(msgs, protected_tokens=500)
 
-        # Must still compact; string got wrapped into a ModelRequest
+        # Must still compact; string got wrapped into a valid request part.
         assert len(result) < len(msgs)
         assert result[0] is msgs[0]  # system preserved
+        summary_request = result[1]
+        assert isinstance(summary_request, ModelRequest)
+        assert len(summary_request.parts) == 1
+        assert isinstance(summary_request.parts[0], UserPromptPart)
+        assert summary_request.parts[0].content == "summary as string"
+
+        # Exercise the provider mapper that previously raised assert_never()
+        # for TextPart inside a ModelRequest. No API request is made.
+        model = OpenAIResponsesModel("gpt-5", provider=OpenAIProvider(api_key="test"))
+        _, mapped = await model._map_messages(
+            result,
+            {},
+            ModelRequestParameters(),
+        )
+        assert mapped[1] == {"role": "user", "content": "summary as string"}

@@ -18,18 +18,21 @@ SOL_CONFIG = {
 
 
 def test_make_model_settings_for_sol_uses_responses_fields():
-    with patch(
-        "code_puppy.model_factory.ModelFactory.load_config", return_value=SOL_CONFIG
+    effective_settings = {
+        "reasoning_effort": "max",
+        "summary": "detailed",
+        "verbosity": "medium",
+    }
+    with (
+        patch(
+            "code_puppy.model_factory.ModelFactory.load_config", return_value=SOL_CONFIG
+        ),
+        patch(
+            "code_puppy.config.get_effective_model_settings",
+            return_value=effective_settings,
+        ),
     ):
-        with patch("code_puppy.config.get_openai_reasoning_effort", return_value="max"):
-            with patch(
-                "code_puppy.config.get_openai_reasoning_summary",
-                return_value="detailed",
-            ):
-                with patch(
-                    "code_puppy.config.get_openai_verbosity", return_value="medium"
-                ):
-                    settings = make_model_settings("gpt-5.6-sol", max_tokens=4096)
+        settings = make_model_settings("gpt-5.6-sol", max_tokens=4096)
 
     assert settings["openai_reasoning_effort"] == "max"
     assert settings["openai_reasoning_summary"] == "detailed"
@@ -74,4 +77,4 @@ def test_custom_openai_sol_uses_responses_model():
                 ModelFactory.get_model("gpt-5.6-sol-custom", custom_config)
 
     mock_chat.assert_not_called()
-    mock_responses.assert_called_once_with("gpt-5.6-sol", provider=ANY)
+    mock_responses.assert_called_once_with(model_name="gpt-5.6-sol", provider=ANY)

@@ -9,6 +9,7 @@ import time
 from typing import Dict, List, Optional
 
 from prompt_toolkit import Application
+from prompt_toolkit.filters import Condition
 from prompt_toolkit.key_binding import KeyBindings
 from prompt_toolkit.layout import Dimension, Layout, VSplit, Window
 from prompt_toolkit.layout.controls import FormattedTextControl
@@ -21,21 +22,23 @@ from code_puppy.command_line.pagination import (
     get_total_pages,
 )
 from code_puppy.config import (
+    CUSTOM_MODEL_SETTING,
     get_all_model_settings,
+    get_custom_model_settings,
     get_global_model_name,
-    get_openai_reasoning_effort,
-    get_openai_reasoning_summary,
-    get_openai_verbosity,
+    get_value,
     model_supports_setting,
+    parse_config_scalar,
+    reset_value,
+    set_custom_model_setting,
     set_model_setting,
-    set_openai_reasoning_effort,
-    set_openai_reasoning_summary,
-    set_openai_verbosity,
+    set_value,
 )
 from code_puppy.messaging import emit_info
-from code_puppy.model_factory import ModelFactory
 from code_puppy.openai_capabilities import get_openai_reasoning_effort_choices
+from code_puppy.model_factory import ModelFactory
 from code_puppy.tools.command_runner import set_awaiting_user_input
+from code_puppy.callbacks import on_prompt_toolkit_style
 
 # Pagination config
 MODELS_PER_PAGE = 15
@@ -75,10 +78,24 @@ SETTING_DEFINITIONS: Dict[str, Dict] = {
     },
     "reasoning_effort": {
         "name": "Reasoning Effort",
-        "description": "Controls how much effort OpenAI reasoning models spend on reasoning. Available levels vary by model.",
+        "description": "Controls how much effort GPT-5 models spend on reasoning. Higher = more thorough but slower.",
         "type": "choice",
-        "choices": ["none", "minimal", "low", "medium", "high", "xhigh", "max"],
+        "choices": ["none", "low", "medium", "high", "xhigh", "max"],
         "default": "medium",
+    },
+    "reasoning_context": {
+        "name": "Reasoning Context",
+        "description": "Controls which prior reasoning is retained for GPT-5.6 Responses models. All turns preserves reasoning across the conversation.",
+        "type": "choice",
+        "choices": ["all_turns", "current_turn", "auto"],
+        "default": "all_turns",
+    },
+    "reasoning_mode": {
+        "name": "Reasoning Mode",
+        "description": "Controls the GPT-5.6 reasoning mode. Standard is the default; Pro spends more compute and is only available on supported variants.",
+        "type": "choice",
+        "choices": ["standard", "pro"],
+        "default": "standard",
     },
     "summary": {
         "name": "Reasoning Summary",
@@ -123,6 +140,20 @@ SETTING_DEFINITIONS: Dict[str, Dict] = {
         "type": "boolean",
         "default": False,
     },
+    "thinking_type": {
+        "name": "Thinking Type (GLM)",
+        "description": "GLM deep-thinking mode. 'enabled' (default) = model auto-decides whether to think (forced on for GLM-4.7/4.5V regardless). 'disabled' = direct answers, no thinking.",
+        "type": "choice",
+        "choices": ["enabled", "disabled"],
+        "default": "enabled",
+    },
+    "glm_reasoning_effort": {
+        "name": "Reasoning Effort (GLM-5.2+)",
+        "description": "Chain-of-thought reasoning effort, GLM-5.2+ only. 'max' is default/recommended. none/minimal skip thinking; low/medium are mapped to high server-side; xhigh is mapped to max.",
+        "type": "choice",
+        "choices": ["max", "xhigh", "high", "medium", "low", "minimal", "none"],
+        "default": "max",
+    },
     "thinking_enabled": {
         "name": "Thinking Enabled",
         "description": "Enable thinking mode for Gemini 3 Pro models. When enabled, the model will show its reasoning process.",
@@ -138,12 +169,87 @@ SETTING_DEFINITIONS: Dict[str, Dict] = {
     },
     "effort": {
         "name": "Effort",
-        "description": "Controls how much effort the model spends on its response (Opus 4-6 only). Low = fast, Max = most thorough.",
+        "description": "Controls how much effort adaptive models spend on their response. Low = fast, Max = most thorough.",
         "type": "choice",
-        "choices": ["low", "medium", "high", "max"],
+        "choices": ["low", "medium", "high", "xhigh", "max"],
         "default": "high",
     },
+    "retry_main_strategy": {
+        "name": "Retry Strategy (main agent)",
+        "description": (
+            "Per-model streaming-retry backoff when THIS model runs as the main "
+            "agent (overrides the global /set value). Exponential-with-jitter, "
+            "capped at 30s between retries. Leave unset to use the global setting."
+        ),
+        "type": "choice",
+        "choices": ["gentle", "balanced", "aggressive"],
+        "default": None,
+    },
+    "retry_main_max_attempts": {
+        "name": "Retry Max Attempts (main agent)",
+        "description": (
+            "Per-model max streaming-retry attempts (1-100) when THIS model runs "
+            "as the main agent, including the first try. Overrides the global "
+            "/set value. Leave unset to use the global setting."
+        ),
+        "type": "numeric",
+        "min": 1,
+        "max": 100,
+        "step": 1,
+        "default": None,
+        "format": "{:.0f}",
+    },
+    "retry_subagent_strategy": {
+        "name": "Retry Strategy (sub-agent)",
+        "description": (
+            "Per-model streaming-retry backoff when THIS model runs as a "
+            "sub-agent (overrides the global /set value). Sub-agents usually want "
+            "a longer budget -- losing their work to a blip is expensive. Leave "
+            "unset to use the global setting."
+        ),
+        "type": "choice",
+        "choices": ["gentle", "balanced", "aggressive"],
+        "default": None,
+    },
+    "retry_subagent_max_attempts": {
+        "name": "Retry Max Attempts (sub-agent)",
+        "description": (
+            "Per-model max streaming-retry attempts (1-100) when THIS model runs "
+            "as a sub-agent, including the first try. Overrides the global /set "
+            "value. Leave unset to use the global setting."
+        ),
+        "type": "numeric",
+        "min": 1,
+        "max": 100,
+        "step": 1,
+        "default": None,
+        "format": "{:.0f}",
+    },
+    CUSTOM_MODEL_SETTING: {
+        "name": "Custom Params",
+        "description": (
+            "Free-form key = value params merged into the request body via "
+            "extra_body. Dotted keys nest: 'chat_template_kwargs.thinking = medium' "
+            "becomes {'chat_template_kwargs': {'thinking': 'medium'}}. Values "
+            "parse as bool/int/float; anything else stays a string. Applied "
+            "last, so they override built-in settings on conflict."
+        ),
+        "type": "custom",
+        "default": None,
+    },
 }
+
+
+def _format_custom_value(value) -> str:
+    """Format a custom param value so it round-trips through parse_config_scalar."""
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    return str(value)
+
+
+def _format_custom_pairs(pairs: Dict) -> str:
+    """Render a custom-params dict as a compact 'k=v; k=v' summary string."""
+    return "; ".join(f"{k}={_format_custom_value(v)}" for k, v in pairs.items())
 
 
 def _load_all_model_names() -> List[str]:
@@ -152,16 +258,67 @@ def _load_all_model_names() -> List[str]:
     return list(models_config.keys())
 
 
+# Per-model retry override keys are handled specially: they live in the dedicated
+# ``retry_model_<model>_<role>_<field>`` namespace (see
+# retry_profiles.per_model_key), NOT the generic ``model_settings_`` namespace, so
+# they can never leak into the ModelSettings sent to the provider. Maps the menu
+# setting key -> (role, config field).
+_RETRY_MENU_KEYS: Dict[str, tuple] = {
+    "retry_main_strategy": ("main", "strategy"),
+    "retry_main_max_attempts": ("main", "max_attempts"),
+    "retry_subagent_strategy": ("subagent", "strategy"),
+    "retry_subagent_max_attempts": ("subagent", "max_attempts"),
+}
+
+
+def _read_per_model_retry(model_name: str, menu_key: str):
+    """Read a per-model retry override, or None if unset. Parses ints."""
+    from code_puppy.agents.retry_profiles import per_model_key
+
+    role, field = _RETRY_MENU_KEYS[menu_key]
+    raw = get_value(per_model_key(model_name, role, field))
+    if raw is None or not str(raw).strip():
+        return None
+    if field == "max_attempts":
+        try:
+            return int(float(raw))
+        except (TypeError, ValueError):
+            return None
+    return str(raw).strip()
+
+
+def _write_per_model_retry(model_name: str, menu_key: str, value) -> None:
+    """Write (or clear, when value is None) a per-model retry override."""
+    from code_puppy.agents.retry_profiles import per_model_key
+
+    role, field = _RETRY_MENU_KEYS[menu_key]
+    key = per_model_key(model_name, role, field)
+    if value is None:
+        reset_value(key)
+    else:
+        set_value(key, str(value))
+
+
 def _get_model_display_settings(model_name: str) -> Dict:
-    """Get model settings merged with global OpenAI controls for display."""
+    """Get configured model settings plus model-specific display defaults."""
     settings = get_all_model_settings(model_name)
 
-    if model_supports_setting(model_name, "reasoning_effort"):
-        settings["reasoning_effort"] = get_openai_reasoning_effort()
-    if model_supports_setting(model_name, "summary"):
-        settings["summary"] = get_openai_reasoning_summary()
-    if model_supports_setting(model_name, "verbosity"):
-        settings["verbosity"] = get_openai_verbosity()
+    if model_supports_setting(model_name, "reasoning_context"):
+        settings.setdefault("reasoning_context", "all_turns")
+    if model_supports_setting(model_name, "reasoning_mode"):
+        settings.setdefault("reasoning_mode", "standard")
+    # Per-model retry overrides live in their own namespace, so inject their
+    # current values here (only when actually set -- unset shows the default).
+    for menu_key in _RETRY_MENU_KEYS:
+        val = _read_per_model_retry(model_name, menu_key)
+        if val is not None:
+            settings[menu_key] = val
+
+    # Custom params are a JSON blob in their own reserved key -- inject the
+    # parsed dict (only when non-empty) so displays can summarize it.
+    custom = get_custom_model_settings(model_name)
+    if custom:
+        settings[CUSTOM_MODEL_SETTING] = custom
 
     return settings
 
@@ -171,8 +328,8 @@ def _get_setting_choices(
 ) -> List[str]:
     """Get the available choices for a setting, filtered by model capabilities.
 
-    For reasoning_effort, only codex models support 'xhigh' - regular GPT-5.2
-    models are capped at 'high'.
+    Reasoning effort is capability-gated: xhigh is available to codex and
+    GPT-5.4+ models, while max is reserved for GPT-5.6+ variants.
 
     Args:
         setting_key: The setting name (e.g., 'reasoning_effort', 'verbosity')
@@ -255,6 +412,13 @@ class ModelSettingsMenu:
         self.edit_value: Optional[float] = None
         self.result_changed = False
 
+        # Custom params view state
+        self.custom_settings: Dict = {}
+        self.custom_index = 0
+        self.custom_input: Optional[str] = None  # None = not typing
+        self.custom_editing_key: Optional[str] = None  # original key being edited
+        self.custom_error: Optional[str] = None
+
         # Cache for selected model's settings
         self.selected_model: Optional[str] = None
         self.supported_settings: List[str] = []
@@ -295,7 +459,13 @@ class ModelSettingsMenu:
         """Get list of settings supported by a model."""
         supported = []
         for setting_key in SETTING_DEFINITIONS:
-            if model_supports_setting(model_name, setting_key):
+            # Retry overrides and custom params apply to every model, so
+            # they're always offered regardless of model capability flags.
+            if (
+                setting_key == CUSTOM_MODEL_SETTING
+                or setting_key in _RETRY_MENU_KEYS
+                or model_supports_setting(model_name, setting_key)
+            ):
                 supported.append(setting_key)
         return supported
 
@@ -304,6 +474,7 @@ class ModelSettingsMenu:
         self.selected_model = model_name
         self.supported_settings = self._get_supported_settings(model_name)
         self.current_settings = _get_model_display_settings(model_name)
+        self.custom_settings = get_custom_model_settings(model_name)
 
         self.setting_index = 0
 
@@ -318,7 +489,16 @@ class ModelSettingsMenu:
             # Unknown/stale setting from saved config — just stringify it
             return str(value) if value is not None else "(unknown)"
 
+        if setting == CUSTOM_MODEL_SETTING:
+            if isinstance(value, dict) and value:
+                return _format_custom_pairs(value)
+            return "(none)"
+
         if value is None:
+            # Per-model retry overrides fall back to the global /set value, not a
+            # model default -- say so explicitly to avoid confusion.
+            if setting in _RETRY_MENU_KEYS:
+                return "(uses global)"
             default = _get_setting_default(setting, self.selected_model)
             if default is not None:
                 return f"(default: {default})"
@@ -339,18 +519,18 @@ class ModelSettingsMenu:
 
         if self.view_mode == "models":
             # Header with page indicator
-            lines.append(("bold cyan", " 🐕 Select a Model to Configure"))
+            lines.append(("class:tui.header", " 🐕 Select a Model to Configure"))
             if self.total_pages > 1:
                 lines.append(
                     (
-                        "fg:ansibrightblack",
+                        "class:tui.muted",
                         f"  (Page {self.page + 1}/{self.total_pages})",
                     )
                 )
             lines.append(("", "\n\n"))
 
             if not self.all_models:
-                lines.append(("fg:ansiyellow", "  No models available."))
+                lines.append(("class:tui.warning", "  No models available."))
                 lines.append(("", "\n\n"))
                 self._add_model_nav_hints(lines)
                 return lines
@@ -366,36 +546,40 @@ class ModelSettingsMenu:
                 is_current = model_name == self.current_model_name
 
                 prefix = " › " if is_selected else "   "
-                style = "fg:ansiwhite bold" if is_selected else "fg:ansibrightblack"
+                style = "class:tui.selected" if is_selected else "class:tui.body"
 
-                # Check if model has any custom settings
-                model_settings = get_all_model_settings(model_name)
-                has_settings = len(model_settings) > 0
+                # Check if model has any configured settings (incl. custom params)
+                has_settings = bool(
+                    get_all_model_settings(model_name)
+                    or get_custom_model_settings(model_name)
+                )
 
                 lines.append((style, f"{prefix}{model_name}"))
 
                 # Show indicators
                 if is_current:
-                    lines.append(("fg:ansigreen", " (active)"))
+                    lines.append(("class:tui.success", " (active)"))
                 if has_settings:
-                    lines.append(("fg:ansicyan", " ⚙"))
+                    lines.append(("class:tui.body", " ⚙"))
 
                 lines.append(("", "\n"))
 
                 if is_selected:
                     description = get_model_description(models_config, model_name)
-                    lines.append(("fg:ansiyellow italic", f"      {description}\n"))
+                    lines.append(("class:tui.body", f"      {description}\n"))
 
             lines.append(("", "\n"))
             self._add_model_nav_hints(lines)
+        elif self.view_mode == "custom":
+            lines.extend(self._render_custom_list())
         else:
             # Settings view
-            lines.append(("bold cyan", f" ⚙ Settings for {self.selected_model}"))
+            lines.append(("class:tui.header", f"  Settings for {self.selected_model}"))
             lines.append(("", "\n\n"))
 
             if not self.supported_settings:
                 lines.append(
-                    ("fg:ansiyellow", "  No configurable settings for this model.")
+                    ("class:tui.warning", "  No configurable settings for this model.")
                 )
                 lines.append(("", "\n\n"))
                 self._add_settings_nav_hints(lines)
@@ -410,18 +594,18 @@ class ModelSettingsMenu:
                 if is_selected and self.editing_mode:
                     display_value = self._format_value(setting_key, self.edit_value)
                     prefix = " ✏️ "
-                    style = "fg:ansigreen bold"
+                    style = "class:tui.success"
                 else:
                     display_value = self._format_value(setting_key, current_value)
                     prefix = " › " if is_selected else "   "
-                    style = "fg:ansiwhite" if is_selected else "fg:ansibrightblack"
+                    style = "class:tui.selected" if is_selected else "class:tui.body"
 
                 # Setting name and value
                 lines.append((style, f"{prefix}{setting_def['name']}: "))
                 if current_value is not None or (is_selected and self.editing_mode):
-                    lines.append(("fg:ansicyan", display_value))
+                    lines.append(("class:tui.body", display_value))
                 else:
-                    lines.append(("fg:ansibrightblack dim", display_value))
+                    lines.append(("class:tui.muted", display_value))
                 lines.append(("", "\n"))
 
             lines.append(("", "\n"))
@@ -429,92 +613,148 @@ class ModelSettingsMenu:
 
         return lines
 
+    def _render_custom_list(self) -> List:
+        """Render the custom params list (custom view mode)."""
+        lines: List = []
+        lines.append(("class:tui.header", f"  Custom Params for {self.selected_model}"))
+        lines.append(("", "\n\n"))
+
+        keys = list(self.custom_settings)
+        for i, key in enumerate(keys):
+            is_selected = i == self.custom_index and self.custom_input is None
+            prefix = " › " if is_selected else "   "
+            style = "class:tui.selected" if is_selected else "class:tui.body"
+            display_value = _format_custom_value(self.custom_settings[key])
+            lines.append((style, f"{prefix}{key} = {display_value}"))
+            lines.append(("", "\n"))
+
+        add_selected = self.custom_index == len(keys) and self.custom_input is None
+        prefix = " › " if add_selected else "   "
+        style = "class:tui.selected" if add_selected else "class:tui.muted"
+        lines.append((style, f"{prefix}+ Add new param"))
+        lines.append(("", "\n"))
+
+        if self.custom_input is not None:
+            lines.append(("", "\n"))
+            lines.append(("class:tui.success", "   "))
+            lines.append(("class:tui.body", self.custom_input))
+            lines.append(("class:tui.selected", "█"))
+            lines.append(("", "\n"))
+
+        if self.custom_error:
+            lines.append(("class:tui.warning", f"  {self.custom_error}"))
+            lines.append(("", "\n"))
+
+        lines.append(("", "\n"))
+        self._add_custom_nav_hints(lines)
+        return lines
+
+    def _add_custom_nav_hints(self, lines: List):
+        """Add navigation hints for the custom params view."""
+        lines.append(("", "\n"))
+        if self.custom_input is not None:
+            lines.append(("class:tui.help-key", "  Type  "))
+            lines.append(("class:tui.help", "key = value\n"))
+            lines.append(("class:tui.help-key", "  Enter  "))
+            lines.append(("class:tui.help", "Save\n"))
+            lines.append(("class:tui.help-key", "  Esc  "))
+            lines.append(("class:tui.help", "Cancel\n"))
+        else:
+            lines.append(("class:tui.help-key", "  ↑/↓  "))
+            lines.append(("class:tui.help", "Navigate params\n"))
+            lines.append(("class:tui.help-key", "  Enter  "))
+            lines.append(("class:tui.help", "Add / edit param\n"))
+            lines.append(("class:tui.help-key", "  d  "))
+            lines.append(("class:tui.help", "Delete param\n"))
+            lines.append(("class:tui.help-key", "  Esc  "))
+            lines.append(("class:tui.help", "Back to settings\n"))
+
     def _add_model_nav_hints(self, lines: List):
         """Add navigation hints for model list view."""
         lines.append(("", "\n"))
-        lines.append(("fg:ansibrightblack", "  ↑/↓  "))
-        lines.append(("", "Navigate models\n"))
+        lines.append(("class:tui.help-key", "  ↑/↓  "))
+        lines.append(("class:tui.help", "Navigate models\n"))
         if self.total_pages > 1:
-            lines.append(("fg:ansibrightblack", "  PgUp/PgDn  "))
-            lines.append(("", "Change page\n"))
-        lines.append(("fg:ansigreen", "  Enter  "))
-        lines.append(("", "Configure model\n"))
-        lines.append(("fg:ansiyellow", "  Esc  "))
-        lines.append(("", "Exit\n"))
+            lines.append(("class:tui.help-key", "  PgUp/PgDn  "))
+            lines.append(("class:tui.help", "Change page\n"))
+        lines.append(("class:tui.help-key", "  Enter  "))
+        lines.append(("class:tui.help", "Configure model\n"))
+        lines.append(("class:tui.help-key", "  Esc  "))
+        lines.append(("class:tui.help", "Exit\n"))
 
     def _add_settings_nav_hints(self, lines: List):
         """Add navigation hints for settings view."""
         lines.append(("", "\n"))
 
         if self.editing_mode:
-            lines.append(("fg:ansibrightblack", "  ←/→  "))
-            lines.append(("", "Adjust value\n"))
-            lines.append(("fg:ansigreen", "  Enter  "))
-            lines.append(("", "Save\n"))
-            lines.append(("fg:ansiyellow", "  Esc  "))
-            lines.append(("", "Cancel edit\n"))
-            lines.append(("fg:ansired", "  d  "))
-            lines.append(("", "Reset to default\n"))
+            lines.append(("class:tui.help-key", "  ←/→  "))
+            lines.append(("class:tui.help", "Adjust value\n"))
+            lines.append(("class:tui.help-key", "  Enter  "))
+            lines.append(("class:tui.help", "Save\n"))
+            lines.append(("class:tui.help-key", "  Esc  "))
+            lines.append(("class:tui.help", "Cancel edit\n"))
+            lines.append(("class:tui.help-key", "  d  "))
+            lines.append(("class:tui.help", "Reset to default\n"))
         else:
-            lines.append(("fg:ansibrightblack", "  ↑/↓  "))
-            lines.append(("", "Navigate settings\n"))
-            lines.append(("fg:ansigreen", "  Enter  "))
-            lines.append(("", "Edit setting\n"))
-            lines.append(("fg:ansired", "  d  "))
-            lines.append(("", "Reset to default\n"))
-            lines.append(("fg:ansiyellow", "  Esc  "))
-            lines.append(("", "Back to models\n"))
+            lines.append(("class:tui.help-key", "  ↑/↓  "))
+            lines.append(("class:tui.help", "Navigate settings\n"))
+            lines.append(("class:tui.help-key", "  Enter  "))
+            lines.append(("class:tui.help", "Edit setting\n"))
+            lines.append(("class:tui.help-key", "  d  "))
+            lines.append(("class:tui.help", "Reset to default\n"))
+            lines.append(("class:tui.help-key", "  Esc  "))
+            lines.append(("class:tui.help", "Back to models\n"))
 
     def _render_details_panel(self) -> List:
         """Render the details/help panel."""
         lines = []
 
         if self.view_mode == "models":
-            lines.append(("bold cyan", " Model Info"))
+            lines.append(("class:tui.title", " Model Info"))
             lines.append(("", "\n\n"))
 
             if not self.all_models:
-                lines.append(("fg:ansibrightblack", "  No models available."))
+                lines.append(("class:tui.muted", "  No models available."))
                 return lines
 
             model_name = self.all_models[self.model_index]
             is_current = model_name == self.current_model_name
 
-            lines.append(("bold", f"  {model_name}"))
+            lines.append(("class:tui.label", f"  {model_name}"))
             lines.append(("", "\n\n"))
 
             if is_current:
-                lines.append(("fg:ansigreen", "  ✓ Currently active model"))
+                lines.append(("class:tui.success", "  ✓ Currently active model"))
                 lines.append(("", "\n\n"))
 
             # Show current settings for this model
             model_settings = _get_model_display_settings(model_name)
             if model_settings:
-                lines.append(("bold", "  Effective Settings:"))
+                lines.append(("class:tui.label", "  Effective Settings:"))
                 lines.append(("", "\n"))
                 for setting_key, value in model_settings.items():
                     setting_def = SETTING_DEFINITIONS.get(setting_key, {})
                     name = setting_def.get("name", setting_key)
                     display = self._format_value(setting_key, value)
-                    lines.append(("fg:ansicyan", f"    {name}: {display}"))
+                    lines.append(("class:tui.body", f"    {name}: {display}"))
                     lines.append(("", "\n"))
             else:
-                lines.append(("fg:ansibrightblack", "  Using all default settings"))
+                lines.append(("class:tui.muted", "  Using all default settings"))
                 lines.append(("", "\n"))
 
             # Show supported settings
             supported = self._get_supported_settings(model_name)
             lines.append(("", "\n"))
-            lines.append(("bold", "  Configurable Settings:"))
+            lines.append(("class:tui.label", "  Configurable Settings:"))
             lines.append(("", "\n"))
             if supported:
                 for s in supported:
                     setting_def = SETTING_DEFINITIONS.get(s, {})
                     name = setting_def.get("name", s)
-                    lines.append(("fg:ansibrightblack", f"    • {name}"))
+                    lines.append(("class:tui.muted", f"    • {name}"))
                     lines.append(("", "\n"))
             else:
-                lines.append(("fg:ansibrightblack dim", "    None"))
+                lines.append(("class:tui.muted", "    None"))
                 lines.append(("", "\n"))
 
             # Show pagination info at the bottom of details
@@ -522,7 +762,7 @@ class ModelSettingsMenu:
                 lines.append(("", "\n"))
                 lines.append(
                     (
-                        "fg:ansibrightblack dim",
+                        "class:tui.muted",
                         f"  Model {self.model_index + 1} of {len(self.all_models)}",
                     )
                 )
@@ -530,12 +770,12 @@ class ModelSettingsMenu:
 
         else:
             # Settings detail view
-            lines.append(("bold cyan", " Setting Details"))
+            lines.append(("class:tui.title", " Setting Details"))
             lines.append(("", "\n\n"))
 
             if not self.supported_settings:
                 lines.append(
-                    ("fg:ansibrightblack", "  This model doesn't expose any settings.")
+                    ("class:tui.muted", "  This model doesn't expose any settings.")
                 )
                 return lines
 
@@ -544,84 +784,87 @@ class ModelSettingsMenu:
             current_value = self._get_current_value(setting_key)
 
             # Setting name
-            lines.append(("bold", f"  {setting_def['name']}"))
+            lines.append(("class:tui.label", f"  {setting_def['name']}"))
             lines.append(("", "\n"))
 
-            # Show if this is a global setting
-            if setting_key in ("reasoning_effort", "summary", "verbosity"):
-                lines.append(
-                    (
-                        "fg:ansiyellow",
-                        "   Global OpenAI setting (normalized per model when needed)",
-                    )
-                )
             lines.append(("", "\n\n"))
 
             # Description
-            lines.append(("fg:ansibrightblack", f"  {setting_def['description']}"))
+            lines.append(("class:tui.muted", f"  {setting_def['description']}"))
             lines.append(("", "\n\n"))
 
             # Range/choices info
             if setting_def.get("type") == "choice":
-                lines.append(("bold", "  Options:"))
+                lines.append(("class:tui.label", "  Options:"))
                 lines.append(("", "\n"))
                 # Get filtered choices based on model capabilities
                 choices = _get_setting_choices(setting_key, self.selected_model)
                 lines.append(
                     (
-                        "fg:ansibrightblack",
+                        "class:tui.muted",
                         f"    {' | '.join(choices)}",
                     )
                 )
             elif setting_def.get("type") == "boolean":
-                lines.append(("bold", "  Options:"))
+                lines.append(("class:tui.label", "  Options:"))
                 lines.append(("", "\n"))
                 lines.append(
                     (
-                        "fg:ansibrightblack",
+                        "class:tui.muted",
                         "    Enabled | Disabled",
                     )
                 )
+            elif setting_def.get("type") == "custom":
+                lines.append(("class:tui.label", "  Configured Params:"))
+                lines.append(("", "\n"))
+                if self.custom_settings:
+                    for key, val in self.custom_settings.items():
+                        lines.append(
+                            (
+                                "class:tui.muted",
+                                f"    {key} = {_format_custom_value(val)}\n",
+                            )
+                        )
+                else:
+                    lines.append(("class:tui.muted", "    (none yet)\n"))
             else:
-                lines.append(("bold", "  Range:"))
+                lines.append(("class:tui.label", "  Range:"))
                 lines.append(("", "\n"))
                 lines.append(
                     (
-                        "fg:ansibrightblack",
+                        "class:tui.muted",
                         f"    Min: {setting_def['min']}  Max: {setting_def['max']}  Step: {setting_def['step']}",
                     )
                 )
             lines.append(("", "\n\n"))
 
             # Current value
-            lines.append(("bold", "  Current Value:"))
+            lines.append(("class:tui.label", "  Current Value:"))
             lines.append(("", "\n"))
             if current_value is not None:
                 lines.append(
                     (
-                        "fg:ansicyan",
+                        "class:tui.body",
                         f"    {self._format_value(setting_key, current_value)}",
                     )
                 )
             else:
-                lines.append(("fg:ansibrightblack dim", "    (using model default)"))
+                lines.append(("class:tui.muted", "    (using model default)"))
             lines.append(("", "\n\n"))
 
             # Editing hint
             if self.editing_mode:
-                lines.append(("fg:ansigreen bold", "  ✏️  EDITING MODE"))
+                lines.append(("class:tui.success", "  ✏️  EDITING MODE"))
                 lines.append(("", "\n"))
                 if self.edit_value is not None:
                     lines.append(
                         (
-                            "fg:ansicyan",
+                            "class:tui.body",
                             f"    New value: {self._format_value(setting_key, self.edit_value)}",
                         )
                     )
                 else:
-                    lines.append(
-                        ("fg:ansibrightblack", "    New value: (model default)")
-                    )
+                    lines.append(("class:tui.muted", "    New value: (model default)"))
                 lines.append(("", "\n"))
 
         return lines
@@ -646,6 +889,9 @@ class ModelSettingsMenu:
             return
 
         setting_key = self.supported_settings[self.setting_index]
+        if setting_key == CUSTOM_MODEL_SETTING:
+            # Custom params have their own view; Enter routes there instead.
+            return
         setting_def = SETTING_DEFINITIONS[setting_key]
         current = self._get_current_value(setting_key)
 
@@ -670,6 +916,14 @@ class ModelSettingsMenu:
                 self.edit_value = 42
             elif setting_key == "budget_tokens":
                 self.edit_value = 10000
+            elif setting_key in _RETRY_MENU_KEYS:
+                # Seed from the effective (resolved) value as an INT -- never the
+                # (min+max)/2 midpoint, which produces a .5 float that {:.0f}
+                # banker's-rounds so +1 steps look like +2 and stall.
+                role, _ = _RETRY_MENU_KEYS[setting_key]
+                from code_puppy.agents.retry_profiles import resolve
+
+                self.edit_value = int(resolve(role, self.selected_model).max_attempts)
             else:
                 self.edit_value = (setting_def["min"] + setting_def["max"]) / 2
 
@@ -700,6 +954,10 @@ class ModelSettingsMenu:
             new_value = self.edit_value + (direction * step)
             # Clamp to range
             new_value = max(setting_def["min"], min(setting_def["max"], new_value))
+            # Integer-step settings stay ints -- a stray float would make the
+            # {:.0f} display banker's-round and appear to step by 2 / stall.
+            if isinstance(step, int) and isinstance(setting_def["min"], int):
+                new_value = int(round(new_value))
             self.edit_value = new_value
 
     def _save_edit(self):
@@ -709,16 +967,9 @@ class ModelSettingsMenu:
 
         setting_key = self.supported_settings[self.setting_index]
 
-        # Handle global OpenAI settings specially
-        if setting_key == "reasoning_effort":
-            if self.edit_value is not None:
-                set_openai_reasoning_effort(self.edit_value)
-        elif setting_key == "summary":
-            if self.edit_value is not None:
-                set_openai_reasoning_summary(self.edit_value)
-        elif setting_key == "verbosity":
-            if self.edit_value is not None:
-                set_openai_verbosity(self.edit_value)
+        if setting_key in _RETRY_MENU_KEYS:
+            # Per-model retry override -> dedicated retry_model_ namespace.
+            _write_per_model_retry(self.selected_model, setting_key, self.edit_value)
         else:
             # Standard per-model setting
             set_model_setting(self.selected_model, setting_key, self.edit_value)
@@ -738,6 +989,75 @@ class ModelSettingsMenu:
         self.editing_mode = False
         self.edit_value = None
 
+    def _enter_custom_view(self):
+        """Enter the custom params view for the selected model."""
+        self._reload_custom()
+        self.view_mode = "custom"
+        self.custom_index = 0
+        self.custom_input = None
+        self.custom_editing_key = None
+        self.custom_error = None
+
+    def _reload_custom(self):
+        """Re-read custom params from config and sync the display cache."""
+        self.custom_settings = get_custom_model_settings(self.selected_model)
+        if self.custom_settings:
+            self.current_settings[CUSTOM_MODEL_SETTING] = self.custom_settings
+        else:
+            self.current_settings.pop(CUSTOM_MODEL_SETTING, None)
+
+    def _start_custom_input(self):
+        """Begin typing a new pair, or editing the selected existing one."""
+        keys = list(self.custom_settings)
+        if self.custom_index < len(keys):
+            key = keys[self.custom_index]
+            self.custom_editing_key = key
+            value = _format_custom_value(self.custom_settings[key])
+            self.custom_input = f"{key} = {value}"
+        else:
+            self.custom_editing_key = None
+            self.custom_input = ""
+        self.custom_error = None
+
+    def _save_custom_input(self):
+        """Parse 'key = value' from the input buffer and persist it."""
+        if self.selected_model is None:
+            return
+        text = (self.custom_input or "").strip()
+        key, sep, value = (part.strip() for part in text.partition("="))
+        if not sep or not key or not value:
+            self.custom_error = "Expected format: key = value"
+            return
+        if self.custom_editing_key and self.custom_editing_key != key:
+            # Renamed: drop the old key so it doesn't linger.
+            set_custom_model_setting(self.selected_model, self.custom_editing_key, None)
+        set_custom_model_setting(self.selected_model, key, parse_config_scalar(value))
+        self._reload_custom()
+        keys = list(self.custom_settings)
+        self.custom_index = keys.index(key) if key in keys else 0
+        self.custom_input = None
+        self.custom_editing_key = None
+        self.custom_error = None
+        self.result_changed = True
+
+    def _cancel_custom_input(self):
+        """Abort typing without saving."""
+        self.custom_input = None
+        self.custom_editing_key = None
+        self.custom_error = None
+
+    def _delete_custom_pair(self):
+        """Delete the currently selected custom param."""
+        if self.selected_model is None:
+            return
+        keys = list(self.custom_settings)
+        if self.custom_index >= len(keys):
+            return
+        set_custom_model_setting(self.selected_model, keys[self.custom_index], None)
+        self._reload_custom()
+        self.custom_index = min(self.custom_index, len(self.custom_settings))
+        self.result_changed = True
+
     def _reset_to_default(self):
         """Reset the current setting to model default."""
         if not self.supported_settings or self.selected_model is None:
@@ -749,16 +1069,16 @@ class ModelSettingsMenu:
             # Reset edit value to default
             self.edit_value = _get_setting_default(setting_key, self.selected_model)
         else:
-            # Handle global OpenAI settings - reset to their defaults
-            if setting_key == "reasoning_effort":
-                set_openai_reasoning_effort("medium")  # Default
-                self.current_settings[setting_key] = "medium"
-            elif setting_key == "summary":
-                set_openai_reasoning_summary("auto")  # Default
-                self.current_settings[setting_key] = "auto"
-            elif setting_key == "verbosity":
-                set_openai_verbosity("medium")  # Default
-                self.current_settings[setting_key] = "medium"
+            if setting_key == CUSTOM_MODEL_SETTING:
+                # "Default" for custom params is having none at all.
+                for key in list(get_custom_model_settings(self.selected_model)):
+                    set_custom_model_setting(self.selected_model, key, None)
+                self._reload_custom()
+            elif setting_key in _RETRY_MENU_KEYS:
+                # Clear the per-model retry override -> falls back to global.
+                _write_per_model_retry(self.selected_model, setting_key, None)
+                if setting_key in self.current_settings:
+                    del self.current_settings[setting_key]
             else:
                 # Standard per-model setting
                 set_model_setting(self.selected_model, setting_key, None)
@@ -812,6 +1132,10 @@ class ModelSettingsMenu:
         # Key bindings
         kb = KeyBindings()
 
+        # True while the user is typing a custom param in the custom view.
+        # Printable-char bindings (like 'd') must yield to text entry.
+        text_editing = Condition(lambda: self.custom_input is not None)
+
         @kb.add("up")
         @kb.add("c-p")  # Ctrl+P = previous (Emacs-style)
         def _(event):
@@ -819,6 +1143,10 @@ class ModelSettingsMenu:
                 if self.model_index > 0:
                     self.model_index -= 1
                     self._ensure_selection_visible()
+                    self.update_display()
+            elif self.view_mode == "custom":
+                if self.custom_input is None and self.custom_index > 0:
+                    self.custom_index -= 1
                     self.update_display()
             else:
                 if not self.editing_mode and self.setting_index > 0:
@@ -832,6 +1160,13 @@ class ModelSettingsMenu:
                 if self.model_index < len(self.all_models) - 1:
                     self.model_index += 1
                     self._ensure_selection_visible()
+                    self.update_display()
+            elif self.view_mode == "custom":
+                # Max index == len(pairs), i.e. the '+ Add new param' row.
+                if self.custom_input is None and self.custom_index < len(
+                    self.custom_settings
+                ):
+                    self.custom_index += 1
                     self.update_display()
             else:
                 if (
@@ -877,17 +1212,31 @@ class ModelSettingsMenu:
         def _(event):
             if self.view_mode == "models":
                 self._enter_settings_view()
-                self.update_display()
-            else:
-                if self.editing_mode:
-                    self._save_edit()
+            elif self.view_mode == "custom":
+                if self.custom_input is not None:
+                    self._save_custom_input()
                 else:
-                    self._start_editing()
-                self.update_display()
+                    self._start_custom_input()
+            elif self.editing_mode:
+                self._save_edit()
+            elif (
+                self.supported_settings
+                and self.supported_settings[self.setting_index] == CUSTOM_MODEL_SETTING
+            ):
+                self._enter_custom_view()
+            else:
+                self._start_editing()
+            self.update_display()
 
         @kb.add("escape")
         def _(event):
-            if self.view_mode == "settings":
+            if self.view_mode == "custom":
+                if self.custom_input is not None:
+                    self._cancel_custom_input()
+                else:
+                    self.view_mode = "settings"
+                self.update_display()
+            elif self.view_mode == "settings":
                 if self.editing_mode:
                     self._cancel_edit()
                     self.update_display()
@@ -898,10 +1247,27 @@ class ModelSettingsMenu:
                 # At model list level, ESC closes the TUI
                 event.app.exit()
 
-        @kb.add("d")
+        @kb.add("d", filter=~text_editing)
         def _(event):
             if self.view_mode == "settings":
                 self._reset_to_default()
+                self.update_display()
+            elif self.view_mode == "custom":
+                self._delete_custom_pair()
+                self.update_display()
+
+        @kb.add("backspace", filter=text_editing)
+        def _(event):
+            self.custom_input = (self.custom_input or "")[:-1]
+            self.custom_error = None
+            self.update_display()
+
+        @kb.add("<any>", filter=text_editing)
+        def _(event):
+            data = event.data or ""
+            if data.isprintable():
+                self.custom_input = (self.custom_input or "") + data
+                self.custom_error = None
                 self.update_display()
 
         @kb.add("c-c")
@@ -916,6 +1282,7 @@ class ModelSettingsMenu:
             key_bindings=kb,
             full_screen=False,
             mouse_support=False,
+            style=on_prompt_toolkit_style(),
         )
 
         set_awaiting_user_input(True)
@@ -978,7 +1345,9 @@ def show_model_settings_summary(model_name: Optional[str] = None) -> None:
         setting_def = SETTING_DEFINITIONS.get(setting_key, {})
         name = setting_def.get("name", setting_key)
         setting_type = setting_def.get("type")
-        if setting_type in ("choice", "boolean"):
+        if setting_type == "custom":
+            display = _format_custom_pairs(value) if isinstance(value, dict) else ""
+        elif setting_type in ("choice", "boolean"):
             display = (
                 str(value)
                 if setting_type == "choice"

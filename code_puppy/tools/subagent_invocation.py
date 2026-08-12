@@ -2,8 +2,11 @@
 
 import asyncio
 import inspect
+import sys
+import time
 import traceback
 from contextlib import AsyncExitStack
+from datetime import datetime, timezone
 from functools import partial
 from typing import Set
 
@@ -25,59 +28,94 @@ from code_puppy.messaging import (
     emit_error,
     emit_info,
     emit_success,
+    emit_warning,
     get_message_bus,
     get_session_context,
     set_session_context,
 )
 from code_puppy.tools.agent_tools import (
     AgentInvokeOutput,
+    AgentInvokeWithModelOutput,
     _generate_session_hash_suffix,
     _load_session_history,
     _sanitize_for_session_id,
     _save_session_history,
     _validate_session_id,
 )
-from code_puppy.pydantic_compat import history_processor_kwargs
 from code_puppy.tools.common import generate_group_id
 from code_puppy.tools.subagent_context import (
+    get_conversation_root_id,
     get_subagent_chain,
     get_subagent_depth,
     get_subagent_model_name,
     subagent_context,
 )
+from code_puppy.tools.subagent_usage_metrics import (
+    _safe_usage_metrics,
+    build_invoke_output,
+)
 
 # Set to track active subagent invocation tasks
 _active_subagent_tasks: Set[asyncio.Task] = set()
 
+# Records of sub-agents interrupted by cancellation, drained into the parent
+# agent's message history at the next run start so the model learns a delegated
+# run was stopped and where to resume it. Populated on the event loop (the
+# cancel raises inside the coroutine), drained on the same loop -- a plain list
+# is safe. Both foreground ``invoke_agent`` and detached ``/fork`` share
+# ``_invoke_agent_impl``, so this single seam covers both.
+_interrupted_subagents: list[dict] = []
+
+
+def record_interrupted_subagent(
+    *, agent_name: str, session_id: str, saved_count: int | None
+) -> None:
+    """Remember that ``agent_name``'s session was interrupted."""
+    _interrupted_subagents.append(
+        {
+            "agent_name": agent_name,
+            "session_id": session_id,
+            "saved_count": saved_count,
+        }
+    )
+
+
+def drain_interrupted_subagents() -> list[dict]:
+    """Return and clear all pending interrupted-subagent records."""
+    drained = list(_interrupted_subagents)
+    _interrupted_subagents.clear()
+    return drained
+
 
 def _is_gpt_5_6_family(model_name: str | None) -> bool:
-    """Return whether a configured alias identifies a GPT-5.6 model."""
-    normalized = str(model_name or "").strip().lower()
-    return "gpt-5.6" in normalized
+    """Return whether a runtime model alias belongs to the GPT-5.6 family."""
+    if not model_name:
+        return False
+    return "gpt-5.6" in model_name.lower()
 
 
 def _subagent_recursion_error(agent_name: str) -> str | None:
-    """Return a blocking error when another child would exceed safe depth."""
+    """Return the first recursion-policy failure for a proposed child."""
     attempted_depth = get_subagent_depth() + 1
     generic_limit = get_subagent_recursion_limit()
     if attempted_depth > generic_limit:
         return (
-            f"Cannot invoke sub-agent '{agent_name}': attempted depth "
-            f"{attempted_depth} exceeds configured limit {generic_limit}."
+            f"Cannot invoke '{agent_name}': attempted depth {attempted_depth} "
+            f"exceeds configured limit {generic_limit}."
         )
 
     caller_model = get_subagent_model_name()
     gpt_5_6_limit = get_subagent_recursion_limit_gpt_5_6()
     if _is_gpt_5_6_family(caller_model) and attempted_depth > gpt_5_6_limit:
         return (
-            f"Cannot invoke sub-agent '{agent_name}': GPT-5.6 caller would reach "
-            f"depth {attempted_depth}, above its configured limit {gpt_5_6_limit}."
+            f"Cannot invoke '{agent_name}': GPT-5.6 caller would create depth "
+            f"{attempted_depth}, exceeding its limit {gpt_5_6_limit}."
         )
     return None
 
 
 def _subagent_identity_prompt(agent_name: str) -> str:
-    """Build explicit child identity and anti-recursion instructions."""
+    """Build explicit nesting context for the child agent's system prompt."""
     depth = get_subagent_depth() + 1
     limit = get_subagent_recursion_limit()
     chain = " -> ".join(("main agent", *get_subagent_chain(), agent_name))
@@ -89,10 +127,57 @@ You are the sub-agent `{agent_name}`, not the main agent. Your nesting depth is
 sub-agent depth is {limit}; {remaining} deeper level(s) remain.
 
 Complete your assigned task directly. NEVER invoke yourself, an agent already in
-the invocation chain, or another agent merely to repeat or continue your role.
+the invocation chain, or another agent merely to repeat/continue your own role.
 Default to no further delegation. If delegation is truly essential, invoke at
-most one child for a narrowly scoped task, tell that child to finish directly
-without further delegation, and then complete your own task."""
+most one child level for a narrowly scoped task, tell that child to complete the
+work directly without further delegation, then finish the task yourself. Do not
+create recursive, cyclic, or open-ended agent chains."""
+
+
+def _contains_cancellation(exc: BaseException) -> bool:
+    """True if ``exc`` is a cancellation, including one nested in a group.
+
+    Async teardown (e.g. ``AsyncExitStack``) can wrap ``CancelledError`` in a
+    ``BaseExceptionGroup``. Such a shape is still an interruption, not a crash,
+    so it must follow the cancellation path rather than the failure path.
+    """
+    if isinstance(exc, asyncio.CancelledError):
+        return True
+    if isinstance(exc, BaseExceptionGroup):
+        return any(_contains_cancellation(inner) for inner in exc.exceptions)
+    return False
+
+
+def _save_partial_session(
+    *,
+    agent_config,
+    session_id: str,
+    agent_name: str,
+    baseline_count: int,
+    initial_prompt: str | None,
+) -> int | None:
+    """Persist any progress made before an interruption or crash.
+
+    The history processor keeps ``agent_config._message_history`` in sync with
+    each completed turn, so this captures every committed turn up to the exit
+    point. Best-effort: a save failure must never mask the original error, so
+    anything the save itself raises is swallowed.
+
+    Returns the saved message count, or ``None`` if nothing was persisted.
+    """
+    try:
+        partial_history = agent_config.get_message_history() if agent_config else []
+        if partial_history and len(partial_history) > baseline_count:
+            _save_session_history(
+                session_id=session_id,
+                message_history=partial_history,
+                agent_name=agent_name,
+                initial_prompt=initial_prompt,
+            )
+            return len(partial_history)
+    except Exception:
+        pass
+    return None
 
 
 async def _invoke_agent_impl(
@@ -101,19 +186,30 @@ async def _invoke_agent_impl(
     prompt: str,
     session_id: str | None = None,
     model_name: str | None = None,
+    emit_response_message: bool = True,
+    include_usage_metrics: bool = False,
 ) -> AgentInvokeOutput:
-    """Invoke a sub-agent, optionally with an explicit temporary model override."""
+    """Invoke a sub-agent, optionally suppressing its standard response message.
+
+    ``include_usage_metrics`` is set by ``invoke_agent_with_model`` only; it
+    gates BOTH the returned type (``AgentInvokeWithModelOutput`` vs the plain
+    ``AgentInvokeOutput``) and whether any timing/usage instrumentation runs
+    at all, so ``invoke_agent`` callers see zero behavioral or performance
+    change from before this instrumentation existed.
+    """
     from code_puppy.agents.agent_manager import load_agent
 
     group_id = generate_group_id("invoke_agent", agent_name)
-    recursion_error = _subagent_recursion_error(agent_name)
-    if recursion_error:
-        emit_error(recursion_error, message_group=group_id)
-        return AgentInvokeOutput(
+    error = _subagent_recursion_error(agent_name)
+
+    if error:
+        emit_error(error, message_group=group_id)
+        return build_invoke_output(
+            include_usage_metrics=include_usage_metrics,
             response=None,
             agent_name=agent_name,
             model_name=model_name,
-            error=recursion_error,
+            error=error,
         )
 
     # Validate user-provided session_id if given
@@ -123,7 +219,8 @@ async def _invoke_agent_impl(
         except ValueError as e:
             # Return error immediately if session_id is invalid
             emit_error(str(e), message_group=group_id)
-            return AgentInvokeOutput(
+            return build_invoke_output(
+                include_usage_metrics=include_usage_metrics,
                 response=None,
                 agent_name=agent_name,
                 model_name=model_name,
@@ -179,13 +276,12 @@ async def _invoke_agent_impl(
     previous_session_id = get_session_context()
     set_session_context(session_id)
 
-    # Set browser session for browser tools (qa-kitten, etc.)
-    # This allows parallel agent invocations to each have their own browser
-    from code_puppy.tools.browser.browser_manager import (
-        set_browser_session,
-    )
+    # Keep parallel browser agents isolated without importing Playwright on Android.
+    browser_session_token = None
+    if sys.platform != "android":
+        from code_puppy.tools.browser.browser_manager import set_browser_session
 
-    browser_session_token = set_browser_session(f"browser-{session_id}")
+        browser_session_token = set_browser_session(f"browser-{session_id}")
 
     # Bound up-front so the ``except`` block can always reach for it even
     # if load_agent() itself fails before assignment.
@@ -209,35 +305,90 @@ async def _invoke_agent_impl(
 
             # Resolve the effective model through the agent so precedence lives
             # in one place: runtime override -> pinned model -> global default.
-            effective_model_name = agent_config.get_model_name()
+            requested_model_name = agent_config.get_model_name()
             models_config = ModelFactory.load_config()
 
-            if not effective_model_name:
+            if not requested_model_name:
                 raise ValueError("No model configured for sub-agent invocation")
 
-            # Only proceed if we have a valid model configuration
-            if effective_model_name not in models_config:
-                raise ValueError(
-                    f"Model '{effective_model_name}' not found in configuration"
-                )
+            # A pinned/ambient model that has since vanished from config
+            # (removed model entry, unsupported type, missing credentials, ...)
+            # must degrade the same way the main agent does: warn and fall back
+            # to the global default (then any other configured model) instead
+            # of hard-failing the whole sub-agent invocation. See
+            # ``load_model_with_fallback`` for the exact fallback order.
+            #
+            # An EXPLICIT override (``invoke_agent_with_model``'s ``model_name``
+            # argument) is a different contract: the caller said "run this one
+            # call on exactly this model", on purpose. Silently substituting a
+            # different model there -- possibly weaker/pricier, with no forced
+            # signal beyond a once-per-conversation warning -- would violate
+            # that contract for automated callers. So a bad explicit override
+            # stays a hard, per-call failure; only the ambient/pinned path
+            # (plain ``invoke_agent``, no override) gets the graceful fallback.
+            from code_puppy.agents._builder import load_model_with_fallback
 
-            model = ModelFactory.get_model(effective_model_name, models_config)
-            if model is None:
-                raise ValueError(
-                    f"Model '{effective_model_name}' is configured but could not be "
-                    "initialized. Check credentials, provider availability, and usage "
-                    "limits for that model."
+            if model_name:
+                try:
+                    model = ModelFactory.get_model(requested_model_name, models_config)
+                    if model is None:
+                        raise ValueError(
+                            f"Model '{requested_model_name}' is configured but "
+                            "could not be initialized. Check credentials, "
+                            "provider availability, and usage limits for that "
+                            "model."
+                        )
+                except ValueError as exc:
+                    available = list(models_config.keys())
+                    available_str = (
+                        ", ".join(sorted(available))
+                        if available
+                        else "no configured models"
+                    )
+                    raise ValueError(
+                        f"Explicit model override '{requested_model_name}' is "
+                        f"unavailable: {exc} Available models: {available_str}."
+                    ) from exc
+                effective_model_name = requested_model_name
+            else:
+                model, effective_model_name = load_model_with_fallback(
+                    requested_model_name,
+                    models_config,
+                    group_id,
+                    agent_name=agent_name,
+                    # Scope the warn-once-per-conversation dedup to the
+                    # conversation's ROOT identity (a ContextVar set once at
+                    # the true top-level conversation boundary -- an ACP
+                    # session's prompt handler, or left None for the CLI's
+                    # one-conversation-per-process model) -- NOT this call's
+                    # own transient session_id, and NOT the message-bus's
+                    # get_session_context() (a shared mutable attribute with
+                    # no per-task isolation; see subagent_context.py's
+                    # docstring for why that's unsafe here). Using the root
+                    # id means:
+                    #   * concurrent conversations sharing one process (
+                    #     concurrent ACP sessions, parallel sibling tool
+                    #     calls) never share warning-dedup state, so nothing
+                    #     needs to reset it between them;
+                    #   * NESTED sub-agent invocations (A invokes B invokes
+                    #     C) all inherit the SAME root value instead of each
+                    #     level minting its own fresh id, so "once per
+                    #     conversation" holds through an entire call tree,
+                    #     not just one hop.
+                    conversation_scope=get_conversation_root_id(),
                 )
 
             # Create a temporary agent instance to avoid interfering with current agent state
             instructions = agent_config.get_full_system_prompt()
-
             instructions += f"\n\n{_subagent_identity_prompt(agent_name)}"
 
-            # Main-agent AGENTS.md rules are deliberately not injected here.
-            # Rules such as "always invoke agent X" can make X recursively
-            # invoke itself. Sub-agents receive their authored prompt plus the
-            # mandatory identity/anti-cycle block above.
+            # AGENTS.md (puppy rules) is deliberately NOT injected into
+            # sub-agents. Those files are user-facing steering for the MAIN
+            # agent; feeding them to sub-agents creates anti-patterns — e.g.
+            # a rule like "always invoke the xyz agent for abc" makes the
+            # xyz sub-agent (which has ``invoke_agent``) re-invoke itself in
+            # an infinite recursion trap. Sub-agents get only their own
+            # authored prompt + the identity note above.
 
             # NOTE: ``load_prompt`` fragments (file-permission handling, kennel
             # memory, ...) are already baked into ``get_full_system_prompt``
@@ -273,19 +424,13 @@ async def _invoke_agent_impl(
             # hits the ``_running_count > 0`` no-op fast-path.
             from code_puppy.agents._builder import autostart_bound_servers_async
             from code_puppy.config import get_value
-            from code_puppy.mcp_optional import has_mcp_support
+            from code_puppy.mcp_ import get_mcp_manager
 
             mcp_servers = []
             mcp_disabled = get_value("disable_mcp_servers")
-            if (
-                not (
-                    mcp_disabled
-                    and str(mcp_disabled).lower() in ("1", "true", "yes", "on")
-                )
-                and has_mcp_support()
+            if not (
+                mcp_disabled and str(mcp_disabled).lower() in ("1", "true", "yes", "on")
             ):
-                from code_puppy.mcp_ import get_mcp_manager
-
                 manager = get_mcp_manager()
                 bound_agent_name = getattr(agent_config, "name", None)
                 if bound_agent_name:
@@ -304,8 +449,8 @@ async def _invoke_agent_impl(
                 output_type=str,
                 retries=3,
                 toolsets=mcp_servers,
+                history_processors=[make_history_processor(agent_config)],
                 model_settings=model_settings,
-                **history_processor_kwargs(make_history_processor(agent_config)),
             )
 
             # Register the tools that the agent needs
@@ -352,7 +497,6 @@ async def _invoke_agent_impl(
             else:
                 stream_handler = partial(subagent_stream_handler, session_id=session_id)
 
-            # Wrap the run with async-local identity, model, depth, and chain tracking.
             with subagent_context(agent_name, effective_model_name):
                 run_ctxs = on_agent_run_context(
                     agent_config, temp_agent, group_id, mcp_servers
@@ -360,14 +504,60 @@ async def _invoke_agent_impl(
                 async with AsyncExitStack() as stack:
                     for cm in run_ctxs:
                         await stack.enter_async_context(cm)
-                    task = asyncio.create_task(
-                        temp_agent.run(
+                    # Wrap the model stream in streaming_retry so a transient
+                    # provider hiccup (gateway 5xx delivered as an in-band SSE
+                    # error, a dropped SSE socket, an overloaded upstream) gets
+                    # the same slow spaced-out retry the top-level agent loop
+                    # gets -- except sub-agents get their own selectable retry
+                    # profile (SUBAGENT role), honouring any per-model override,
+                    # because losing a sub-agent's accumulated work to a
+                    # transient blip is never acceptable --
+                    # instead of crashing the whole sub-agent invocation. This
+                    # path was previously the ONLY unprotected model-stream
+                    # call -- run_agent_task uses @streaming_retry, but a raw
+                    # temp_agent.run() here surfaced the 5xx straight to the REPL.
+                    from code_puppy.agents.retry_profiles import (
+                        make_streaming_retry,
+                    )
+
+                    @make_streaming_retry(
+                        "subagent",
+                        effective_model_name,
+                        # The history processor checkpoints completed steps into
+                        # agent_config._message_history in place, so a growing
+                        # history means real forward progress -> refresh the
+                        # no-progress retry budget.
+                        progress_fn=lambda: len(
+                            agent_config.get_message_history() or []
+                        ),
+                    )
+                    async def _run_subagent():
+                        # Resume from the live checkpoint, not the stale pre-run
+                        # snapshot, so a retried turn picks up completed steps
+                        # instead of redoing them (matches the main-agent loop).
+                        return await temp_agent.run(
                             prompt,
-                            message_history=message_history,
+                            message_history=agent_config.get_message_history(),
                             usage_limits=UsageLimits(request_limit=get_message_limit()),
                             event_stream_handler=stream_handler,
                         )
+
+                    # Time the full run (including streaming retries) so the
+                    # returned timestamps and duration_ms reflect honest
+                    # user-observed latency, not just a single attempt.
+                    # start_time/end_time are timezone-aware UTC ISO-8601
+                    # strings; duration_ms uses a monotonic clock so it is
+                    # immune to wall-clock adjustments during the run. This
+                    # instrumentation only runs for invoke_agent_with_model
+                    # (include_usage_metrics=True) -- invoke_agent skips it
+                    # entirely so its behavior/performance is unchanged.
+                    run_started = time.perf_counter() if include_usage_metrics else None
+                    start_time = (
+                        datetime.now(timezone.utc).isoformat()
+                        if include_usage_metrics
+                        else None
                     )
+                    task = asyncio.create_task(_run_subagent())
                     _active_subagent_tasks.add(task)
 
                     try:
@@ -376,6 +566,17 @@ async def _invoke_agent_impl(
                         _active_subagent_tasks.discard(task)
                         if task.cancelled():
                             await on_agent_run_cancel(group_id)
+
+                    # Capture usage + latency as close to the run boundary as
+                    # possible, before any rendering/history/emit bookkeeping.
+                    if include_usage_metrics:
+                        end_time = datetime.now(timezone.utc).isoformat()
+                        duration_ms = (time.perf_counter() - run_started) * 1000.0
+                        usage_metrics = _safe_usage_metrics(result)
+                    else:
+                        end_time = None
+                        duration_ms = None
+                        usage_metrics = None
 
                 # Still inside subagent_context: if high mode and streaming
                 # didn't produce any text, fall back to the one-shot renderer
@@ -409,7 +610,7 @@ async def _invoke_agent_impl(
             # In high mode, skip the emit when streaming already rendered the
             # response to avoid a double-render if any future subscriber
             # starts rendering SubAgentResponseMessage.
-            if not (is_high_mode and streamed_text):
+            if emit_response_message and not (is_high_mode and streamed_text):
                 bus.emit(
                     SubAgentResponseMessage(
                         agent_name=agent_name,
@@ -424,44 +625,87 @@ async def _invoke_agent_impl(
                 f"✓ {agent_name} completed successfully", message_group=group_id
             )
 
-            return AgentInvokeOutput(
+            return build_invoke_output(
+                include_usage_metrics=include_usage_metrics,
                 response=response,
                 agent_name=agent_name,
                 session_id=session_id,
                 model_name=effective_model_name,
+                usage_metrics=usage_metrics,
+                start_time=start_time,
+                end_time=end_time,
+                duration_ms=duration_ms,
             )
 
-    except Exception as e:
+    except BaseException as e:
+        interrupted = isinstance(
+            e, (asyncio.CancelledError, KeyboardInterrupt)
+        ) or _contains_cancellation(e)
+
+        if interrupted:
+            # Ctrl-C raises CancelledError, which derives from BaseException and
+            # therefore slipped past the old ``except Exception`` save path --
+            # so an interrupted subagent lost both its partial history and its
+            # session ID. Persist progress, tell the user how to resume, then
+            # re-raise: persistence must not convert cancellation into success.
+            saved = _save_partial_session(
+                agent_config=agent_config,
+                session_id=session_id,
+                agent_name=agent_name,
+                baseline_count=len(message_history),
+                initial_prompt=prompt if is_new_session else None,
+            )
+            detail = (
+                f"{saved} message(s) saved"
+                if saved is not None
+                else "no new messages to save"
+            )
+            # Leave a durable breadcrumb for the parent agent: its awaited
+            # tool call is about to be pruned from history as a dangling
+            # (return-less) call, so without this the model would forget the
+            # delegation ever happened. Drained + injected at the next run
+            # start.
+            record_interrupted_subagent(
+                agent_name=agent_name,
+                session_id=session_id,
+                saved_count=saved,
+            )
+            emit_warning(
+                f"{agent_name} interrupted - {detail}. "
+                f"Resume: invoke_agent(session_id='{session_id}')",
+                message_group=group_id,
+            )
+            raise
+
+        if not isinstance(e, Exception):
+            # A non-cancellation BaseException (e.g. SystemExit): don't swallow
+            # it into a failure result.
+            raise
+
         # Emit clean failure summary
-        emit_error(f"✗ {agent_name} failed: {str(e)}", message_group=group_id)
+        emit_error(f"{agent_name} failed: {str(e)}", message_group=group_id)
 
         # Full traceback for debugging
         error_msg = f"Error invoking agent '{agent_name}': {traceback.format_exc()}"
         emit_error(error_msg, message_group=group_id)
 
-        # Save whatever progress the agent made before crashing. The history
-        # processor keeps ``agent_config._message_history`` in sync with each
-        # completed turn, so this captures every committed turn up to the
-        # failure point. Best-effort: a save failure must not mask the
-        # original error, so we swallow anything the save itself raises.
-        try:
-            partial_history = agent_config.get_message_history() if agent_config else []
-            if partial_history and len(partial_history) > len(message_history):
-                _save_session_history(
-                    session_id=session_id,
-                    message_history=partial_history,
-                    agent_name=agent_name,
-                    initial_prompt=prompt if is_new_session else None,
-                )
-                emit_info(
-                    f"💾 Saved partial session '{session_id}' "
-                    f"({len(partial_history)} message(s)) before error",
-                    message_group=group_id,
-                )
-        except Exception:
-            pass
+        # Save whatever progress the agent made before crashing.
+        saved = _save_partial_session(
+            agent_config=agent_config,
+            session_id=session_id,
+            agent_name=agent_name,
+            baseline_count=len(message_history),
+            initial_prompt=prompt if is_new_session else None,
+        )
+        if saved is not None:
+            emit_info(
+                f"Saved partial session '{session_id}' "
+                f"({saved} message(s)) before error",
+                message_group=group_id,
+            )
 
-        return AgentInvokeOutput(
+        return build_invoke_output(
+            include_usage_metrics=include_usage_metrics,
             response=None,
             agent_name=agent_name,
             session_id=session_id,
@@ -472,12 +716,10 @@ async def _invoke_agent_impl(
     finally:
         # Restore the previous session context
         set_session_context(previous_session_id)
-        # Reset browser session context
-        from code_puppy.tools.browser.browser_manager import (
-            _browser_session_var,
-        )
+        if browser_session_token is not None:
+            from code_puppy.tools.browser.browser_manager import _browser_session_var
 
-        _browser_session_var.reset(browser_session_token)
+            _browser_session_var.reset(browser_session_token)
 
 
 def register_invoke_agent(agent):
@@ -491,6 +733,12 @@ def register_invoke_agent(agent):
         **_ignored_kwargs,
     ) -> AgentInvokeOutput:
         """Invoke a specific sub-agent using its configured model.
+
+        Delegation safety: never invoke yourself or an agent already in the
+        invocation chain. Default to doing the work directly. If delegation is
+        essential, go at most one level deeper for one narrowly scoped task and
+        explicitly tell that child not to delegate further. Never create cyclic,
+        recursive, or open-ended delegation chains.
 
         Args:
             agent_name: Name of the sub-agent to invoke.
@@ -532,12 +780,15 @@ def register_invoke_agent_with_model(agent):
         prompt: str,
         model_name: str,
         session_id: str | None = None,
-    ) -> AgentInvokeOutput:
+    ) -> AgentInvokeWithModelOutput:
         """Invoke a sub-agent with an explicit one-call model override.
 
         Use this only when a model override is intentionally required. For
         normal delegation, use invoke_agent so the sub-agent's configured model
-        is respected.
+        is respected. Never invoke yourself or an agent already in the invocation
+        chain. Default to doing the work directly; if delegation is essential,
+        go at most one level deeper for one narrowly scoped task, tell that child
+        not to delegate further, and never create recursive or cyclic chains.
 
         Args:
             agent_name: Name of the sub-agent to invoke.
@@ -546,15 +797,22 @@ def register_invoke_agent_with_model(agent):
             session_id: Optional kebab-case session id for continuing memory.
 
         Returns:
-            AgentInvokeOutput: Contains response, agent_name, session_id,
-            effective model_name, and error fields.
+            AgentInvokeWithModelOutput: Contains response, agent_name,
+            session_id, effective model_name, and error fields. On a
+            successful run it also reports per-run token usage (non-cached
+            input_tokens, cache_read_input_tokens, cache_creation_input_tokens,
+            output_tokens, total_tokens, num_requests) and timing
+            (start_time/end_time as UTC ISO-8601 strings plus duration_ms);
+            those fields are None on any error path. This extra usage/timing
+            reporting is scoped to invoke_agent_with_model only -- invoke_agent
+            is unaffected.
         """
         normalized_model_name = model_name.strip()
         if not normalized_model_name:
             group_id = generate_group_id("invoke_agent", agent_name)
             error_msg = "model_name cannot be empty"
             emit_error(error_msg, message_group=group_id)
-            return AgentInvokeOutput(
+            return AgentInvokeWithModelOutput(
                 response=None,
                 agent_name=agent_name,
                 session_id=session_id,
@@ -567,6 +825,7 @@ def register_invoke_agent_with_model(agent):
             prompt=prompt,
             session_id=session_id,
             model_name=normalized_model_name,
+            include_usage_metrics=True,
         )
 
     return invoke_agent_with_model

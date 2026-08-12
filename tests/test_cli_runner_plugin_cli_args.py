@@ -21,7 +21,7 @@ class TestPluginCliArgsMain:
         def add_args(parser):
             parser.add_argument("--bark-report", action="store_true")
 
-        async def handle_args(args):
+        def handle_args(args):
             seen["bark_report"] = args.bark_report
             return {"handled": True, "exit_code": 17}
 

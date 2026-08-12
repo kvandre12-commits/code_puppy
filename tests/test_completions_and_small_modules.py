@@ -27,31 +27,22 @@ class TestLoadCatalogSkillIds:
     def test_success(self):
         from code_puppy.command_line.skills_completion import load_catalog_skill_ids
 
-        mock_entry = MagicMock()
-        mock_entry.id = "skill-1"
-        mock_catalog = MagicMock()
-        mock_catalog.get_all.return_value = [mock_entry]
-        mock_module = MagicMock()
-        mock_module.catalog = mock_catalog
-
-        import sys
-
-        with patch.dict(
-            sys.modules, {"code_puppy.plugins.agent_skills.skill_catalog": mock_module}
+        provider = MagicMock()
+        provider.get_catalog_skill_ids.return_value = ["skill-1"]
+        with patch(
+            "code_puppy.command_line.skills_completion.get_skill_provider",
+            return_value=provider,
         ):
-            result = load_catalog_skill_ids()
-        assert result == ["skill-1"]
+            assert load_catalog_skill_ids() == ["skill-1"]
 
     def test_exception(self):
-        import sys
-
         from code_puppy.command_line.skills_completion import load_catalog_skill_ids
 
-        with patch.dict(
-            sys.modules, {"code_puppy.plugins.agent_skills.skill_catalog": None}
+        with patch(
+            "code_puppy.command_line.skills_completion.get_skill_provider",
+            side_effect=RuntimeError("boom"),
         ):
-            result = load_catalog_skill_ids()
-        assert result == []
+            assert load_catalog_skill_ids() == []
 
 
 class TestSkillsCompleterGetCompletions:
@@ -261,6 +252,35 @@ class TestModelSwitching:
         agent.get_model_name.side_effect = Exception("fail")
         assert _get_effective_agent_model(agent) is None
 
+    def test_refresh_context_status_uses_effective_model_capacity(self):
+        from code_puppy.model_switching import _refresh_context_status
+
+        agent = MagicMock()
+        agent._get_model_context_length.return_value = 1_050_000
+        agent.get_message_history.return_value = ["first", "second"]
+        agent.estimate_tokens_for_message.side_effect = [20_000, 10_000]
+        agent._estimate_context_overhead.return_value = 2_000
+
+        with patch(
+            "code_puppy.messaging.spinner.update_spinner_context"
+        ) as update_status:
+            _refresh_context_status(agent)
+
+        update_status.assert_called_once_with("32k/1.1M tokens (3%)")
+
+    def test_refresh_context_status_clears_stale_value_on_failure(self):
+        from code_puppy.model_switching import _refresh_context_status
+
+        agent = MagicMock()
+        agent._get_model_context_length.side_effect = RuntimeError("missing config")
+
+        with patch(
+            "code_puppy.messaging.spinner.update_spinner_context"
+        ) as update_status:
+            _refresh_context_status(agent)
+
+        update_status.assert_called_once_with("")
+
     def _run(self, model_name, agent=None):
         """Helper to call set_model_and_reload_agent with proper patches."""
         from code_puppy.model_switching import set_model_and_reload_agent
@@ -294,6 +314,13 @@ class TestModelSwitching:
         self._run("model-x", agent=agent)
         agent.refresh_config.assert_called_once()
         agent.reload_code_generation_agent.assert_called_once()
+
+    def test_reload_refreshes_context_status(self):
+        agent = MagicMock()
+        agent.get_model_name.return_value = "model-x"
+        with patch("code_puppy.model_switching._refresh_context_status") as refresh:
+            self._run("model-x", agent=agent)
+        refresh.assert_called_once_with(agent)
 
     def test_refresh_config_exception_nonfatal(self):
         agent = MagicMock()
@@ -361,9 +388,9 @@ class TestMarkdownPatches:
         from code_puppy.messaging import markdown_patches
 
         markdown_patches._patched = False
-        markdown_patches.patch_markdown_headings()
+        markdown_patches.patch_markdown()
         assert markdown_patches._patched is True
-        markdown_patches.patch_markdown_headings()  # no-op
+        markdown_patches.patch_markdown()  # no-op
         assert markdown_patches._patched is True
 
 

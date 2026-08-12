@@ -4,12 +4,35 @@ This module contains @register_command decorated handlers that are automatically
 discovered by the command registry system.
 """
 
-from datetime import datetime
+import logging
 from pathlib import Path
 
 from code_puppy.command_line.command_registry import register_command
-from code_puppy.config import CONTEXTS_DIR
-from code_puppy.session_storage import list_sessions, load_session, save_session
+from code_puppy.config import AUTOSAVE_DIR
+from code_puppy.i18n import t
+from code_puppy.session_storage import list_sessions, load_session
+
+logger = logging.getLogger(__name__)
+
+
+def _parse_quick_resume_target(command: str) -> str:
+    """Extract the optional PATH arg from a ``/quick-resume`` command string.
+
+    OS-agnostic: splits off only the command word and keeps the remainder
+    verbatim so Windows paths (``C:\\Users\\...``) retain their backslashes --
+    ``shlex`` POSIX mode would silently strip them. A single pair of matching
+    outer quotes (used for paths containing spaces) is removed on every OS.
+    Returns ``"."`` (current directory) when no path was given.
+    """
+    parts = command.split(maxsplit=1)
+    target_path = parts[1].strip() if len(parts) > 1 else "."
+    if (
+        len(target_path) >= 2
+        and target_path[0] in ("'", '"')
+        and target_path[-1] == target_path[0]
+    ):
+        target_path = target_path[1:-1]
+    return target_path or "."
 
 
 # Import get_commands_help from command_handler to avoid circular imports
@@ -41,27 +64,28 @@ def get_commands_help():
 def handle_session_command(command: str) -> bool:
     """Handle /session command."""
     from code_puppy.config import (
-        AUTOSAVE_DIR,
-        get_current_autosave_id,
-        get_current_autosave_session_name,
-        rotate_autosave_id,
+        get_current_session_name,
+        rotate_session_name,
     )
     from code_puppy.messaging import emit_info, emit_success, emit_warning
 
     tokens = command.split()
 
     if len(tokens) == 1 or tokens[1] == "id":
-        sid = get_current_autosave_id()
+        session_name = get_current_session_name()
         emit_info(
-            f"[bold magenta]Autosave Session[/bold magenta]: {sid}\n"
-            f"Files prefix: {Path(AUTOSAVE_DIR) / get_current_autosave_session_name()}"
+            t(
+                "cmd.session.info",
+                name=session_name,
+                prefix=str(Path(AUTOSAVE_DIR) / session_name),
+            )
         )
         return True
     if tokens[1] == "new":
-        new_sid = rotate_autosave_id()
-        emit_success(f"New autosave session id: {new_sid}")
+        new_name = rotate_session_name()
+        emit_success(t("cmd.session.new", name=new_name))
         return True
-    emit_warning("Usage: /session [id|new]")
+    emit_warning(t("cmd.session.usage"))
     return True
 
 
@@ -85,6 +109,7 @@ def handle_session_command(command: str) -> bool:
 )
 def handle_clear_command(command: str) -> bool:
     """Clear conversation history and rotate autosave session."""
+    from code_puppy.agents._builder import reset_model_fallback_warnings
     from code_puppy.agents.agent_manager import get_current_agent
     from code_puppy.command_line.clipboard import get_clipboard_manager
     from code_puppy.config import finalize_autosave_session
@@ -93,16 +118,19 @@ def handle_clear_command(command: str) -> bool:
     agent = get_current_agent()
     new_session_id = finalize_autosave_session()
     agent.clear_message_history()
-    emit_warning("Conversation history cleared!")
-    emit_system_message("The agent will not remember previous interactions.")
-    emit_info(f"Auto-save session rotated to: {new_session_id}")
+    # New conversation: a stale pinned-model warning deserves to resurface
+    # rather than staying silenced from the previous conversation forever.
+    reset_model_fallback_warnings()
+    emit_warning(t("cmd.clear.cleared"))
+    emit_system_message(t("cmd.clear.agent_notice"))
+    emit_info(t("cmd.clear.session_rotated", id=new_session_id))
 
     # Also clear pending clipboard images so they don't leak into the next turn
     clipboard_manager = get_clipboard_manager()
     clipboard_count = clipboard_manager.get_pending_count()
     clipboard_manager.clear_pending()
     if clipboard_count > 0:
-        emit_info(f"Cleared {clipboard_count} pending clipboard image(s)")
+        emit_info(t("cmd.clear.clipboard_cleared", count=clipboard_count))
     return True
 
 
@@ -119,10 +147,19 @@ def handle_compact_command(command: str) -> bool:
     from code_puppy.messaging import emit_error, emit_info, emit_success, emit_warning
 
     try:
+        from code_puppy.messaging.run_ui import is_run_active
+
+        if is_run_active():
+            from code_puppy.messaging.pause_controller import get_pause_controller
+
+            get_pause_controller().request_compaction()
+            emit_info(t("cmd.compact.queued"))
+            return True
+
         agent = get_current_agent()
         history = agent.get_message_history()
         if not history:
-            emit_warning("No history to compact yet. Ask me something first!")
+            emit_warning(t("cmd.compact.no_history"))
             return True
 
         current_agent = get_current_agent()
@@ -132,7 +169,12 @@ def handle_compact_command(command: str) -> bool:
         compaction_strategy = get_compaction_strategy()
         protected_tokens = get_protected_token_count()
         emit_info(
-            f"🤔 Compacting {len(history)} messages using {compaction_strategy} strategy... (~{before_tokens} tokens)"
+            t(
+                "cmd.compact.compacting",
+                count=len(history),
+                strategy=compaction_strategy,
+                tokens=f"{before_tokens:,}",
+            )
         )
 
         current_agent = get_current_agent()
@@ -148,7 +190,7 @@ def handle_compact_command(command: str) -> bool:
             )
 
         if not compacted:
-            emit_error("Compaction failed. History unchanged.")
+            emit_error(t("cmd.compact.failed"))
             return True
 
         agent.set_message_history(compacted)
@@ -163,18 +205,29 @@ def handle_compact_command(command: str) -> bool:
             else 0
         )
 
-        strategy_info = (
-            f"using {compaction_strategy} strategy"
+        # Whole-sentence keys per strategy so translators can reorder or
+        # inflect the verb naturally. Do NOT reintroduce a shared success
+        # template with a ``{strategy_info}`` fragment -- fragment gluing
+        # doesn't agree grammatically outside English.
+        success_key = (
+            "cmd.compact.success.truncation"
             if compaction_strategy == "truncation"
-            else "via summarization"
+            else "cmd.compact.success.summarization"
         )
         emit_success(
-            f"✨ Done! History: {len(history)} → {len(compacted)} messages {strategy_info}\n"
-            f"🏦 Tokens: {before_tokens:,} → {after_tokens:,} ({reduction_pct:.1f}% reduction)"
+            t(
+                success_key,
+                before_count=len(history),
+                after_count=len(compacted),
+                strategy=compaction_strategy,
+                before_tokens=f"{before_tokens:,}",
+                after_tokens=f"{after_tokens:,}",
+                reduction_pct=f"{reduction_pct:.1f}",
+            )
         )
         return True
     except Exception as e:
-        emit_error(f"/compact error: {e}")
+        emit_error(t("cmd.compact.error", error=e))
         return True
 
 
@@ -191,28 +244,26 @@ def handle_truncate_command(command: str) -> bool:
 
     tokens = command.split()
     if len(tokens) != 2:
-        emit_error("Usage: /truncate <N> (where N is the number of messages to keep)")
+        emit_error(t("cmd.truncate.usage"))
         return True
 
     try:
         n = int(tokens[1])
         if n < 1:
-            emit_error("N must be a positive integer")
+            emit_error(t("cmd.truncate.must_be_positive"))
             return True
     except ValueError:
-        emit_error("N must be a valid integer")
+        emit_error(t("cmd.truncate.invalid_int"))
         return True
 
     agent = get_current_agent()
     history = agent.get_message_history()
     if not history:
-        emit_warning("No history to truncate yet. Ask me something first!")
+        emit_warning(t("cmd.truncate.no_history"))
         return True
 
     if len(history) <= n:
-        emit_info(
-            f"History already has {len(history)} messages, which is <= {n}. Nothing to truncate."
-        )
+        emit_info(t("cmd.truncate.already_short", current=len(history), n=n))
         return True
 
     # Always keep the first message (system message) and then keep the N-1 most recent messages
@@ -220,7 +271,12 @@ def handle_truncate_command(command: str) -> bool:
 
     agent.set_message_history(truncated_history)
     emit_success(
-        f"Truncated message history from {len(history)} to {len(truncated_history)} messages (keeping system message and {n - 1} most recent)"
+        t(
+            "cmd.truncate.success",
+            before=len(history),
+            after=len(truncated_history),
+            kept=n - 1,
+        )
     )
     return True
 
@@ -239,6 +295,79 @@ def handle_autosave_load_command(command: str) -> bool:
 
 
 @register_command(
+    name="quick-resume",
+    description="Load the latest autosave for a directory/path and git branch",
+    usage="/quick-resume [path]",
+    hidden_aliases=["qr"],
+    category="session",
+    detailed_help="""
+    Resume the latest autosaved session for a path (defaults to the current
+    directory), scoped to the nearest git worktree root and branch when
+    available.
+
+    If the path is not inside a git repository (or git is unavailable), this
+    gracefully falls back to the relevant directory/workspace scope.
+    """,
+)
+def handle_quick_resume_command(command: str) -> bool:
+    """Load the latest autosave for this directory/path + branch into the agent."""
+    from code_puppy.agents.agent_manager import get_current_agent
+    from code_puppy.config import (
+        format_quick_resume_scope,
+        get_quick_resume_location,
+        resolve_quick_resume_pickle,
+        set_current_autosave_from_session_name,
+    )
+    from code_puppy.messaging import emit_error, emit_info, emit_success
+
+    # Parse an optional path argument (OS-agnostic; preserves Windows
+    # backslashes -- see _parse_quick_resume_target).
+    target_path = _parse_quick_resume_target(command)
+
+    # Diagnostic identifies the scope without leaking full local paths.
+    cwd, branch = get_quick_resume_location(target_path)
+    emit_info(
+        t("cmd.quick_resume.searching", scope=format_quick_resume_scope(cwd, branch))
+    )
+
+    quick_resume_pickle = resolve_quick_resume_pickle(target_path)
+    if not quick_resume_pickle:
+        emit_info(t("cmd.quick_resume.no_session"))
+        return True
+
+    session_path = Path(quick_resume_pickle)
+    session_name = session_path.stem
+
+    try:
+        history = load_session(session_name, session_path.parent)
+    except FileNotFoundError:
+        logger.warning("Quick-resume session file not found: %s", session_path)
+        emit_error(t("cmd.quick_resume.file_not_found"))
+        return True
+    except Exception:
+        logger.exception("Failed to quick-resume from %s", session_path)
+        emit_error(t("cmd.quick_resume.failed"))
+        return True
+
+    agent = get_current_agent()
+    agent.set_message_history(history)
+    set_current_autosave_from_session_name(session_name)
+    total_tokens = sum(agent.estimate_tokens_for_message(m) for m in history)
+
+    emit_success(t("cmd.quick_resume.success", count=len(history), tokens=total_tokens))
+
+    # Best-effort history preview; failure must not abort a successful resume.
+    try:
+        from code_puppy.command_line.autosave_menu import display_resumed_history
+
+        display_resumed_history(history)
+    except Exception:
+        logger.debug("Unable to display quick-resume history preview", exc_info=True)
+
+    return True
+
+
+@register_command(
     name="dump_context",
     description="Save current message history to file",
     usage="/dump_context <name>",
@@ -247,37 +376,45 @@ def handle_autosave_load_command(command: str) -> bool:
 def handle_dump_context_command(command: str) -> bool:
     """Dump message history to a file."""
     from code_puppy.agents.agent_manager import get_current_agent
-    from code_puppy.messaging import emit_error, emit_success, emit_warning
+    from code_puppy.messaging import emit_error, emit_warning
+    from code_puppy.session_lifecycle import (
+        is_valid_session_name,
+        persist_named_session,
+    )
 
     tokens = command.split()
     if len(tokens) != 2:
-        emit_warning("Usage: /dump_context <session_name>")
+        emit_warning(t("cmd.dump_context.usage"))
         return True
 
     session_name = tokens[1]
-    agent = get_current_agent()
-    history = agent.get_message_history()
+    if not is_valid_session_name(session_name, allow_reserved_prefix=False):
+        emit_error(t("cmd.dump_context.invalid_name", name=repr(session_name)))
+        return True
 
-    if not history:
-        emit_warning("No message history to dump!")
+    agent = get_current_agent()
+    if not agent.get_message_history():
+        emit_warning(t("cmd.dump_context.no_history"))
         return True
 
     try:
-        metadata = save_session(
-            history=history,
-            session_name=session_name,
-            base_dir=Path(CONTEXTS_DIR),
-            timestamp=datetime.now().isoformat(),
-            token_estimator=agent.estimate_tokens_for_message,
-        )
-        emit_success(
-            f"✅ Context saved: {metadata.message_count} messages ({metadata.total_tokens} tokens)\n"
-            f"📁 Files: {metadata.pickle_path}, {metadata.metadata_path}"
+        # The user-facing success line is preserved verbatim via
+        # ``success_message_key`` so /dump_context UX doesn't regress.
+        # The silent save-back paths (``-r``, periodic autosave) omit the
+        # key and stay quiet. NOTE: we pass a *catalog key*, not raw text --
+        # ``t()`` is the only safe interpolator for catalog strings
+        # (see docs/I18N.md); routing catalog text through ``str.format``
+        # is forbidden.
+        persist_named_session(
+            agent,
+            session_name,
+            base_dir=Path(AUTOSAVE_DIR),
+            success_message_key="cmd.dump_context.success",
         )
         return True
 
     except Exception as exc:
-        emit_error(f"Failed to dump context: {exc}")
+        emit_error(t("cmd.dump_context.failed", error=exc))
         return True
 
 
@@ -289,53 +426,72 @@ def handle_dump_context_command(command: str) -> bool:
 )
 def handle_load_context_command(command: str) -> bool:
     """Load message history from a file."""
-    from rich.text import Text
-
     from code_puppy.agents.agent_manager import get_current_agent
-    from code_puppy.config import rotate_autosave_id
+    from code_puppy.config import rotate_session_name
     from code_puppy.messaging import emit_error, emit_info, emit_success, emit_warning
 
     tokens = command.split()
     if len(tokens) != 2:
-        emit_warning("Usage: /load_context <session_name>")
+        emit_warning(t("cmd.load_context.usage"))
         return True
 
     session_name = tokens[1]
-    contexts_dir = Path(CONTEXTS_DIR)
-    session_path = contexts_dir / f"{session_name}.pkl"
+    sessions_dir = Path(AUTOSAVE_DIR)
+    session_path = sessions_dir / f"{session_name}.pkl"
 
     try:
-        history = load_session(session_name, contexts_dir)
+        history = load_session(session_name, sessions_dir)
     except FileNotFoundError:
-        emit_error(f"Context file not found: {session_path}")
-        available = list_sessions(contexts_dir)
+        emit_error(t("cmd.load_context.not_found", path=session_path))
+        available = list_sessions(sessions_dir)
         if available:
-            emit_info(f"Available contexts: {', '.join(available)}")
+            emit_info(t("cmd.load_context.available", contexts=", ".join(available)))
         return True
     except Exception as exc:
-        emit_error(f"Failed to load context: {exc}")
+        emit_error(t("cmd.load_context.failed", error=exc))
         return True
 
     agent = get_current_agent()
     agent.set_message_history(history)
     total_tokens = sum(agent.estimate_tokens_for_message(m) for m in history)
 
-    # Rotate autosave id to avoid overwriting any existing autosave
-    try:
-        new_id = rotate_autosave_id()
-        autosave_info = Text.from_markup(
-            f"\n[dim]Autosave session rotated to: {new_id}[/dim]"
-        )
-    except Exception:
-        autosave_info = Text("")
+    # Rotate the singleton to a fresh ``auto_session_<TS>`` so subsequent
+    # autosaves do NOT overwrite the loaded snapshot. This asymmetry with
+    # ``-r NAME`` (which pins and saves back in place) is INTENTIONAL --
+    # the two verbs encode two different intents:
+    #
+    #   * ``/dump_context NAME`` + ``/load_context NAME`` are a snapshot
+    #     pair (think ``pg_dump`` / ``pg_restore``, save games, git
+    #     stash). The named file is a stable reference point; loading
+    #     it lets you inspect / branch from it without dirtying the
+    #     original.
+    #   * ``-r NAME`` / ``--resume NAME`` is a continuation verb (pick
+    #     up where you left off). That path pins and saves back.
+    #
+    # Origin: commit ``cc04629b`` (Mike Pfaffenberger, 2025-10-11)
+    # introduced this rotate-on-load behavior as a deliberate design
+    # choice; the commit message explicitly says "Automatically rotate
+    # session ID when loading saved context to prevent overwrites." The
+    # ``-r`` flag was added 4 months later (commit ``92bb0f90``) and
+    # the asymmetry was preserved -- on purpose. Do NOT "unify" these
+    # two paths in the name of symmetry; you'd be deleting the encoded
+    # distinction between snapshot-load and continuation-resume.
+    #
+    # If a user wants to continue working on the loaded snapshot in
+    # place, the explicit move is ``/load_context NAME`` followed by
+    # ``/dump_context NAME`` later -- or relaunch via ``-r NAME``.
+    new_autosave_id = rotate_session_name()
 
-    # Build the success message with proper Text concatenation
-    success_msg = Text(
-        f"✅ Context loaded: {len(history)} messages ({total_tokens} tokens)\n"
-        f"📁 From: {session_path}"
+    emit_success(
+        t(
+            "cmd.load_context.success",
+            count=len(history),
+            tokens=total_tokens,
+            path=session_path,
+            session_id=new_autosave_id,
+            file=session_path.name,
+        )
     )
-    success_msg.append_text(autosave_info)
-    emit_success(success_msg)
 
     # Display recent message history for context
     from code_puppy.command_line.autosave_menu import display_resumed_history

@@ -1,6 +1,15 @@
 """Tests for code_puppy/command_line/onboarding_slides.py"""
 
+import sys
+from unittest.mock import patch
+
+import pytest
+
 MODULE = "code_puppy.command_line.onboarding_slides"
+
+
+def _plain(content):
+    return "".join(text for _, text in content)
 
 
 class TestModelOptions:
@@ -22,19 +31,31 @@ class TestGetNavFooter:
     def test_returns_string(self):
         from code_puppy.command_line.onboarding_slides import get_nav_footer
 
-        result = get_nav_footer()
-        assert isinstance(result, str)
+        content = get_nav_footer()
+        result = _plain(content)
+        assert isinstance(content, list)
         assert "Next" in result
         assert "Back" in result
         assert "ESC" in result
 
 
 class TestGetGradientBanner:
+    def test_android_uses_compact_banner(self, monkeypatch):
+        import code_puppy.command_line.onboarding_slides as mod
+
+        monkeypatch.setattr(sys, "platform", "android")
+        with patch("pyfiglet.figlet_format", return_value="BANNER") as figlet:
+            content = mod.get_gradient_banner()
+
+        assert _plain(content) == "BANNER"
+        figlet.assert_called_once_with("PUP", font="ansi_shadow")
+
     def test_with_pyfiglet(self):
         from code_puppy.command_line.onboarding_slides import get_gradient_banner
 
-        result = get_gradient_banner()
-        assert isinstance(result, str)
+        content = get_gradient_banner()
+        result = _plain(content)
+        assert isinstance(content, list)
         # Should contain some content
         assert len(result) > 0
 
@@ -43,7 +64,8 @@ class TestGetGradientBanner:
         import code_puppy.command_line.onboarding_slides as mod
 
         # pyfiglet is available in this env, so normal path works
-        result = mod.get_gradient_banner()
+        content = mod.get_gradient_banner()
+        result = _plain(content)
         assert len(result) > 0
 
 
@@ -51,8 +73,9 @@ class TestSlideWelcome:
     def test_returns_string(self):
         from code_puppy.command_line.onboarding_slides import slide_welcome
 
-        result = slide_welcome()
-        assert isinstance(result, str)
+        content = slide_welcome()
+        result = _plain(content)
+        assert isinstance(content, list)
         assert "Welcome" in result
         assert "setup" in result.lower() or "quick" in result.lower()
 
@@ -68,7 +91,8 @@ class TestSlideModels:
             ("openrouter", "OpenRouter"),
             ("skip", "Skip"),
         ]
-        result = slide_models(0, options)
+        content = slide_models(0, options)
+        result = _plain(content)
         assert "ChatGPT" in result
         assert "▶" in result  # selected indicator
 
@@ -76,41 +100,46 @@ class TestSlideModels:
         from code_puppy.command_line.onboarding_slides import slide_models
 
         options = [("chatgpt", "ChatGPT"), ("claude", "Claude")]
-        result = slide_models(1, options)
+        content = slide_models(1, options)
+        result = _plain(content)
         assert "Claude" in result
 
-    def test_api_keys_context(self):
+    @pytest.mark.parametrize(
+        "option,display,expected",
+        [
+            ("api_keys", "API Keys", "API Key"),
+            ("openrouter", "OpenRouter", "OpenRouter"),
+        ],
+        ids=["api_keys", "openrouter"],
+    )
+    def test_provider_context(self, option, display, expected):
         from code_puppy.command_line.onboarding_slides import slide_models
 
-        options = [("api_keys", "API Keys")]
-        result = slide_models(0, options)
-        assert "API Key" in result
-
-    def test_openrouter_context(self):
-        from code_puppy.command_line.onboarding_slides import slide_models
-
-        options = [("openrouter", "OpenRouter")]
-        result = slide_models(0, options)
-        assert "OpenRouter" in result
+        options = [(option, display)]
+        content = slide_models(0, options)
+        result = _plain(content)
+        assert expected in result
 
     def test_skip_context(self):
         from code_puppy.command_line.onboarding_slides import slide_models
 
         options = [("skip", "Skip")]
-        result = slide_models(0, options)
+        content = slide_models(0, options)
+        result = _plain(content)
         assert "later" in result.lower() or "No worries" in result
 
     def test_empty_options(self):
         from code_puppy.command_line.onboarding_slides import slide_models
 
-        result = slide_models(0, [])
-        assert isinstance(result, str)
+        content = slide_models(0, [])
+        assert isinstance(content, list)
 
     def test_chatgpt_context(self):
         from code_puppy.command_line.onboarding_slides import slide_models
 
         options = [("chatgpt", "ChatGPT Plus")]
-        result = slide_models(0, options)
+        content = slide_models(0, options)
+        result = _plain(content)
         assert "ChatGPT" in result or "OAuth" in result
 
 
@@ -118,8 +147,9 @@ class TestSlideMcp:
     def test_returns_string(self):
         from code_puppy.command_line.onboarding_slides import slide_mcp
 
-        result = slide_mcp()
-        assert isinstance(result, str)
+        content = slide_mcp()
+        result = _plain(content)
+        assert isinstance(content, list)
         assert "MCP" in result
         assert "/mcp" in result
 
@@ -128,8 +158,9 @@ class TestSlideUseCases:
     def test_returns_string(self):
         from code_puppy.command_line.onboarding_slides import slide_use_cases
 
-        result = slide_use_cases()
-        assert isinstance(result, str)
+        content = slide_use_cases()
+        result = _plain(content)
+        assert isinstance(content, list)
         assert "Planning" in result
         assert "Code Puppy" in result
 
@@ -138,20 +169,23 @@ class TestSlideDone:
     def test_without_oauth(self):
         from code_puppy.command_line.onboarding_slides import slide_done
 
-        result = slide_done(None)
-        assert isinstance(result, str)
+        content = slide_done(None)
+        result = _plain(content)
+        assert isinstance(content, list)
         assert "Ready" in result
         assert "/tutorial" in result
 
     def test_with_oauth_chatgpt(self):
         from code_puppy.command_line.onboarding_slides import slide_done
 
-        result = slide_done("chatgpt")
+        content = slide_done("chatgpt")
+        result = _plain(content)
         assert "Chatgpt" in result or "chatgpt" in result.lower()
         assert "OAuth" in result
 
     def test_with_oauth_claude(self):
         from code_puppy.command_line.onboarding_slides import slide_done
 
-        result = slide_done("claude")
+        content = slide_done("claude")
+        result = _plain(content)
         assert "Claude" in result or "claude" in result.lower()

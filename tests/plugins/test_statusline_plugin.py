@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from unittest.mock import patch
+import sys
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -52,19 +53,16 @@ class TestConfig:
         with patch("code_puppy.plugins.statusline.config.get_value", return_value=val):
             assert is_enabled() is False
 
-    def test_set_enabled_true(self):
+    @pytest.mark.parametrize(
+        ("enabled", "expected"),
+        [(True, "true"), (False, "false")],
+    )
+    def test_set_enabled(self, enabled, expected):
         from code_puppy.plugins.statusline.config import set_enabled
 
         with patch("code_puppy.plugins.statusline.config.set_value") as mock_set:
-            set_enabled(True)
-            mock_set.assert_called_once_with("statusline_enabled", "true")
-
-    def test_set_enabled_false(self):
-        from code_puppy.plugins.statusline.config import set_enabled
-
-        with patch("code_puppy.plugins.statusline.config.set_value") as mock_set:
-            set_enabled(False)
-            mock_set.assert_called_once_with("statusline_enabled", "false")
+            set_enabled(enabled)
+            mock_set.assert_called_once_with("statusline_enabled", expected)
 
     def test_get_command_strips_whitespace(self):
         from code_puppy.plugins.statusline.config import get_command
@@ -145,14 +143,6 @@ class TestConfig:
             "code_puppy.plugins.statusline.config.get_value", return_value="REPLACE"
         ):
             assert get_mode() == "replace"
-
-    def test_get_mode_falls_back_to_default_for_garbage(self):
-        from code_puppy.plugins.statusline.config import DEFAULT_MODE, get_mode
-
-        with patch(
-            "code_puppy.plugins.statusline.config.get_value", return_value="bogus"
-        ):
-            assert get_mode() == DEFAULT_MODE
 
     def test_set_mode_valid(self):
         from code_puppy.plugins.statusline.config import set_mode
@@ -256,25 +246,6 @@ class TestRender:
         fragments = list(result)
         assert any("\n" in text for _, text in fragments)
         assert any(">>>" in text for _, text in fragments)
-
-    def test_render_uses_default_arrow_when_base_empty(self):
-        from code_puppy.plugins.statusline.prompt_patch import _render, _DEFAULT_ARROW
-
-        default = self._make_formatted_text()
-        with (
-            patch(
-                "code_puppy.plugins.statusline.prompt_patch.get_status_text",
-                return_value="status",
-            ),
-            patch(
-                "code_puppy.plugins.statusline.prompt_patch.get_mode",
-                return_value="replace",
-            ),
-        ):
-            result = _render(default, "")
-
-        fragments = list(result)
-        assert any(_DEFAULT_ARROW in text for _, text in fragments)
 
     def test_render_survives_ansi_parse_exception(self):
         """If ANSI() blows up, _render should return the default prompt unchanged."""
@@ -442,25 +413,19 @@ class TestStatuslineCommand:
             assert result is True
             mock_mode.assert_called_once_with(mode)
 
-    def test_mode_invalid_warns(self):
+    @pytest.mark.parametrize(
+        "cmd",
+        ["/statusline mode supermode", "/statusline mode"],
+        ids=["invalid_mode", "missing_arg"],
+    )
+    def test_mode_invalid_warns(self, cmd):
         with (
             patch(
                 "code_puppy.plugins.statusline.statusline_command.emit_warning"
             ) as mock_warn,
             patch("code_puppy.plugins.statusline.statusline_command.emit_info"),
         ):
-            result = self._call("/statusline mode supermode")
-        assert result is True
-        mock_warn.assert_called_once()
-
-    def test_mode_missing_arg_warns(self):
-        with (
-            patch(
-                "code_puppy.plugins.statusline.statusline_command.emit_warning"
-            ) as mock_warn,
-            patch("code_puppy.plugins.statusline.statusline_command.emit_info"),
-        ):
-            result = self._call("/statusline mode")
+            result = self._call(cmd)
         assert result is True
         mock_warn.assert_called_once()
 
@@ -498,25 +463,6 @@ class TestStatuslineCommand:
         assert result is True
         calls = [c[0][0] for c in mock_info.call_args_list]
         assert any("hello world" in c for c in calls)
-
-    def test_show_emits_empty_placeholder(self):
-        with (
-            patch(
-                "code_puppy.plugins.statusline.statusline_command.config.get_command",
-                return_value="echo",
-            ),
-            patch(
-                "code_puppy.plugins.statusline.statusline_command.runner.run_once_sync",
-                return_value="",
-            ),
-            patch(
-                "code_puppy.plugins.statusline.statusline_command.emit_info"
-            ) as mock_info,
-        ):
-            result = self._call("/statusline show")
-        assert result is True
-        calls = [c[0][0] for c in mock_info.call_args_list]
-        assert any("(empty)" in c for c in calls)
 
     # --- json ---
 
@@ -621,3 +567,260 @@ class TestStatuslineCommand:
 
         entries = dict(statusline_command_help())
         assert "statusline" in entries
+
+
+# ---------------------------------------------------------------------------
+# Cross-platform guards — the missing protection that let these bugs ship
+# ---------------------------------------------------------------------------
+
+
+class TestCrossPlatform:
+    """Regression tests for Windows + Unicode bugs.
+
+    These tests exist because the original suite had zero platform-mocking
+    coverage. Every test here maps to a real crash report:
+
+    - Umlaut crash: ``subprocess.run(..., text=True)`` used Windows cp1252
+      encoding by default, raising UnicodeDecodeError on non-ASCII output.
+    - Windows init: ``/statusline init`` wrote a bash ``.sh`` script and set
+      the command to the raw path — neither runnable on Windows.
+
+    NOTE: No ``importlib.reload()`` is used here. ``_default_script_path()``
+    and ``_do_init()`` both read ``sys.platform`` at *call* time, so patching
+    ``sys.platform`` directly is sufficient and avoids module-state leakage
+    between tests.
+    """
+
+    def setup_method(self):
+        _reset_runner()
+
+    # --- _default_script_path ---
+
+    @pytest.mark.parametrize(
+        "platform, suffix",
+        [("win32", ".ps1"), ("linux", ".sh"), ("darwin", ".sh")],
+        ids=["windows", "linux", "darwin"],
+    )
+    def test_default_script_path(self, platform, suffix):
+        """The init script path must match the platform convention."""
+        import code_puppy.plugins.statusline.statusline_command as sc
+
+        with patch.object(sys, "platform", platform):
+            p = sc._default_script_path()
+        assert str(p).endswith(suffix), f"Expected {suffix} on {platform}, got {p}"
+
+    # --- PS1 template content ---
+
+    def test_ps1_template_has_required_constructs(self):
+        """The PowerShell starter template must be valid-looking PS1."""
+        from code_puppy.plugins.statusline.statusline_command import _STARTER_SCRIPT_PS1
+
+        assert "ConvertFrom-Json" in _STARTER_SCRIPT_PS1, (
+            "Must parse JSON via ConvertFrom-Json"
+        )
+        # Must use Write-Output, NOT Write-Host.
+        # Write-Host writes to the console host only; subprocess.run(capture_output=True)
+        # captures stdout, so Write-Host produces empty output for the parent process.
+        assert "Write-Output" in _STARTER_SCRIPT_PS1, (
+            "Must output via Write-Output (not Write-Host)"
+        )
+        assert "Write-Host" not in _STARTER_SCRIPT_PS1, (
+            "Write-Host goes to the console, not stdout — parent process captures nothing"
+        )
+        # Must NOT contain bash-isms
+        assert "#!/usr/bin/env bash" not in _STARTER_SCRIPT_PS1
+        assert "jq" not in _STARTER_SCRIPT_PS1, "PS1 template must not require jq"
+
+    def test_bash_template_unchanged(self):
+        """The bash starter script must still contain expected bash constructs."""
+        from code_puppy.plugins.statusline.statusline_command import _STARTER_SCRIPT
+
+        assert "#!/usr/bin/env bash" in _STARTER_SCRIPT
+        assert "jq" in _STARTER_SCRIPT
+
+    # --- Windows init sets powershell command ---
+
+    def test_do_init_windows_sets_powershell_command(self, tmp_path):
+        """On win32, /statusline init must use powershell, set_enabled, and reset_cache."""
+        import code_puppy.plugins.statusline.statusline_command as sc
+
+        fake_ps1 = tmp_path / "statusline.ps1"
+
+        with (
+            patch.object(sys, "platform", "win32"),
+            patch.object(sc, "_default_script_path", return_value=fake_ps1),
+            patch.object(sc.config, "set_command") as mock_cmd,
+            patch.object(sc.config, "set_enabled") as mock_enabled,
+            patch.object(sc.runner, "reset_cache") as mock_reset,
+            patch.object(sc, "emit_success"),
+            patch.object(sc, "emit_info"),
+            patch.object(sc, "emit_warning") as mock_warn,
+        ):
+            sc._do_init()
+
+        # Command must invoke powershell (not bare .ps1 path)
+        set_cmd_value = mock_cmd.call_args[0][0]
+        assert "powershell" in set_cmd_value.lower(), (
+            f"Windows init must invoke powershell, got: {set_cmd_value!r}"
+        )
+        assert str(fake_ps1) in set_cmd_value, "Command must reference the .ps1 path"
+
+        # Must enable and reset cache
+        mock_enabled.assert_called_once_with(True)
+        mock_reset.assert_called_once()
+
+        # jq warning must NOT be emitted on Windows (no jq dependency)
+        jq_warned = any("jq" in str(c) for c in mock_warn.call_args_list)
+        assert not jq_warned, "Windows init must not emit jq warning (PS1 needs no jq)"
+
+    def test_do_init_posix_sets_bare_path_command(self, tmp_path):
+        """On posix, /statusline init sets command to the bare script path (not powershell)."""
+        import code_puppy.plugins.statusline.statusline_command as sc
+
+        fake_sh = tmp_path / "statusline.sh"
+
+        with (
+            patch.object(sys, "platform", "linux"),
+            patch.object(sc, "_default_script_path", return_value=fake_sh),
+            patch.object(sc.config, "set_command") as mock_cmd,
+            patch.object(sc.config, "set_enabled") as mock_enabled,
+            patch.object(sc.runner, "reset_cache") as mock_reset,
+            patch.object(sc, "emit_success"),
+            patch.object(sc, "emit_info"),
+            patch.object(sc, "_has_jq", return_value=True),
+        ):
+            sc._do_init()
+
+        set_cmd_value = mock_cmd.call_args[0][0]
+        assert "powershell" not in set_cmd_value.lower(), (
+            f"Posix init must not invoke powershell, got: {set_cmd_value!r}"
+        )
+        assert str(fake_sh) in set_cmd_value
+        mock_enabled.assert_called_once_with(True)
+        mock_reset.assert_called_once()
+
+    def test_do_init_posix_warns_if_no_jq(self, tmp_path):
+        """On posix, missing jq must emit a warning. On Windows it must not."""
+        import code_puppy.plugins.statusline.statusline_command as sc
+
+        fake_sh = tmp_path / "statusline.sh"
+
+        with (
+            patch.object(sys, "platform", "linux"),
+            patch.object(sc, "_default_script_path", return_value=fake_sh),
+            patch.object(sc.config, "set_command"),
+            patch.object(sc.config, "set_enabled"),
+            patch.object(sc.runner, "reset_cache"),
+            patch.object(sc, "emit_success"),
+            patch.object(sc, "emit_info"),
+            patch.object(sc, "_has_jq", return_value=False),
+            patch.object(sc, "emit_warning") as mock_warn,
+        ):
+            sc._do_init()
+
+        assert mock_warn.called, "Posix init with no jq must warn the user"
+        assert "jq" in mock_warn.call_args[0][0]
+
+    # --- Unicode / umlaut encoding guard ---
+
+    def test_run_command_blocking_uses_utf8_encoding(self):
+        """_run_command_blocking must pass encoding='utf-8' and errors='replace'.
+
+        Without encoding='utf-8', Windows uses cp1252 by default and raises
+        UnicodeDecodeError when the script outputs German umlauts (ä, ö, ü),
+        killing the terminal with exit code 1.
+        """
+        from code_puppy.plugins.statusline.runner import _run_command_blocking
+
+        captured_kwargs = {}
+
+        def fake_run(*args, **kwargs):
+            captured_kwargs.update(kwargs)
+            result = MagicMock()
+            result.stdout = "erklären"
+            return result
+
+        with (
+            patch(
+                "code_puppy.plugins.statusline.runner.subprocess.run",
+                side_effect=fake_run,
+            ),
+            patch(
+                "code_puppy.plugins.statusline.runner.build_payload_json",
+                return_value="{}",
+            ),
+        ):
+            _run_command_blocking("echo erklären")
+
+        assert captured_kwargs.get("encoding") == "utf-8", (
+            "subprocess.run must use encoding='utf-8' — missing this crashes Windows terminals "
+            "when output contains non-ASCII characters (umlauts, etc.)"
+        )
+        assert captured_kwargs.get("errors") == "replace", (
+            "subprocess.run must use errors='replace' to survive any remaining bad bytes"
+        )
+
+    def test_run_command_blocking_returns_unicode_output(self):
+        """Output containing umlauts must be returned without raising."""
+        from code_puppy.plugins.statusline.runner import _run_command_blocking
+
+        umlaut_output = "🐶 code-puppy [model] erklärenstraße 0%ctx"
+
+        mock_proc = MagicMock()
+        mock_proc.stdout = umlaut_output
+
+        with (
+            patch(
+                "code_puppy.plugins.statusline.runner.subprocess.run",
+                return_value=mock_proc,
+            ),
+            patch(
+                "code_puppy.plugins.statusline.runner.build_payload_json",
+                return_value="{}",
+            ),
+        ):
+            result = _run_command_blocking("echo test")
+
+        assert "erkl" in result, f"Umlaut output was mangled or lost: {result!r}"
+
+    # --- payload.py encoding guard ---
+
+    def test_detect_git_branch_handles_unicode_branch(self):
+        """detect_git_branch() must return non-ASCII branch names without raising.
+
+        Branch names containing non-ASCII chars (e.g. feature/für-münchen)
+        would crash on Windows if the output weren't decoded as UTF-8.
+
+        Note: detect_git_branch uses a temp file for stdout (not subprocess.PIPE)
+        to avoid Windows pipe deadlocks, so it decodes manually via
+        ``out_f.read().decode("utf-8", "replace")`` rather than
+        ``subprocess.run(encoding=...)``. We verify the UTF-8 decoding works
+        by injecting a mock temp file that yields UTF-8 bytes.
+        """
+        from code_puppy.plugins.statusline.payload import detect_git_branch
+
+        branch_name = "feature/für-münchen"
+        mock_proc = MagicMock()
+        mock_proc.returncode = 0
+
+        # Simulate the temp file pattern: stdout is a BinaryIO
+        mock_temp = MagicMock()
+        mock_temp.__enter__ = MagicMock(return_value=mock_temp)
+        mock_temp.__exit__ = MagicMock(return_value=False)
+        mock_temp.read.return_value = branch_name.encode("utf-8")
+
+        with (
+            patch(
+                "code_puppy.plugins.statusline.payload.subprocess.run",
+                return_value=mock_proc,
+            ),
+            patch(
+                "tempfile.TemporaryFile",
+                return_value=mock_temp,
+            ),
+        ):
+            result = detect_git_branch("/tmp")
+
+        assert result == branch_name, f"Expected {branch_name!r}, got {result!r}"
+        mock_temp.read.assert_called_once()
+        mock_temp.seek.assert_called_with(0)

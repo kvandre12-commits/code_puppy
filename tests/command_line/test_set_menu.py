@@ -1,7 +1,5 @@
 """Tests for ``code_puppy.command_line.set_menu`` and the slash dispatcher.
 
-Value resolution + masking tests live in ``test_set_menu_values.py``.
-
 This file covers:
 * ``apply_setting`` validation + restart warnings + agent reload toggle
 * ``_prompt_for_value`` control flow: Cancel returns None without
@@ -34,10 +32,29 @@ from code_puppy.command_line.set_menu import (
     _record_reset,
 )
 from code_puppy.command_line.set_menu_settings import (
+    SETTINGS_CATEGORIES,
     Setting,
     SettingsCategory,
 )
-from tests.command_line.test_set_menu_values import find_setting
+
+
+def find_setting(key: str) -> Setting:
+    """Locate a curated :class:`Setting` by key. Test helper."""
+    for category in SETTINGS_CATEGORIES:
+        for setting in category.settings:
+            if setting.key == key:
+                return setting
+    raise AssertionError(f"Setting '{key}' not found in SETTINGS_CATEGORIES")
+
+
+def test_dbos_effective_value_uses_plugin_capability():
+    setting = find_setting("enable_dbos")
+    with patch(
+        "code_puppy.command_line.set_menu_catalog.get_feature_capability",
+        return_value=False,
+    ) as capability:
+        assert setting.effective_getter() is False
+    capability.assert_called_once_with("dbos_durable_exec")
 
 
 # ---------------------------------------------------------------------------
@@ -50,6 +67,14 @@ class TestApplySetting:
         result = apply_setting("", "anything")
         assert result.ok is False
         assert result.error and "key" in result.error.lower()
+
+    @pytest.mark.parametrize("key", ["openai_reasoning_effort", "openai_verbosity"])
+    def test_model_settings_only_keys_are_rejected(self, key):
+        with patch("code_puppy.config.set_config_value") as mock_set:
+            result = apply_setting(key, "high")
+        assert result.ok is False
+        assert "/model_settings" in (result.error or "")
+        mock_set.assert_not_called()
 
     def test_cancel_agent_key_invalid_returns_error(self):
         with patch("code_puppy.config.set_config_value") as mock_set:
@@ -202,6 +227,7 @@ class TestPromptForValue:
         class _FakeSession:
             def __init__(self, message, **kwargs):
                 captured["is_password"] = kwargs.get("is_password")
+                captured["style"] = kwargs.get("style")
 
             async def prompt_async(self):
                 return "secret"
@@ -210,6 +236,7 @@ class TestPromptForValue:
             result = await _prompt_for_value(sensitive_setting, current_val=None)
         assert result == "secret"
         assert captured["is_password"] is True
+        assert "style" in captured
 
     @pytest.mark.asyncio
     async def test_prompt_no_password_for_non_sensitive(self):
@@ -306,6 +333,16 @@ class TestEntryBuilding:
         match = [e for e in entries if e.setting.key == "custom_random_key"]
         assert match
         assert match[0].category.name == "Dynamic"
+
+    def test_model_settings_only_keys_are_absent(self):
+        with patch(
+            "code_puppy.command_line.set_menu.get_config_keys",
+            return_value=["openai_reasoning_effort", "openai_verbosity"],
+        ):
+            entries = _build_entries()
+        keys = {entry.setting.key for entry in entries}
+        assert "openai_reasoning_effort" not in keys
+        assert "openai_verbosity" not in keys
 
     def test_dynamic_does_not_double_curated_keys(self):
         with patch(

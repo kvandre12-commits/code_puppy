@@ -1,8 +1,15 @@
+import os
+import sys
+
 from code_puppy.callbacks import on_register_agent_tools, on_register_tools
 from code_puppy.messaging import emit_warning
-from code_puppy.runtime_profile import hidden_tool_names_for_runtime
 from code_puppy.tools.agent_tools import register_list_agents
+from code_puppy.tools.subagent_invocation import (
+    register_invoke_agent,
+    register_invoke_agent_with_model,
+)
 from code_puppy.tools.ask_user_question import register_ask_user_question
+
 from code_puppy.tools.command_runner import (
     register_agent_run_shell_command,
     register_agent_share_your_reasoning,
@@ -24,78 +31,7 @@ from code_puppy.tools.file_operations import (
 )
 from code_puppy.tools.image_tools import register_load_image
 from code_puppy.tools.model_tools import register_list_available_models
-from code_puppy.tools.skills_tools import (
-    register_activate_skill,
-    register_list_or_search_skills,
-)
-from code_puppy.tools.subagent_invocation import (
-    register_invoke_agent,
-    register_invoke_agent_with_model,
-)
-from code_puppy.tools.universal_constructor import register_universal_constructor
-
-# Browser automation tools are optional.
-# Android/Termux cannot install Playwright wheels, so browser tools must not crash startup.
-_BROWSER_TOOLS_AVAILABLE = False
-
-try:
-    from code_puppy.tools.browser.browser_control import (
-        register_close_browser as register_close_browser,
-        register_create_new_page as register_create_new_page,
-        register_get_browser_status as register_get_browser_status,
-        register_initialize_browser as register_initialize_browser,
-        register_list_pages as register_list_pages,
-    )
-    from code_puppy.tools.browser.browser_interactions import (
-        register_browser_check as register_browser_check,
-        register_browser_uncheck as register_browser_uncheck,
-        register_click_element as register_click_element,
-        register_double_click_element as register_double_click_element,
-        register_get_element_text as register_get_element_text,
-        register_get_element_value as register_get_element_value,
-        register_hover_element as register_hover_element,
-        register_select_option as register_select_option,
-        register_set_element_text as register_set_element_text,
-    )
-    from code_puppy.tools.browser.browser_locators import (
-        register_find_buttons as register_find_buttons,
-        register_find_by_label as register_find_by_label,
-        register_find_by_placeholder as register_find_by_placeholder,
-        register_find_by_role as register_find_by_role,
-        register_find_by_test_id as register_find_by_test_id,
-        register_find_by_text as register_find_by_text,
-        register_find_links as register_find_links,
-        register_run_xpath_query as register_run_xpath_query,
-    )
-    from code_puppy.tools.browser.browser_navigation import (
-        register_browser_go_back as register_browser_go_back,
-        register_browser_go_forward as register_browser_go_forward,
-        register_get_page_info as register_get_page_info,
-        register_navigate_to_url as register_navigate_to_url,
-        register_reload_page as register_reload_page,
-        register_wait_for_load_state as register_wait_for_load_state,
-    )
-    from code_puppy.tools.browser.browser_screenshot import (
-        register_take_screenshot_and_analyze as register_take_screenshot_and_analyze,
-    )
-    from code_puppy.tools.browser.browser_scripts import (
-        register_browser_clear_highlights as register_browser_clear_highlights,
-        register_browser_highlight_element as register_browser_highlight_element,
-        register_execute_javascript as register_execute_javascript,
-        register_scroll_page as register_scroll_page,
-        register_scroll_to_element as register_scroll_to_element,
-        register_set_viewport_size as register_set_viewport_size,
-        register_wait_for_element as register_wait_for_element,
-    )
-    from code_puppy.tools.browser.browser_workflows import (
-        register_list_workflows as register_list_workflows,
-        register_read_workflow as register_read_workflow,
-        register_save_workflow as register_save_workflow,
-    )
-
-    _BROWSER_TOOLS_AVAILABLE = True
-except Exception:
-    _BROWSER_TOOLS_AVAILABLE = False
+from code_puppy.runtime_profile import hidden_tool_names_for_runtime
 
 # Map of tool names to their individual registration functions
 TOOL_REGISTRY = {
@@ -119,60 +55,22 @@ TOOL_REGISTRY = {
     "agent_share_your_reasoning": register_agent_share_your_reasoning,
     # User Interaction
     "ask_user_question": register_ask_user_question,
-    # Browser Control
-    # "browser_initialize": register_initialize_browser,
-    # "browser_close": register_close_browser,
-    # "browser_status": register_get_browser_status,
-    # "browser_new_page": register_create_new_page,
-    # "browser_list_pages": register_list_pages,
-    # Browser Navigation
-    # "browser_navigate": register_navigate_to_url,
-    # "browser_get_page_info": register_get_page_info,
-    # "browser_go_back": register_browser_go_back,
-    # "browser_go_forward": register_browser_go_forward,
-    # "browser_reload": register_reload_page,
-    # "browser_wait_for_load": register_wait_for_load_state,
-    # Browser Element Discovery
-    # "browser_find_by_role": register_find_by_role,
-    # "browser_find_by_text": register_find_by_text,
-    # "browser_find_by_label": register_find_by_label,
-    # "browser_find_by_placeholder": register_find_by_placeholder,
-    # "browser_find_by_test_id": register_find_by_test_id,
-    # "browser_xpath_query": register_run_xpath_query,
-    # "browser_find_buttons": register_find_buttons,
-    # "browser_find_links": register_find_links,
-    # Browser Element Interactions
-    # "browser_click": register_click_element,
-    # "browser_double_click": register_double_click_element,
-    # "browser_hover": register_hover_element,
-    # "browser_set_text": register_set_element_text,
-    # "browser_get_text": register_get_element_text,
-    # "browser_get_value": register_get_element_value,
-    # "browser_select_option": register_select_option,
-    # "browser_check": register_browser_check,
-    # "browser_uncheck": register_browser_uncheck,
-    # Browser Scripts and Advanced Features
-    # "browser_execute_js": register_execute_javascript,
-    # "browser_scroll": register_scroll_page,
-    # "browser_scroll_to_element": register_scroll_to_element,
-    # "browser_set_viewport": register_set_viewport_size,
-    # "browser_wait_for_element": register_wait_for_element,
-    # "browser_highlight_element": register_browser_highlight_element,
-    # "browser_clear_highlights": register_browser_clear_highlights,
-    # Browser Screenshots
-    # "browser_screenshot_analyze": register_take_screenshot_and_analyze,
-    # Browser Workflows
-    # "browser_save_workflow": register_save_workflow,
-    # "browser_list_workflows": register_list_workflows,
-    # "browser_read_workflow": register_read_workflow,
     # Image loading (used by browser/QA agents and friends)
     "load_image_for_analysis": register_load_image,
-    # Skills Tools
-    "activate_skill": register_activate_skill,
-    "list_or_search_skills": register_list_or_search_skills,
-    # Universal Constructor
-    "universal_constructor": register_universal_constructor,
 }
+
+
+def _load_browser_tool_registry() -> dict[str, object]:
+    """Skip Playwright-backed tool imports on Android."""
+    if sys.platform == "android":
+        return {}
+
+    from code_puppy.tools.browser.tool_registry import BROWSER_TOOL_REGISTRY
+
+    return BROWSER_TOOL_REGISTRY
+
+
+TOOL_REGISTRY.update(_load_browser_tool_registry())
 
 # Tools that expand into multiple tools for backward compatibility.
 # When an agent requests a tool listed here, all the expansion tools
@@ -186,15 +84,36 @@ TOOL_EXPANSIONS: dict[str, list[str]] = {
 # that still work should stay in TOOL_REGISTRY.
 REMOVED_LEGACY_TOOLS: set[str] = set()
 
+# Process-wide tool kill-switch (issue #182). Set by the builtin ``no_tools``
+# plugin when ``--no-tools`` is passed, or directly by wrappers that spawn
+# Code Puppy as a subprocess. An env var (not puppy.cfg) on purpose: it's
+# scoped to this process and never persists.
+NO_TOOLS_ENV_VAR = "CODE_PUPPY_NO_TOOLS"
+
+
+def tools_disabled() -> bool:
+    """True when the ``CODE_PUPPY_NO_TOOLS`` kill-switch is active.
+
+    When active, no tools are registered on any agent and no MCP toolsets
+    are attached — the model runs pure text-in/text-out.
+    """
+    return os.environ.get(NO_TOOLS_ENV_VAR, "").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    )
+
+
 _VALIDATED_PLUGIN_TOOL_CONNECTIONS: set[tuple[str, str, str]] = set()
 
 
 def _filter_tool_names_for_runtime(tool_names: list[str]) -> list[str]:
-    """Hide optional desktop-ish tools from lean Android runtime surfaces."""
+    """Hide optional desktop tools from lean Android runtime surfaces."""
     hidden_tool_names = hidden_tool_names_for_runtime()
     if not hidden_tool_names:
         return tool_names
-    return [tool_name for tool_name in tool_names if tool_name not in hidden_tool_names]
+    return [name for name in tool_names if name not in hidden_tool_names]
 
 
 class _ToolRegistrationProbeAgent:
@@ -208,28 +127,13 @@ class _ToolRegistrationProbeAgent:
             self.registered_tool_names.append(getattr(fn, "__name__", "<unknown>"))
             return fn
 
-        if func is None:
-            return decorator
-        return decorator(func)
+        return decorator if func is None else decorator(func)
 
 
 def _validate_plugin_tool_registration(tool_name: str, register_func) -> None:
-    """Best-effort validator for the plugin register_func -> tool_name seam.
-
-    The canonical contract is one tool definition per tool name, where each
-    ``register_func(agent)`` call registers exactly one ``@agent.tool`` with the
-    same public function name as ``tool_name``.
-
-    Validation is warning-only so plugin contract issues are surfaced without
-    breaking startup or agent construction.
-    """
-
+    """Warn when a plugin registration function violates the one-tool seam."""
     module_name = getattr(register_func, "__module__", "<unknown>")
-    qualname = getattr(
-        register_func,
-        "__qualname__",
-        getattr(register_func, "__name__", "<unknown>"),
-    )
+    qualname = getattr(register_func, "__qualname__", register_func.__name__)
     cache_key = (tool_name, module_name, qualname)
     if cache_key in _VALIDATED_PLUGIN_TOOL_CONNECTIONS:
         return
@@ -239,36 +143,13 @@ def _validate_plugin_tool_registration(tool_name: str, register_func) -> None:
     try:
         register_func(probe_agent)
     except Exception as exc:
-        emit_warning(
-            "Warning: Plugin tool registration probe failed for "
-            f"'{tool_name}' via {module_name}.{qualname}: {exc}"
-        )
+        emit_warning(f"Warning: Plugin tool probe failed for '{tool_name}': {exc}")
         return
-
-    registered_names = probe_agent.registered_tool_names
-    if not registered_names:
+    registered = probe_agent.registered_tool_names
+    if registered != [tool_name]:
         emit_warning(
             "Warning: Plugin tool registration contract issue for "
-            f"'{tool_name}' via {module_name}.{qualname}: register_func "
-            "did not register any @agent.tool functions."
-        )
-        return
-
-    if len(registered_names) > 1:
-        emit_warning(
-            "Warning: Plugin tool registration contract issue for "
-            f"'{tool_name}' via {module_name}.{qualname}: register_func "
-            f"registered {len(registered_names)} tool functions "
-            f"{registered_names}. Expected exactly one."
-        )
-        return
-
-    registered_name = registered_names[0]
-    if registered_name != tool_name:
-        emit_warning(
-            "Warning: Plugin tool registration contract issue for "
-            f"'{tool_name}' via {module_name}.{qualname}: register_func "
-            f"registered tool '{registered_name}' instead of '{tool_name}'."
+            f"'{tool_name}': registered {registered or 'no tools'}."
         )
 
 
@@ -372,6 +253,11 @@ def register_tools_for_agent(
     """
     from code_puppy.config import get_universal_constructor_enabled
 
+    if tools_disabled():
+        # --no-tools / CODE_PUPPY_NO_TOOLS: register nothing at all. This
+        # also keeps tool schemas out of the request, trimming token usage.
+        return
+
     _load_plugin_tools()
 
     # Plugin-advertised tools get unioned into the requested list. This is
@@ -401,9 +287,7 @@ def register_tools_for_agent(
             if tool_name not in seen:
                 expanded_tools.append(tool_name)
                 seen.add(tool_name)
-    tool_names = expanded_tools
-
-    tool_names = _filter_tool_names_for_runtime(tool_names)
+    tool_names = _filter_tool_names_for_runtime(expanded_tools)
 
     for tool_name in tool_names:
         # Handle UC tools (prefixed with "uc:")
@@ -452,15 +336,20 @@ def _register_uc_tool_wrapper(agent, uc_tool_name: str):
 
     # Get tool info and function from registry
     try:
-        from code_puppy.plugins.universal_constructor.registry import get_registry
+        from code_puppy.universal_constructor_provider import (
+            get_universal_constructor_provider,
+        )
 
-        registry = get_registry()
-        tool_info = registry.get_tool(uc_tool_name)
+        provider = get_universal_constructor_provider()
+        if provider is None:
+            emit_warning("Warning: Universal Constructor provider is unavailable")
+            return
+        tool_info = provider.get_tool(uc_tool_name)
         if not tool_info:
             emit_warning(f"Warning: UC tool '{uc_tool_name}' not found, skipping...")
             return
 
-        func = registry.get_tool_function(uc_tool_name)
+        func = provider.get_tool_function(uc_tool_name)
         if not func:
             emit_warning(
                 f"Warning: UC tool '{uc_tool_name}' function not found, skipping..."

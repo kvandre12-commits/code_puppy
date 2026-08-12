@@ -353,24 +353,7 @@ DEFAULT_CODEX_MODELS = [
     "gpt-5.4",
     "gpt-5.4-mini",
     "gpt-5.3-codex-spark",
-    "gpt-5.3-instant",
-    "gpt-5.3-codex",
-    "gpt-5.2-codex",
-    "gpt-5.2",
     "codex-auto-review",
-]
-
-# Models that MUST always be registered, even if the /models endpoint
-# doesn't return them (e.g. newly launched, not yet in the API catalogue).
-# These are merged into whatever the endpoint returns.
-REQUIRED_CODEX_MODELS = [
-    "gpt-5.6-sol",
-    "gpt-5.6-terra",
-    "gpt-5.6-luna",
-    "gpt-5.5",
-    "gpt-5.4",
-    "gpt-5.3-codex-spark",
-    "gpt-5.3-instant",
 ]
 
 # Per-model context length overrides (tokens).
@@ -393,20 +376,8 @@ def _supports_xhigh_reasoning(model_name: str) -> bool:
 
 
 def _supports_max_reasoning(model_name: str) -> bool:
-    """Return whether a ChatGPT/Codex OAuth model supports max reasoning effort."""
+    """Return whether a ChatGPT OAuth model supports max reasoning effort."""
     return model_name.lower().startswith("gpt-5.6")
-
-
-def _ensure_required_models(models: List[str]) -> List[str]:
-    """Merge REQUIRED_CODEX_MODELS into the given list, preserving order.
-
-    Any required model not already present is prepended so it appears first.
-    """
-    existing = set(models)
-    missing = [m for m in REQUIRED_CODEX_MODELS if m not in existing]
-    if missing:
-        logger.info("Injecting required models not returned by API: %s", missing)
-    return missing + models
 
 
 def fetch_chatgpt_models(access_token: str, account_id: str) -> Optional[List[str]]:
@@ -473,7 +444,7 @@ def fetch_chatgpt_models(access_token: str, account_id: str) -> Optional[List[st
                             seen_models.add(model_id)
                             models.append(model_id)
                     if models:
-                        return _ensure_required_models(models)
+                        return models
             except (json.JSONDecodeError, ValueError) as exc:
                 logger.warning("Failed to parse models response: %s", exc)
 
@@ -508,7 +479,6 @@ def add_models_to_extra_config(models: List[str]) -> bool:
             if model_config.get("oauth_source") != "chatgpt-oauth-plugin"
             or key in desired_model_keys
         }
-
         added = 0
         for model_name in models:
             prefixed = f"{CHATGPT_OAUTH_CONFIG['prefix']}{model_name}"

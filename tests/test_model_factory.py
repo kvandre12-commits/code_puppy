@@ -35,16 +35,16 @@ def test_anthropic_load_model():
     # Note: Do not make actual Anthropic network calls in CI, just validate instantiation.
 
 
-def test_missing_model():
-    config = {"foo": {"type": "openai", "name": "bar"}}
+@pytest.mark.parametrize(
+    ("model_key", "config"),
+    [
+        ("not-there", {"foo": {"type": "openai", "name": "bar"}}),
+        ("bad", {"bad": {"type": "doesnotexist", "name": "fake"}}),
+    ],
+)
+def test_missing_model_or_unsupported_type(model_key, config):
     with pytest.raises(ValueError):
-        ModelFactory.get_model("not-there", config)
-
-
-def test_unsupported_type():
-    config = {"bad": {"type": "doesnotexist", "name": "fake"}}
-    with pytest.raises(ValueError):
-        ModelFactory.get_model("bad", config)
+        ModelFactory.get_model(model_key, config)
 
 
 def test_env_var_reference_azure(monkeypatch):
@@ -64,16 +64,34 @@ def test_env_var_reference_azure(monkeypatch):
     assert model.client is not None
 
 
-def test_custom_endpoint_missing_url():
-    config = {
-        "custom": {
-            "type": "custom_openai",
-            "name": "mycust",
-            "custom_endpoint": {"headers": {}},
-        }
-    }
+@pytest.mark.parametrize(
+    ("model_key", "config"),
+    [
+        (
+            "custom",
+            {
+                "custom": {
+                    "type": "custom_openai",
+                    "name": "mycust",
+                    "custom_endpoint": {"headers": {}},
+                }
+            },
+        ),
+        (
+            "x",
+            {
+                "x": {
+                    "type": "custom_anthropic",
+                    "name": "ya",
+                    "custom_endpoint": {"headers": {}},
+                }
+            },
+        ),
+    ],
+)
+def test_custom_endpoint_missing_url(model_key, config):
     with pytest.raises(ValueError):
-        ModelFactory.get_model("custom", config)
+        ModelFactory.get_model(model_key, config)
 
 
 # Additional tests for coverage
@@ -127,43 +145,24 @@ def test_custom_openai_happy(monkeypatch):
     assert hasattr(model._provider, "base_url")
 
 
-def test_custom_openai_timeout_config(monkeypatch):
-    monkeypatch.setenv("OPENAI_API_KEY", "ok")
+@pytest.mark.parametrize(
+    ("env_var", "model_type", "model_name"),
+    [
+        ("OPENAI_API_KEY", "custom_openai", "cust"),
+        ("CUSTOM_API_KEY", "custom_gemini", "gemini"),
+    ],
+)
+def test_custom_timeout_config(monkeypatch, env_var, model_type, model_name):
+    monkeypatch.setenv(env_var, "ok")
     config = {
         "custom": {
-            "type": "custom_openai",
-            "name": "cust",
+            "type": model_type,
+            "name": model_name,
             "custom_endpoint": {
                 "url": "https://fake.url",
-                "headers": {"X-Api-Key": "$OPENAI_API_KEY"},
+                "headers": {"X-Api-Key": "$" + env_var},
                 "ca_certs_path": False,
-                "api_key": "$OPENAI_API_KEY",
-            },
-            "timeout": 600,
-        }
-    }
-
-    with patch("code_puppy.model_factory.create_async_client") as mock_client:
-        mock_client.return_value = httpx.AsyncClient(timeout=600)
-        model = ModelFactory.get_model("custom", config)
-
-    mock_client.assert_called_once_with(
-        headers={"X-Api-Key": "ok"}, verify=False, timeout=600
-    )
-    assert model is not None
-
-
-def test_custom_gemini_timeout_config(monkeypatch):
-    monkeypatch.setenv("CUSTOM_API_KEY", "ok")
-    config = {
-        "custom": {
-            "type": "custom_gemini",
-            "name": "gemini",
-            "custom_endpoint": {
-                "url": "https://fake.url",
-                "headers": {"X-Api-Key": "$CUSTOM_API_KEY"},
-                "ca_certs_path": False,
-                "api_key": "$CUSTOM_API_KEY",
+                "api_key": "$" + env_var,
             },
             "timeout": 600,
         }
@@ -267,99 +266,95 @@ def test_anthropic_missing_api_key(monkeypatch):
         mock_warn.assert_called_once()
 
 
-def test_azure_missing_endpoint():
-    config = {
-        "az1": {
-            "type": "azure_openai",
-            "name": "az",
-            "api_version": "2023",
-            "api_key": "val",
-        }
-    }
+@pytest.mark.parametrize(
+    ("model_key", "config"),
+    [
+        (
+            "az1",
+            {
+                "az1": {
+                    "type": "azure_openai",
+                    "name": "az",
+                    "api_version": "2023",
+                    "api_key": "val",
+                }
+            },
+        ),
+        (
+            "az2",
+            {
+                "az2": {
+                    "type": "azure_openai",
+                    "name": "az",
+                    "azure_endpoint": "foo",
+                    "api_key": "val",
+                }
+            },
+        ),
+        (
+            "az3",
+            {
+                "az3": {
+                    "type": "azure_openai",
+                    "name": "az",
+                    "azure_endpoint": "foo",
+                    "api_version": "1.0",
+                }
+            },
+        ),
+    ],
+)
+def test_azure_missing_field(model_key, config):
     with pytest.raises(ValueError):
-        ModelFactory.get_model("az1", config)
-
-
-def test_azure_missing_apiversion():
-    config = {
-        "az2": {
-            "type": "azure_openai",
-            "name": "az",
-            "azure_endpoint": "foo",
-            "api_key": "val",
-        }
-    }
-    with pytest.raises(ValueError):
-        ModelFactory.get_model("az2", config)
-
-
-def test_azure_missing_apikey():
-    config = {
-        "az3": {
-            "type": "azure_openai",
-            "name": "az",
-            "azure_endpoint": "foo",
-            "api_version": "1.0",
-        }
-    }
-    with pytest.raises(ValueError):
-        ModelFactory.get_model("az3", config)
-
-
-def test_custom_anthropic_missing_url():
-    config = {
-        "x": {
-            "type": "custom_anthropic",
-            "name": "ya",
-            "custom_endpoint": {"headers": {}},
-        }
-    }
-    with pytest.raises(ValueError):
-        ModelFactory.get_model("x", config)
+        ModelFactory.get_model(model_key, config)
 
 
 def test_extra_models_json_decode_error(tmp_path, monkeypatch):
     # Create a temporary extra_models.json file with invalid JSON
     extra_models_file = tmp_path / "extra_models.json"
     extra_models_file.write_text("{ invalid json content }")
+    base_config = {"base-model": {"type": "openai", "name": "base"}}
 
-    # Patch the EXTRA_MODELS_FILE path to point to our temporary file
-    from code_puppy.model_factory import ModelFactory
-
+    # Use an explicit base config: bundled models.json may intentionally be empty.
+    monkeypatch.setattr(
+        "code_puppy.model_factory.callbacks.get_callbacks", lambda phase: [object()]
+    )
+    monkeypatch.setattr(
+        "code_puppy.model_factory.callbacks.on_load_model_config",
+        lambda: [base_config.copy()],
+    )
     monkeypatch.setattr(
         "code_puppy.model_factory.EXTRA_MODELS_FILE", str(extra_models_file)
     )
 
-    # This should not raise an exception despite the invalid JSON
+    # Invalid extra JSON should be ignored without discarding the base config.
     config = ModelFactory.load_config()
 
-    # The config should still be loaded, just without the extra models
-    assert isinstance(config, dict)
-    assert len(config) > 0
+    assert config["base-model"] == base_config["base-model"]
 
 
 def test_extra_models_exception_handling(tmp_path, monkeypatch, caplog):
-    # Create a temporary extra_models.json file that will raise a general exception
+    # Create a directory where a JSON file is expected to force an OSError.
     extra_models_file = tmp_path / "extra_models.json"
-    # Create a directory with the same name to cause an OSError when trying to read it
     extra_models_file.mkdir()
+    base_config = {"base-model": {"type": "openai", "name": "base"}}
 
-    # Patch the EXTRA_MODELS_FILE path
-    from code_puppy.model_factory import ModelFactory
-
+    # Use an explicit base config: bundled models.json may intentionally be empty.
+    monkeypatch.setattr(
+        "code_puppy.model_factory.callbacks.get_callbacks", lambda phase: [object()]
+    )
+    monkeypatch.setattr(
+        "code_puppy.model_factory.callbacks.on_load_model_config",
+        lambda: [base_config.copy()],
+    )
     monkeypatch.setattr(
         "code_puppy.model_factory.EXTRA_MODELS_FILE", str(extra_models_file)
     )
 
-    # This should not raise an exception despite the error
     with caplog.at_level("WARNING"):
         config = ModelFactory.load_config()
 
-    # The config should still be loaded
-    assert isinstance(config, dict)
-    assert len(config) > 0
-
-    # Check that warning was logged
+    assert config["base-model"] == base_config["base-model"]
     assert "Failed to load extra models config" in caplog.text
 
 

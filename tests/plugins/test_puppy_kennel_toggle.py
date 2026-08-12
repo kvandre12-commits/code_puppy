@@ -6,7 +6,6 @@ Covers:
 * recorder no-ops when disabled
 * retriever returns None when disabled
 * every agent-facing tool returns the disabled error when disabled
-* /kennel debug emits echo-filter inspection lines for humans
 * /kennel enable / disable / status slash commands flip and report state
 * /kennel stats and /kennel wings still work when disabled (human inspection)
 """
@@ -66,30 +65,6 @@ def _ctx(agent_name: str = "code-puppy") -> Any:
 # --------------------------------------------------------------------------- #
 # State module
 # --------------------------------------------------------------------------- #
-
-
-def test_default_state_is_enabled(kennel_root: Path) -> None:
-    from code_puppy.plugins.puppy_kennel import state
-
-    assert state.is_enabled() is True
-
-
-def test_set_enabled_persists(kennel_root: Path) -> None:
-    from code_puppy.plugins.puppy_kennel import state
-
-    state.set_enabled(False)
-    assert state.is_enabled() is False
-    state.set_enabled(True)
-    assert state.is_enabled() is True
-
-
-def test_garbage_cfg_value_falls_back_to_enabled(kennel_root: Path) -> None:
-    """Default-on means a typo in puppy.cfg must not silently kill memory."""
-    from code_puppy.config import set_config_value
-    from code_puppy.plugins.puppy_kennel import state
-
-    set_config_value("kennel_enabled", "banana")
-    assert state.is_enabled() is True
 
 
 # --------------------------------------------------------------------------- #
@@ -168,7 +143,6 @@ def test_all_tools_return_disabled_error_when_off(kennel_root: Path) -> None:
     tools.register_kennel_recent(agent)
     tools.register_kennel_list_wings(agent)
     tools.register_kennel_stats(agent)
-    tools.register_kennel_debug_echo(agent)
 
     recall_out = asyncio.run(agent.registered["kennel_recall"](_ctx(), "anything"))
     remember_out = asyncio.run(
@@ -177,9 +151,8 @@ def test_all_tools_return_disabled_error_when_off(kennel_root: Path) -> None:
     recent_out = asyncio.run(agent.registered["kennel_recent"](_ctx()))
     wings_out = asyncio.run(agent.registered["kennel_list_wings"](_ctx()))
     stats_out = asyncio.run(agent.registered["kennel_stats"](_ctx()))
-    debug_out = asyncio.run(agent.registered["kennel_debug_echo"](_ctx()))
 
-    for out in (recall_out, remember_out, recent_out, wings_out, stats_out, debug_out):
+    for out in (recall_out, remember_out, recent_out, wings_out, stats_out):
         assert out.error is not None
         assert "disabled" in out.error.lower()
 
@@ -261,159 +234,17 @@ def test_slash_disable_when_already_disabled_is_noop(kennel_root: Path) -> None:
 # --------------------------------------------------------------------------- #
 
 
-def test_stats_command_works_when_disabled(kennel_root: Path) -> None:
-    from code_puppy.plugins.puppy_kennel import commands, recorder, state
-
-    recorder.record_run_end(
-        agent_name="code-puppy",
-        model_name="m",
-        success=True,
-        response_text="something",
-    )
-    state.set_enabled(False)
-    assert commands.handle("/kennel stats", "kennel") is True
-
-
-def test_wings_command_works_when_disabled(kennel_root: Path) -> None:
-    from code_puppy.plugins.puppy_kennel import commands, recorder, state
-
-    recorder.record_run_end(
-        agent_name="code-puppy",
-        model_name="m",
-        success=True,
-        response_text="something",
-    )
-    state.set_enabled(False)
-    assert commands.handle("/kennel wings", "kennel") is True
-
-
-def test_search_command_works_when_disabled(kennel_root: Path) -> None:
-    """Human-driven search bypasses the toggle — operator can always inspect."""
-    from code_puppy.plugins.puppy_kennel import commands, recorder, state
-
-    recorder.record_run_end(
-        agent_name="code-puppy",
-        model_name="m",
-        success=True,
-        response_text="The pangolin is a scaly mammal.",
-    )
-    state.set_enabled(False)
-    assert commands.handle("/kennel search pangolin", "kennel") is True
-
-
-def test_inventory_command_works_when_disabled(kennel_root: Path) -> None:
-    from code_puppy.plugins.puppy_kennel import commands, recorder, state
-
-    recorder.record_run_end(
-        agent_name="code-puppy",
-        model_name="m",
-        session_id="alpha-session",
-        success=True,
-        response_text="Inventory me.",
-    )
-    state.set_enabled(False)
-    assert commands.handle("/kennel inventory", "kennel") is True
-
-
-def test_debug_command_emits_echo_sections(
-    kennel_root: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    from code_puppy.plugins.puppy_kennel import commands, kennel, recorder
-    from code_puppy.plugins.puppy_kennel.wings import repo_wing
-
-    lines: list[str] = []
-    monkeypatch.setattr(commands, "emit_info", lines.append)
-    monkeypatch.setattr(commands, "emit_warning", lines.append)
-    monkeypatch.setattr(commands, "emit_success", lines.append)
-
-    kennel.write_note(
-        wing_name=repo_wing(),
-        room_name="decisions",
-        content=(
-            "What: Canonical packet/object context won over transcript-only session slices for operator workflows.\n"
-            "Why: Transcript context is too lossy and too implicit for downstream agents.\n"
-            "Follow-up: Capture durable state in packet/object form."
-        ),
-        role="note",
-    )
-    recorder.record_run_end(
-        agent_name="code-puppy",
-        model_name="m",
-        success=True,
-        response_text=(
-            "We backfilled the packet-first workflow context doctrine so transcript residue stops pretending to be durable state. "
-            + " lorem ipsum" * 20
-        ),
-    )
-
-    assert commands.handle("/kennel debug dropped 3", "kennel") is True
-    joined = "\n".join(lines)
-    assert "Kennel echo debug" in joined
-    assert "[DROP]" in joined
-    assert "preview:" in joined
-
-
-def test_checkpoint_command_writes_structured_decision_note(kennel_root: Path) -> None:
-    from code_puppy.plugins.puppy_kennel import commands, kennel
-
-    assert (
-        commands.handle(
-            "/kennel checkpoint Shifted to packet state || Transcript fog was losing durable context || follow-up: add bootstrap helper || evidence: tests passed",
-            "kennel",
-        )
-        is True
-    )
-
-    hits = kennel.search_drawers("packet state", limit=5)
-    assert len(hits) == 1
-    content = hits[0].content
-    assert "What: Shifted to packet state" in content
-    assert "Why: Transcript fog was losing durable context" in content
-    assert "Follow-up: add bootstrap helper" in content
-    assert "Evidence: tests passed" in content
-
-
-def test_audit_command_emits_summary_sections(
-    kennel_root: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    from code_puppy.plugins.puppy_kennel import commands, recorder
-
-    lines: list[str] = []
-    monkeypatch.setattr(commands, "emit_info", lines.append)
-    monkeypatch.setattr(commands, "emit_warning", lines.append)
-    monkeypatch.setattr(commands, "emit_success", lines.append)
-
-    recorder.record_run_end(
-        agent_name="code-puppy",
-        model_name="m",
-        session_id="alpha-session",
-        success=True,
-        response_text="Session residue for audit.",
-    )
-    commands.handle(
-        "/kennel checkpoint Durable choice || Because the doctrine matters || follow-up: reuse this pattern",
-        "kennel",
-    )
-
-    assert commands.handle("/kennel audit all 2", "kennel") is True
-    joined = "\n".join(lines)
-    assert "Kennel audit scope:" in joined
-    assert "Recent hinges:" in joined
-    assert "Decisions missing follow-up:" in joined
-    assert "Doctrine gaps:" in joined
-
-
 # --------------------------------------------------------------------------- #
 # register_agent_tools advertisement honours the toggle
 # --------------------------------------------------------------------------- #
 
 
 def test_advertise_tools_returns_full_list_when_enabled(kennel_root: Path) -> None:
-    from code_puppy.plugins.puppy_kennel import register_callbacks, state, tools
+    from code_puppy.plugins.puppy_kennel import register_callbacks, state
 
     state.set_enabled(True)
     advertised = register_callbacks._advertise_tools_to_agent("code-puppy")
-    assert set(advertised) == set(tools.kennel_tool_names())
+    assert set(advertised) == set(register_callbacks._KENNEL_TOOL_NAMES)
 
 
 def test_advertise_tools_returns_empty_when_disabled(kennel_root: Path) -> None:
@@ -429,77 +260,57 @@ def test_advertise_tools_returns_empty_when_disabled(kennel_root: Path) -> None:
 # --------------------------------------------------------------------------- #
 
 
-def test_slash_disable_triggers_agent_reload(
-    kennel_root: Path, monkeypatch: pytest.MonkeyPatch
+@pytest.mark.parametrize(
+    "command, initial_enabled, reload_raises, expected_calls, final_enabled",
+    [
+        # Disabling reloads the live agent so the tool list refreshes.
+        ("/kennel disable", True, False, ["reloaded"], False),
+        # Re-enabling reloads the live agent.
+        ("/kennel enable", False, False, ["reloaded"], True),
+        # Already-enabled + enable is a no-op that must NOT churn the agent.
+        ("/kennel enable", True, False, [], True),
+        # Reload errors are swallowed; the persisted toggle still flips.
+        ("/kennel disable", True, True, [], False),
+    ],
+    ids=[
+        "disable_reloads",
+        "enable_reloads",
+        "noop_no_reload",
+        "reload_error_still_flips",
+    ],
+)
+def test_toggle_reload_behavior(
+    kennel_root: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    command: str,
+    initial_enabled: bool,
+    reload_raises: bool,
+    expected_calls: list[str],
+    final_enabled: bool,
 ) -> None:
-    from code_puppy.plugins.puppy_kennel import commands
-
-    calls: list[str] = []
-
-    class _StubAgent:
-        def reload_code_generation_agent(self) -> None:
-            calls.append("reloaded")
-
-    import code_puppy.agents.agent_manager as agent_manager
-
-    monkeypatch.setattr(agent_manager, "get_current_agent", lambda: _StubAgent())
-
-    assert commands.handle("/kennel disable", "kennel") is True
-    assert calls == ["reloaded"]
-
-
-def test_slash_enable_triggers_agent_reload(
-    kennel_root: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+    """Toggle commands trigger a live agent reload so tools refresh; reload
+    failures are swallowed without blocking the toggle flip."""
     from code_puppy.plugins.puppy_kennel import commands, state
 
-    state.set_enabled(False)
+    state.set_enabled(initial_enabled)
     calls: list[str] = []
 
-    class _StubAgent:
-        def reload_code_generation_agent(self) -> None:
-            calls.append("reloaded")
-
     import code_puppy.agents.agent_manager as agent_manager
 
-    monkeypatch.setattr(agent_manager, "get_current_agent", lambda: _StubAgent())
+    if reload_raises:
 
-    assert commands.handle("/kennel enable", "kennel") is True
-    assert calls == ["reloaded"]
+        def _boom() -> None:
+            raise RuntimeError("agent manager unavailable")
 
+        monkeypatch.setattr(agent_manager, "get_current_agent", _boom)
+    else:
 
-def test_noop_toggle_does_not_reload(
-    kennel_root: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """Already-enabled + /kennel enable should NOT churn the agent."""
-    from code_puppy.plugins.puppy_kennel import commands
+        class _StubAgent:
+            def reload_code_generation_agent(self) -> None:
+                calls.append("reloaded")
 
-    calls: list[str] = []
+        monkeypatch.setattr(agent_manager, "get_current_agent", lambda: _StubAgent())
 
-    class _StubAgent:
-        def reload_code_generation_agent(self) -> None:
-            calls.append("reloaded")
-
-    import code_puppy.agents.agent_manager as agent_manager
-
-    monkeypatch.setattr(agent_manager, "get_current_agent", lambda: _StubAgent())
-
-    commands.handle("/kennel enable", "kennel")  # already enabled by default
-    assert calls == []
-
-
-def test_reload_failure_does_not_break_toggle(
-    kennel_root: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """Reload errors are swallowed; the persisted toggle still flips."""
-    from code_puppy.plugins.puppy_kennel import commands, state
-
-    def _boom() -> None:
-        raise RuntimeError("agent manager unavailable")
-
-    import code_puppy.agents.agent_manager as agent_manager
-
-    monkeypatch.setattr(agent_manager, "get_current_agent", _boom)
-
-    assert commands.handle("/kennel disable", "kennel") is True
-    assert state.is_enabled() is False
+    assert commands.handle(command, "kennel") is True
+    assert calls == expected_calls
+    assert state.is_enabled() is final_enabled

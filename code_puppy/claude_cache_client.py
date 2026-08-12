@@ -40,6 +40,27 @@ TOOL_PREFIX = "cp_"
 # User-Agent to send with Claude Code OAuth requests
 CLAUDE_CLI_USER_AGENT = "claude-cli/2.1.2 (external, cli)"
 
+# Extended (1 hour) prompt-cache TTL. Claude Code OAuth sessions get this for
+# free, so claude-code-* models always request it. API-key / third-party
+# Anthropic models keep the default 5-minute TTL (no ``ttl`` field at all).
+CACHE_TTL_1H = "1h"
+
+# Beta flag Anthropic requires before honoring a 1-hour cache TTL.
+EXTENDED_CACHE_TTL_BETA = "extended-cache-ttl-2025-04-11"
+
+
+def _cache_marker(ttl: str | None) -> dict[str, str]:
+    """Build a cache_control marker, optionally with an explicit TTL.
+
+    ``ttl=None`` yields the plain ``{"type": "ephemeral"}`` marker (Anthropic
+    defaults it to 5 minutes). Single source of truth for BOTH injection
+    paths (wire body and SDK payload) so they can never drift.
+    """
+    marker: dict[str, str] = {"type": "ephemeral"}
+    if ttl:
+        marker["ttl"] = ttl
+    return marker
+
 
 def _model_requires_thinking_summary(model_name):
     # Anthropic's Opus 4.7+ / Fable 5 families reject adaptive-thinking
@@ -94,11 +115,15 @@ class ClaudeCacheAsyncClient(httpx.AsyncClient):
         oauth_reauthentication_callback: Callable[[], str | None] | None = None,
         token_update_callback: Callable[[str], None] | None = None,
         apply_claude_code_prefix: bool = False,
+        cache_ttl: str | None = None,
         **kwargs: Any,
     ) -> None:
         super().__init__(*args, **kwargs)
         self._oauth_reauthentication_callback = oauth_reauthentication_callback
         self._token_update_callback = token_update_callback
+        # Explicit prompt-cache TTL (e.g. "1h") for injected cache markers.
+        # None means "let Anthropic default" (currently 5 minutes).
+        self._cache_ttl = cache_ttl
         # The ``cp_`` tool-name prefix is a Claude Code OAuth quirk. Only the
         # claude_code_oauth plugin should enable it; custom_anthropic and
         # Anthropic-vanilla models keep tool names verbatim.
@@ -174,33 +199,27 @@ class ClaudeCacheAsyncClient(httpx.AsyncClient):
             return auth_header[7:]  # Strip "Bearer " prefix
         return None
 
-    def _should_refresh_token(self, request: httpx.Request) -> bool:
-        """Check if the token should be refreshed (within the max-age window).
-
-        Uses two strategies:
-        1. Decode JWT to check token age (if possible)
-        2. Fall back to stored expires_at from token file
-
-        Returns True if token expires within TOKEN_MAX_AGE_SECONDS.
-        """
+    def _jwt_refresh_decision(self, request: httpx.Request) -> bool | None:
+        """Return a JWT-based refresh decision, or ``None`` for stored fallback."""
         token = self._extract_bearer_token(request)
         if not token:
             return False
 
-        # Strategy 1: Try to decode JWT age
         age = self._get_jwt_age_seconds(token)
-        if age is not None:
-            should_refresh = age >= TOKEN_MAX_AGE_SECONDS
-            if should_refresh:
-                logger.info(
-                    "JWT token is %.1f seconds old (>= %d), will refresh proactively",
-                    age,
-                    TOKEN_MAX_AGE_SECONDS,
-                )
-            return should_refresh
+        if age is None:
+            return None
 
-        # Strategy 2: Fall back to stored expires_at from token file
-        should_refresh = self._check_stored_token_expiry()
+        should_refresh = age >= TOKEN_MAX_AGE_SECONDS
+        if should_refresh:
+            logger.info(
+                "JWT token is %.1f seconds old (>= %d), will refresh proactively",
+                age,
+                TOKEN_MAX_AGE_SECONDS,
+            )
+        return should_refresh
+
+    @staticmethod
+    def _log_stored_token_refresh(should_refresh: bool) -> bool:
         if should_refresh:
             logger.info(
                 "Stored token expires within %d seconds, will refresh proactively",
@@ -208,25 +227,50 @@ class ClaudeCacheAsyncClient(httpx.AsyncClient):
             )
         return should_refresh
 
+    def _should_refresh_token(self, request: httpx.Request) -> bool:
+        """Synchronously check JWT age, then the stored-token callback."""
+        decision = self._jwt_refresh_decision(request)
+        if decision is not None:
+            return decision
+        return self._log_stored_token_refresh(self._check_stored_token_expiry())
+
+    async def _should_refresh_token_async(self, request: httpx.Request) -> bool:
+        """Check token expiry while awaiting async providers in ``send()``."""
+        decision = self._jwt_refresh_decision(request)
+        if decision is not None:
+            return decision
+        return self._log_stored_token_refresh(
+            await self._check_stored_token_expiry_async()
+        )
+
     @staticmethod
     def _check_stored_token_expiry() -> bool:
         """Check if the stored token expires within TOKEN_MAX_AGE_SECONDS.
 
         This is a fallback for when JWT decoding fails or isn't available.
-        Uses the expires_at timestamp from the stored token file.
+        Uses the expires_at timestamp from the stored token file.  The
+        claude_code_oauth plugin self-registers this capability; when it
+        isn't loaded (or the check fails) we conservatively report ``False``.
         """
         try:
-            from code_puppy.plugins.claude_code_oauth.utils import (
-                is_token_expired,
-                load_stored_tokens,
+            from code_puppy.callbacks import on_check_claude_oauth_token_expiry
+
+            results = on_check_claude_oauth_token_expiry()
+            return any(result is True for result in results)
+        except Exception as exc:
+            logger.debug("Error checking stored token expiry: %s", exc)
+            return False
+
+    @staticmethod
+    async def _check_stored_token_expiry_async() -> bool:
+        """Await stored-token expiry providers from an active event loop."""
+        try:
+            from code_puppy.callbacks import (
+                on_check_claude_oauth_token_expiry_async,
             )
 
-            tokens = load_stored_tokens()
-            if not tokens:
-                return False
-
-            # is_token_expired already uses the configured refresh buffer window
-            return is_token_expired(tokens)
+            results = await on_check_claude_oauth_token_expiry_async()
+            return any(result is True for result in results)
         except Exception as exc:
             logger.debug("Error checking stored token expiry: %s", exc)
             return False
@@ -266,12 +310,14 @@ class ClaudeCacheAsyncClient(httpx.AsyncClient):
     @staticmethod
     def _transform_headers_for_claude_code(
         headers: MutableMapping[str, str],
+        cache_ttl: str | None = None,
     ) -> None:
         """Transform headers for Claude Code OAuth compatibility.
 
         - Sets user-agent to claude-cli
         - Merges anthropic-beta headers appropriately
         - Removes x-api-key (using Bearer auth instead)
+        - Adds the extended-cache-ttl beta when a 1h cache TTL is requested
         """
         # Set user-agent
         headers["user-agent"] = CLAUDE_CLI_USER_AGENT
@@ -288,6 +334,8 @@ class ClaudeCacheAsyncClient(httpx.AsyncClient):
         ]
         if "claude-code-20250219" in incoming_betas:
             required_betas.append("claude-code-20250219")
+        if cache_ttl == CACHE_TTL_1H:
+            required_betas.append(EXTENDED_CACHE_TTL_BETA)
 
         # Merge: start with required, then append any extras from the
         # incoming headers that aren't already in the required set.
@@ -330,8 +378,8 @@ class ClaudeCacheAsyncClient(httpx.AsyncClient):
         # Proactive token refresh: check JWT age before every request
         if not request.extensions.get("claude_oauth_proactive_refresh_attempted"):
             try:
-                if self._should_refresh_token(request):
-                    refreshed_token = self._refresh_claude_oauth_token()
+                if await self._should_refresh_token_async(request):
+                    refreshed_token = await self._refresh_claude_oauth_token_async()
                     if refreshed_token:
                         logger.info("Proactively refreshed token before request")
                         # Rebuild request with new token
@@ -360,7 +408,7 @@ class ClaudeCacheAsyncClient(httpx.AsyncClient):
                 headers_modified = False
 
                 # 1. Transform headers for Claude Code OAuth
-                self._transform_headers_for_claude_code(headers)
+                self._transform_headers_for_claude_code(headers, self._cache_ttl)
                 headers_modified = True
 
                 # 2. Add ?beta=true query param
@@ -377,7 +425,9 @@ class ClaudeCacheAsyncClient(httpx.AsyncClient):
                         body_modified = True
 
                     # 4. Inject cache_control
-                    cached_body = self._inject_cache_control(body_bytes)
+                    cached_body = self._inject_cache_control(
+                        body_bytes, self._cache_ttl
+                    )
                     if cached_body is not None:
                         body_bytes = cached_body
                         body_modified = True
@@ -594,10 +644,14 @@ class ClaudeCacheAsyncClient(httpx.AsyncClient):
         headers: MutableMapping[str, str], access_token: str
     ) -> None:
         bearer_value = f"Bearer {access_token}"
-        if "Authorization" in headers or "authorization" in headers:
+        if "Authorization" in headers:
             headers["Authorization"] = bearer_value
-        elif "x-api-key" in headers or "X-API-Key" in headers:
+        elif "authorization" in headers:
+            headers["authorization"] = bearer_value
+        elif "x-api-key" in headers:
             headers["x-api-key"] = access_token
+        elif "X-API-Key" in headers:
+            headers["X-API-Key"] = access_token
         else:
             headers["Authorization"] = bearer_value
 
@@ -667,25 +721,46 @@ class ClaudeCacheAsyncClient(httpx.AsyncClient):
         self._notify_token_recovered(reauthenticated_token)
         return reauthenticated_token
 
+    def _apply_token_refresh_results(self, results: list[Any]) -> str | None:
+        if not results:
+            # Plugin not loaded — nothing to refresh.
+            return None
+
+        logger.info("Attempting to refresh Claude Code OAuth token...")
+        refreshed_token = next(
+            (result for result in results if isinstance(result, str) and result),
+            None,
+        )
+        if refreshed_token:
+            self._update_auth_headers(self.headers, refreshed_token)
+            self._notify_token_recovered(refreshed_token)
+            logger.info("Successfully refreshed Claude Code OAuth token")
+        else:
+            logger.warning("Token refresh returned None")
+        return refreshed_token
+
     def _refresh_claude_oauth_token(self) -> str | None:
         try:
-            from code_puppy.plugins.claude_code_oauth.utils import refresh_access_token
+            from code_puppy.callbacks import on_refresh_claude_oauth_token
 
-            logger.info("Attempting to refresh Claude Code OAuth token...")
-            refreshed_token = refresh_access_token(force=True)
-            if refreshed_token:
-                self._update_auth_headers(self.headers, refreshed_token)
-                self._notify_token_recovered(refreshed_token)
-                logger.info("Successfully refreshed Claude Code OAuth token")
-            else:
-                logger.warning("Token refresh returned None")
-            return refreshed_token
+            return self._apply_token_refresh_results(on_refresh_claude_oauth_token())
+        except Exception as exc:
+            logger.error("Exception during token refresh: %s", exc)
+            return None
+
+    async def _refresh_claude_oauth_token_async(self) -> str | None:
+        """Await token-refresh providers from an active event loop."""
+        try:
+            from code_puppy.callbacks import on_refresh_claude_oauth_token_async
+
+            results = await on_refresh_claude_oauth_token_async()
+            return self._apply_token_refresh_results(results)
         except Exception as exc:
             logger.error("Exception during token refresh: %s", exc)
             return None
 
     @staticmethod
-    def _inject_cache_control(body: bytes) -> bytes | None:
+    def _inject_cache_control(body: bytes, ttl: str | None = None) -> bytes | None:
         try:
             data = json.loads(body.decode("utf-8"))
         except Exception:
@@ -708,13 +783,13 @@ class ClaudeCacheAsyncClient(httpx.AsyncClient):
         if isinstance(system, list) and system:
             last_sys = system[-1]
             if isinstance(last_sys, dict) and "cache_control" not in last_sys:
-                last_sys["cache_control"] = {"type": "ephemeral"}
+                last_sys["cache_control"] = _cache_marker(ttl)
                 modified = True
         elif isinstance(system, str) and system:
             # Convert bare string to content-block list so we can attach
             # cache_control (the Anthropic API accepts both formats).
             data["system"] = [
-                {"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}
+                {"type": "text", "text": system, "cache_control": _cache_marker(ttl)}
             ]
             modified = True
 
@@ -723,7 +798,7 @@ class ClaudeCacheAsyncClient(httpx.AsyncClient):
         if isinstance(tools, list) and tools:
             last_tool = tools[-1]
             if isinstance(last_tool, dict) and "cache_control" not in last_tool:
-                last_tool["cache_control"] = {"type": "ephemeral"}
+                last_tool["cache_control"] = _cache_marker(ttl)
                 modified = True
 
         # 3. Last message content block
@@ -738,7 +813,7 @@ class ClaudeCacheAsyncClient(httpx.AsyncClient):
                         isinstance(last_block, dict)
                         and "cache_control" not in last_block
                     ):
-                        last_block["cache_control"] = {"type": "ephemeral"}
+                        last_block["cache_control"] = _cache_marker(ttl)
                         modified = True
 
         # 4. Opus 4.7 adaptive-thinking requires display=summarized on the
@@ -753,7 +828,9 @@ class ClaudeCacheAsyncClient(httpx.AsyncClient):
         return json.dumps(data).encode("utf-8")
 
 
-def _inject_cache_control_in_payload(payload: dict[str, Any]) -> None:
+def _inject_cache_control_in_payload(
+    payload: dict[str, Any], ttl: str | None = None
+) -> None:
     """In-place cache_control injection on Anthropic messages.create payload.
 
     Places up to three cache breakpoints (Anthropic allows 4) on the most
@@ -768,10 +845,10 @@ def _inject_cache_control_in_payload(payload: dict[str, Any]) -> None:
     if isinstance(system, list) and system:
         last_sys = system[-1]
         if isinstance(last_sys, dict) and "cache_control" not in last_sys:
-            last_sys["cache_control"] = {"type": "ephemeral"}
+            last_sys["cache_control"] = _cache_marker(ttl)
     elif isinstance(system, str) and system:
         payload["system"] = [
-            {"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}
+            {"type": "text", "text": system, "cache_control": _cache_marker(ttl)}
         ]
 
     # 2. Tool definitions
@@ -779,7 +856,7 @@ def _inject_cache_control_in_payload(payload: dict[str, Any]) -> None:
     if isinstance(tools, list) and tools:
         last_tool = tools[-1]
         if isinstance(last_tool, dict) and "cache_control" not in last_tool:
-            last_tool["cache_control"] = {"type": "ephemeral"}
+            last_tool["cache_control"] = _cache_marker(ttl)
 
     # 3. Last message content block
     messages = payload.get("messages")
@@ -790,7 +867,7 @@ def _inject_cache_control_in_payload(payload: dict[str, Any]) -> None:
             if isinstance(content, list) and content:
                 last_block = content[-1]
                 if isinstance(last_block, dict) and "cache_control" not in last_block:
-                    last_block["cache_control"] = {"type": "ephemeral"}
+                    last_block["cache_control"] = _cache_marker(ttl)
 
     # 4. Opus 4.7 adaptive-thinking requires display=summarized on the
     # thinking dict. Enforce here as well so the AsyncAnthropic client
@@ -798,27 +875,32 @@ def _inject_cache_control_in_payload(payload: dict[str, Any]) -> None:
     _enforce_thinking_display_summary(payload)
 
 
-def _make_cache_wrapper(original_create: Callable[..., Any]) -> Callable[..., Any]:
+def _make_cache_wrapper(
+    original_create: Callable[..., Any], ttl: str | None = None
+) -> Callable[..., Any]:
     """Create a wrapped version of messages.create that injects cache_control."""
 
     async def wrapped_create(*args: Any, **kwargs: Any):
         if kwargs:
-            _inject_cache_control_in_payload(kwargs)
+            _inject_cache_control_in_payload(kwargs, ttl)
         elif args:
             maybe_payload = args[-1]
             if isinstance(maybe_payload, dict):
-                _inject_cache_control_in_payload(maybe_payload)
+                _inject_cache_control_in_payload(maybe_payload, ttl)
 
         return await original_create(*args, **kwargs)
 
     return wrapped_create
 
 
-def patch_anthropic_client_messages(client: Any) -> None:
+def patch_anthropic_client_messages(client: Any, cache_ttl: str | None = None) -> None:
     """Monkey-patch AsyncAnthropic messages.create to inject cache_control.
 
     Patches both client.messages.create AND client.beta.messages.create
     since pydantic-ai uses the beta endpoint.
+
+    ``cache_ttl`` (e.g. "1h") is stamped on every injected marker; ``None``
+    keeps Anthropic's default 5-minute TTL.
     """
 
     if AsyncAnthropic is None or not isinstance(client, AsyncAnthropic):  # type: ignore[arg-type]
@@ -828,7 +910,7 @@ def patch_anthropic_client_messages(client: Any) -> None:
     try:
         messages_obj = getattr(client, "messages", None)
         if messages_obj is not None:
-            messages_obj.create = _make_cache_wrapper(messages_obj.create)  # type: ignore[assignment]
+            messages_obj.create = _make_cache_wrapper(messages_obj.create, cache_ttl)  # type: ignore[assignment]
     except Exception:  # pragma: no cover - defensive
         pass
 
@@ -838,6 +920,8 @@ def patch_anthropic_client_messages(client: Any) -> None:
         if beta_obj is not None:
             beta_messages_obj = getattr(beta_obj, "messages", None)
             if beta_messages_obj is not None:
-                beta_messages_obj.create = _make_cache_wrapper(beta_messages_obj.create)  # type: ignore[assignment]
+                beta_messages_obj.create = _make_cache_wrapper(
+                    beta_messages_obj.create, cache_ttl
+                )  # type: ignore[assignment]
     except Exception:  # pragma: no cover - defensive
         pass

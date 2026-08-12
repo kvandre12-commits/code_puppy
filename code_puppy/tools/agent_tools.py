@@ -147,7 +147,7 @@ def _save_session_history(
     elif txt_path.exists():
         # Update message count on subsequent saves
         try:
-            with open(txt_path, "r") as f:
+            with open(txt_path, "r", encoding="utf-8") as f:
                 metadata = json.load(f)
             metadata["message_count"] = len(message_history)
             metadata["last_updated"] = datetime.now().isoformat()
@@ -210,6 +210,34 @@ class AgentInvokeOutput(BaseModel):
     error: str | None = None
 
 
+class AgentInvokeWithModelOutput(AgentInvokeOutput):
+    """Output for the invoke_agent_with_model tool.
+
+    Extends :class:`AgentInvokeOutput` with per-run token-usage and timing
+    fields, populated on the success path only, so benchmarking/
+    model-comparison callers that explicitly pin a model can measure per-run
+    cost without reconstructing it from downstream telemetry. These fields are
+    scoped to THIS tool only -- ``invoke_agent`` keeps the original five-field
+    contract untouched, with no functional or schema changes.
+
+    Token accounting is normalized so the input buckets never overlap:
+    ``input_tokens`` counts only regular (non-cached) input, while cached input
+    is reported separately as ``cache_read_input_tokens`` (cache hits) and
+    ``cache_creation_input_tokens`` (cache writes). A provider that does not
+    report a given bucket leaves that field ``None`` rather than a fabricated 0.
+    """
+
+    input_tokens: int | None = None
+    cache_read_input_tokens: int | None = None
+    cache_creation_input_tokens: int | None = None
+    output_tokens: int | None = None
+    total_tokens: int | None = None
+    num_requests: int | None = None
+    start_time: str | None = None
+    end_time: str | None = None
+    duration_ms: float | None = None
+
+
 def register_list_agents(agent):
     """Register the list_agents tool with the provided agent.
 
@@ -250,7 +278,7 @@ def register_list_agents(agent):
             agent_count = len(agents)
             emit_info(
                 Text.from_markup(
-                    f"[bold white on {list_agents_color}] LIST AGENTS [/bold white on {list_agents_color}] "
+                    f"\n[bold white on {list_agents_color}] LIST AGENTS [/bold white on {list_agents_color}] "
                     f"[dim]Found {agent_count} agent(s).[/dim]"
                 ),
                 message_group=group_id,
@@ -278,6 +306,7 @@ from code_puppy.tools.subagent_invocation import (  # noqa: E402
 __all__ = [
     "AgentInfo",
     "AgentInvokeOutput",
+    "AgentInvokeWithModelOutput",
     "ListAgentsOutput",
     "_active_subagent_tasks",
     "_generate_session_hash_suffix",

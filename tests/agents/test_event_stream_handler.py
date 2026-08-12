@@ -9,6 +9,7 @@ Covers:
 - Cleanup and state management
 """
 
+import contextlib
 from io import StringIO
 from unittest.mock import MagicMock, patch
 
@@ -111,10 +112,16 @@ class TestEventStreamHandler:
         await event_stream_handler(mock_ctx, empty_stream())
 
     @pytest.mark.asyncio
-    async def test_handles_thinking_part_start_event(self, mock_ctx):
-        """Test handling PartStartEvent for ThinkingPart."""
-        thinking_part = ThinkingPart(content="I am thinking...")
-        event = PartStartEvent(index=0, part=thinking_part)
+    @pytest.mark.parametrize(
+        "part",
+        [
+            pytest.param(ThinkingPart(content="I am thinking..."), id="thinking_part"),
+            pytest.param(TextPart(content="Hello world"), id="text_part"),
+        ],
+    )
+    async def test_handles_part_start_event(self, mock_ctx, part):
+        """Test handling PartStartEvent for ThinkingPart / TextPart."""
+        event = PartStartEvent(index=0, part=part)
 
         async def event_stream():
             yield event
@@ -122,27 +129,8 @@ class TestEventStreamHandler:
         console = MagicMock(spec=Console)
         set_streaming_console(console)
 
-        with patch("code_puppy.agents.event_stream_handler.pause_all_spinners"):
-            with patch("code_puppy.agents.event_stream_handler.resume_all_spinners"):
-                await event_stream_handler(mock_ctx, event_stream())
-
-        # Console should have printed something
-        assert console.print.called
-
-    @pytest.mark.asyncio
-    async def test_handles_text_part_start_event(self, mock_ctx):
-        """Test handling PartStartEvent for TextPart."""
-        text_part = TextPart(content="Hello world")
-        event = PartStartEvent(index=0, part=text_part)
-
-        async def event_stream():
-            yield event
-
-        console = MagicMock(spec=Console)
-        set_streaming_console(console)
-
-        with patch("code_puppy.agents.event_stream_handler.pause_all_spinners"):
-            with patch("code_puppy.agents.event_stream_handler.resume_all_spinners"):
+        with contextlib.nullcontext():
+            with contextlib.nullcontext():
                 await event_stream_handler(mock_ctx, event_stream())
 
         assert console.print.called
@@ -159,8 +147,8 @@ class TestEventStreamHandler:
         console = MagicMock(spec=Console)
         set_streaming_console(console)
 
-        with patch("code_puppy.agents.event_stream_handler.pause_all_spinners"):
-            with patch("code_puppy.agents.event_stream_handler.resume_all_spinners"):
+        with contextlib.nullcontext():
+            with contextlib.nullcontext():
                 await event_stream_handler(mock_ctx, event_stream())
 
     @pytest.mark.asyncio
@@ -175,16 +163,22 @@ class TestEventStreamHandler:
         console = MagicMock(spec=Console)
         set_streaming_console(console)
 
-        with patch("code_puppy.agents.event_stream_handler.pause_all_spinners"):
-            with patch("code_puppy.agents.event_stream_handler.resume_all_spinners"):
+        with contextlib.nullcontext():
+            with contextlib.nullcontext():
                 with patch(
                     "code_puppy.agents.event_stream_handler.get_banner_color",
                     return_value="blue",
                 ):
                     await event_stream_handler(mock_ctx, event_stream())
 
-        # Should print the initial content
+        # The banner and initial content should print without a redundant icon.
         assert console.print.called
+        thinking_banner = next(
+            call.args[0]
+            for call in console.print.call_args_list
+            if call.args and "THINKING" in str(call.args[0])
+        )
+        assert chr(0x26A1) not in str(thinking_banner)
 
     @pytest.mark.asyncio
     async def test_handles_text_part_with_initial_content(self, mock_ctx):
@@ -198,8 +192,8 @@ class TestEventStreamHandler:
         console = MagicMock(spec=Console)
         set_streaming_console(console)
 
-        with patch("code_puppy.agents.event_stream_handler.pause_all_spinners"):
-            with patch("code_puppy.agents.event_stream_handler.resume_all_spinners"):
+        with contextlib.nullcontext():
+            with contextlib.nullcontext():
                 with patch(
                     "code_puppy.agents.event_stream_handler.get_banner_color",
                     return_value="blue",
@@ -225,8 +219,8 @@ class TestEventStreamHandler:
         console = MagicMock(spec=Console)
         set_streaming_console(console)
 
-        with patch("code_puppy.agents.event_stream_handler.pause_all_spinners"):
-            with patch("code_puppy.agents.event_stream_handler.resume_all_spinners"):
+        with contextlib.nullcontext():
+            with contextlib.nullcontext():
                 with patch(
                     "code_puppy.agents.event_stream_handler.get_banner_color",
                     return_value="blue",
@@ -237,12 +231,19 @@ class TestEventStreamHandler:
         assert console.print.called
 
     @pytest.mark.asyncio
-    async def test_handles_text_part_delta_event(self, mock_ctx):
-        """Test handling PartDeltaEvent for TextPartDelta."""
-        text_part = TextPart(content="")
-        start_event = PartStartEvent(index=0, part=text_part)
-        delta = TextPartDelta(content_delta="Hello ")
-        delta_event = PartDeltaEvent(index=0, delta=delta)
+    @pytest.mark.parametrize(
+        "delta_content",
+        [
+            pytest.param("Hello ", id="plain"),
+            pytest.param("Line 1\nLine 2", id="newlines"),
+        ],
+    )
+    async def test_handles_text_part_delta_event(self, mock_ctx, delta_content):
+        """Test handling PartDeltaEvent for TextPartDelta (plain + newlines)."""
+        start_event = PartStartEvent(index=0, part=TextPart(content=""))
+        delta_event = PartDeltaEvent(
+            index=0, delta=TextPartDelta(content_delta=delta_content)
+        )
 
         async def event_stream():
             yield start_event
@@ -252,8 +253,8 @@ class TestEventStreamHandler:
         console.file = StringIO()
         set_streaming_console(console)
 
-        with patch("code_puppy.agents.event_stream_handler.pause_all_spinners"):
-            with patch("code_puppy.agents.event_stream_handler.resume_all_spinners"):
+        with contextlib.nullcontext():
+            with contextlib.nullcontext():
                 with patch(
                     "code_puppy.agents.event_stream_handler.get_banner_color",
                     return_value="blue",
@@ -285,8 +286,8 @@ class TestEventStreamHandler:
         console = MagicMock(spec=Console)
         set_streaming_console(console)
 
-        with patch("code_puppy.agents.event_stream_handler.pause_all_spinners"):
-            with patch("code_puppy.agents.event_stream_handler.resume_all_spinners"):
+        with contextlib.nullcontext():
+            with contextlib.nullcontext():
                 await event_stream_handler(mock_ctx, event_stream())
 
         # Should have printed tool call info
@@ -307,8 +308,8 @@ class TestEventStreamHandler:
         console.file = StringIO()
         set_streaming_console(console)
 
-        with patch("code_puppy.agents.event_stream_handler.pause_all_spinners"):
-            with patch("code_puppy.agents.event_stream_handler.resume_all_spinners"):
+        with contextlib.nullcontext():
+            with contextlib.nullcontext():
                 with patch("termflow.Parser") as mock_parser_cls:
                     mock_parser = MagicMock()
                     mock_parser.finalize.return_value = []
@@ -335,8 +336,8 @@ class TestEventStreamHandler:
         console = MagicMock(spec=Console)
         set_streaming_console(console)
 
-        with patch("code_puppy.agents.event_stream_handler.pause_all_spinners"):
-            with patch("code_puppy.agents.event_stream_handler.resume_all_spinners"):
+        with contextlib.nullcontext():
+            with contextlib.nullcontext():
                 await event_stream_handler(mock_ctx, event_stream())
 
         # Should have handled the end event without error
@@ -357,8 +358,8 @@ class TestEventStreamHandler:
         console = MagicMock(spec=Console)
         set_streaming_console(console)
 
-        with patch("code_puppy.agents.event_stream_handler.pause_all_spinners"):
-            with patch("code_puppy.agents.event_stream_handler.resume_all_spinners"):
+        with contextlib.nullcontext():
+            with contextlib.nullcontext():
                 with patch(
                     "code_puppy.agents.event_stream_handler.get_banner_color",
                     return_value="blue",
@@ -385,8 +386,8 @@ class TestEventStreamHandler:
         console.file = StringIO()
         set_streaming_console(console)
 
-        with patch("code_puppy.agents.event_stream_handler.pause_all_spinners"):
-            with patch("code_puppy.agents.event_stream_handler.resume_all_spinners"):
+        with contextlib.nullcontext():
+            with contextlib.nullcontext():
                 with patch("termflow.Parser") as mock_parser_cls:
                     mock_parser = MagicMock()
                     mock_parser.finalize.return_value = []
@@ -419,8 +420,8 @@ class TestEventStreamHandler:
         console.file = StringIO()
         set_streaming_console(console)
 
-        with patch("code_puppy.agents.event_stream_handler.pause_all_spinners"):
-            with patch("code_puppy.agents.event_stream_handler.resume_all_spinners"):
+        with contextlib.nullcontext():
+            with contextlib.nullcontext():
                 with patch(
                     "code_puppy.agents.event_stream_handler.get_banner_color",
                     return_value="blue",
@@ -437,40 +438,6 @@ class TestEventStreamHandler:
         # Handler should process multiple deltas without error
 
     @pytest.mark.asyncio
-    async def test_streaming_with_newlines_in_text(self, mock_ctx):
-        """Test that newlines are handled correctly in text streaming."""
-        text_part = TextPart(content="")
-        start_event = PartStartEvent(index=0, part=text_part)
-        # Content with newline
-        delta = TextPartDelta(content_delta="Line 1\nLine 2")
-        delta_event = PartDeltaEvent(index=0, delta=delta)
-
-        async def event_stream():
-            yield start_event
-            yield delta_event
-
-        console = MagicMock(spec=Console, width=80)
-        console.file = StringIO()
-        set_streaming_console(console)
-
-        with patch("code_puppy.agents.event_stream_handler.pause_all_spinners"):
-            with patch("code_puppy.agents.event_stream_handler.resume_all_spinners"):
-                with patch(
-                    "code_puppy.agents.event_stream_handler.get_banner_color",
-                    return_value="blue",
-                ):
-                    with patch("termflow.Parser") as mock_parser_cls:
-                        mock_parser = MagicMock()
-                        mock_parser.parse_line.return_value = []
-                        mock_parser.finalize.return_value = []
-                        mock_parser_cls.return_value = mock_parser
-
-                        with patch("termflow.Renderer"):
-                            await event_stream_handler(mock_ctx, event_stream())
-
-        # Handler should process newlines in text without error
-
-    @pytest.mark.asyncio
     async def test_streaming_ignores_delta_for_unknown_part_index(self, mock_ctx):
         """Test that deltas for unknown part indices are ignored."""
         # Delta for index 5 without corresponding start event
@@ -483,8 +450,8 @@ class TestEventStreamHandler:
         console = MagicMock(spec=Console)
         set_streaming_console(console)
 
-        with patch("code_puppy.agents.event_stream_handler.pause_all_spinners"):
-            with patch("code_puppy.agents.event_stream_handler.resume_all_spinners"):
+        with contextlib.nullcontext():
+            with contextlib.nullcontext():
                 # Should not raise an error
                 await event_stream_handler(mock_ctx, event_stream())
 
@@ -511,8 +478,8 @@ class TestEventStreamHandler:
         console = MagicMock(spec=Console)
         set_streaming_console(console)
 
-        with patch("code_puppy.agents.event_stream_handler.pause_all_spinners"):
-            with patch("code_puppy.agents.event_stream_handler.resume_all_spinners"):
+        with contextlib.nullcontext():
+            with contextlib.nullcontext():
                 await event_stream_handler(mock_ctx, event_stream())
 
         # Console should show token counts
@@ -534,8 +501,8 @@ class TestEventStreamHandler:
         console = MagicMock(spec=Console)
         set_streaming_console(console)
 
-        with patch("code_puppy.agents.event_stream_handler.pause_all_spinners"):
-            with patch("code_puppy.agents.event_stream_handler.resume_all_spinners"):
+        with contextlib.nullcontext():
+            with contextlib.nullcontext():
                 with patch(
                     "code_puppy.agents.event_stream_handler.get_banner_color",
                     return_value="blue",
@@ -558,8 +525,8 @@ class TestEventStreamHandler:
         console.file = StringIO()
         set_streaming_console(console)
 
-        with patch("code_puppy.agents.event_stream_handler.pause_all_spinners"):
-            with patch("code_puppy.agents.event_stream_handler.resume_all_spinners"):
+        with contextlib.nullcontext():
+            with contextlib.nullcontext():
                 with patch(
                     "code_puppy.agents.event_stream_handler.get_banner_color",
                     return_value="blue",
@@ -589,8 +556,8 @@ class TestEventStreamHandler:
         console.file = StringIO()
         set_streaming_console(console)
 
-        with patch("code_puppy.agents.event_stream_handler.pause_all_spinners"):
-            with patch("code_puppy.agents.event_stream_handler.resume_all_spinners"):
+        with contextlib.nullcontext():
+            with contextlib.nullcontext():
                 with patch(
                     "code_puppy.agents.event_stream_handler.get_banner_color",
                     return_value="blue",
@@ -628,8 +595,8 @@ class TestEventStreamHandler:
         console.file = StringIO()
         set_streaming_console(console)
 
-        with patch("code_puppy.agents.event_stream_handler.pause_all_spinners"):
-            with patch("code_puppy.agents.event_stream_handler.resume_all_spinners"):
+        with contextlib.nullcontext():
+            with contextlib.nullcontext():
                 with patch(
                     "code_puppy.agents.event_stream_handler.get_banner_color",
                     return_value="blue",
@@ -718,10 +685,8 @@ class TestSubAgentSuppression:
 
         # Run in sub-agent context BUT with verbose=True
         with subagent_context("test-agent"):
-            with patch("code_puppy.agents.event_stream_handler.pause_all_spinners"):
-                with patch(
-                    "code_puppy.agents.event_stream_handler.resume_all_spinners"
-                ):
+            with contextlib.nullcontext():
+                with contextlib.nullcontext():
                     with patch(
                         "code_puppy.agents.event_stream_handler.get_banner_color",
                         return_value="blue",
@@ -758,8 +723,8 @@ class TestSubAgentSuppression:
         set_streaming_console(console)
 
         # NOT in subagent_context - main agent
-        with patch("code_puppy.agents.event_stream_handler.pause_all_spinners"):
-            with patch("code_puppy.agents.event_stream_handler.resume_all_spinners"):
+        with contextlib.nullcontext():
+            with contextlib.nullcontext():
                 with patch(
                     "code_puppy.agents.event_stream_handler.get_banner_color",
                     return_value="blue",

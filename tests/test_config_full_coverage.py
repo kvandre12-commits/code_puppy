@@ -11,6 +11,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+
 from code_puppy import config as cp_config
 
 
@@ -166,57 +167,44 @@ class TestNumericGetters:
     def test_get_resume_message_count_default(self):
         assert cp_config.get_resume_message_count() == 50
 
-    def test_get_resume_message_count_custom(self):
-        cp_config.set_config_value("resume_message_count", "30")
-        assert cp_config.get_resume_message_count() == 30
-
-    def test_get_resume_message_count_clamped(self):
-        cp_config.set_config_value("resume_message_count", "999")
-        assert cp_config.get_resume_message_count() == 100
-
-    def test_get_resume_message_count_invalid(self):
-        cp_config.set_config_value("resume_message_count", "bad")
-        assert cp_config.get_resume_message_count() == 50
+    @pytest.mark.parametrize("value, expected", [("30", 30), ("999", 100), ("bad", 50)])
+    def test_get_resume_message_count(self, value, expected):
+        cp_config.set_config_value("resume_message_count", value)
+        assert cp_config.get_resume_message_count() == expected
 
     def test_get_compaction_threshold_default(self):
         assert cp_config.get_compaction_threshold() == 0.85
 
-    def test_get_compaction_threshold_custom(self):
-        cp_config.set_config_value("compaction_threshold", "0.7")
-        assert cp_config.get_compaction_threshold() == 0.7
-
-    def test_get_compaction_threshold_clamped_low(self):
-        cp_config.set_config_value("compaction_threshold", "0.1")
-        assert cp_config.get_compaction_threshold() == 0.5
-
-    def test_get_compaction_threshold_invalid(self):
-        cp_config.set_config_value("compaction_threshold", "xyz")
-        assert cp_config.get_compaction_threshold() == 0.85
+    @pytest.mark.parametrize(
+        "value, expected", [("0.7", 0.7), ("0.1", 0.5), ("xyz", 0.85)]
+    )
+    def test_get_compaction_threshold(self, value, expected):
+        cp_config.set_config_value("compaction_threshold", value)
+        assert cp_config.get_compaction_threshold() == expected
 
     def test_get_compaction_strategy_default(self):
-        assert cp_config.get_compaction_strategy() in ["summarization", "truncation"]
-
-    def test_get_compaction_strategy_values(self):
-        cp_config.set_config_value("compaction_strategy", "summarization")
         assert cp_config.get_compaction_strategy() == "summarization"
-        cp_config.set_config_value("compaction_strategy", "truncation")
-        assert cp_config.get_compaction_strategy() == "truncation"
 
-    def test_get_compaction_strategy_invalid(self):
-        cp_config.set_config_value("compaction_strategy", "invalid")
-        assert cp_config.get_compaction_strategy() == "truncation"
+    @pytest.mark.parametrize(
+        "value, expected",
+        [
+            ("summarization", "summarization"),
+            ("truncation", "truncation"),
+            ("invalid", "summarization"),
+        ],
+    )
+    def test_get_compaction_strategy(self, value, expected):
+        cp_config.set_config_value("compaction_strategy", value)
+        assert cp_config.get_compaction_strategy() == expected
 
     def test_get_message_limit_default(self):
         cp_config.reset_value("message_limit")
         assert cp_config.get_message_limit() == 1000
 
-    def test_get_message_limit_custom(self):
-        cp_config.set_config_value("message_limit", "500")
-        assert cp_config.get_message_limit() == 500
-
-    def test_get_message_limit_invalid(self):
-        cp_config.set_config_value("message_limit", "bad")
-        assert cp_config.get_message_limit() == 1000
+    @pytest.mark.parametrize("value, expected", [("500", 500), ("bad", 1000)])
+    def test_get_message_limit(self, value, expected):
+        cp_config.set_config_value("message_limit", value)
+        assert cp_config.get_message_limit() == expected
 
     def test_get_message_limit_custom_default(self):
         cp_config.reset_value("message_limit")
@@ -226,17 +214,10 @@ class TestNumericGetters:
         cp_config.reset_value("diff_context_lines")
         assert cp_config.get_diff_context_lines() == 6
 
-    def test_get_diff_context_lines_custom(self):
-        cp_config.set_config_value("diff_context_lines", "10")
-        assert cp_config.get_diff_context_lines() == 10
-
-    def test_get_diff_context_lines_clamped(self):
-        cp_config.set_config_value("diff_context_lines", "100")
-        assert cp_config.get_diff_context_lines() == 50
-
-    def test_get_diff_context_lines_invalid(self):
-        cp_config.set_config_value("diff_context_lines", "bad")
-        assert cp_config.get_diff_context_lines() == 6
+    @pytest.mark.parametrize("value, expected", [("10", 10), ("100", 50), ("bad", 6)])
+    def test_get_diff_context_lines(self, value, expected):
+        cp_config.set_config_value("diff_context_lines", value)
+        assert cp_config.get_diff_context_lines() == expected
 
     def test_get_max_saved_sessions_default(self):
         assert cp_config.get_max_saved_sessions() == 20
@@ -280,21 +261,13 @@ class TestTemperature:
         cp_config.set_config_value("temperature", "")
         assert cp_config.get_temperature() is None
 
-    def test_get_temperature_valid(self):
-        cp_config.set_config_value("temperature", "0.7")
-        assert cp_config.get_temperature() == 0.7
-
-    def test_get_temperature_clamped_high(self):
-        cp_config.set_config_value("temperature", "5.0")
-        assert cp_config.get_temperature() == 2.0
-
-    def test_get_temperature_clamped_low(self):
-        cp_config.set_config_value("temperature", "-1.0")
-        assert cp_config.get_temperature() == 0.0
-
-    def test_get_temperature_invalid(self):
-        cp_config.set_config_value("temperature", "bad")
-        assert cp_config.get_temperature() is None
+    @pytest.mark.parametrize(
+        "value, expected",
+        [("0.7", 0.7), ("5.0", 2.0), ("-1.0", 0.0), ("bad", None)],
+    )
+    def test_get_temperature(self, value, expected):
+        cp_config.set_config_value("temperature", value)
+        assert cp_config.get_temperature() == expected
 
     def test_set_temperature_none(self):
         cp_config.set_temperature(None)
@@ -303,47 +276,6 @@ class TestTemperature:
     def test_set_temperature_value(self):
         cp_config.set_temperature(1.5)
         assert cp_config.get_temperature() == 1.5
-
-
-# ---------------------------------------------------------------------------
-# OpenAI reasoning / verbosity
-# ---------------------------------------------------------------------------
-class TestOpenAISettings:
-    def test_get_openai_reasoning_effort_default(self):
-        cp_config.reset_value("openai_reasoning_effort")
-        assert cp_config.get_openai_reasoning_effort() == "medium"
-
-    def test_get_openai_reasoning_effort_invalid(self):
-        cp_config.set_config_value("openai_reasoning_effort", "bogus")
-        assert cp_config.get_openai_reasoning_effort() == "medium"
-
-    def test_set_openai_reasoning_effort_valid(self):
-        cp_config.set_openai_reasoning_effort("max")
-        assert cp_config.get_openai_reasoning_effort() == "max"
-
-    def test_set_openai_reasoning_effort_none_valid(self):
-        cp_config.set_openai_reasoning_effort("none")
-        assert cp_config.get_openai_reasoning_effort() == "none"
-
-    def test_set_openai_reasoning_effort_invalid(self):
-        with pytest.raises(ValueError):
-            cp_config.set_openai_reasoning_effort("bogus")
-
-    def test_get_openai_verbosity_default(self):
-        cp_config.reset_value("openai_verbosity")
-        assert cp_config.get_openai_verbosity() == "medium"
-
-    def test_get_openai_verbosity_invalid(self):
-        cp_config.set_config_value("openai_verbosity", "bogus")
-        assert cp_config.get_openai_verbosity() == "medium"
-
-    def test_set_openai_verbosity_valid(self):
-        cp_config.set_openai_verbosity("low")
-        assert cp_config.get_openai_verbosity() == "low"
-
-    def test_set_openai_verbosity_invalid(self):
-        with pytest.raises(ValueError):
-            cp_config.set_openai_verbosity("bogus")
 
 
 # ---------------------------------------------------------------------------
@@ -448,6 +380,22 @@ class TestModelSupportsSetting:
             cp_config.model_supports_setting("glm-4.7-chat", "clear_thinking") is True
         )
         assert cp_config.model_supports_setting("GLM-5-large", "clear_thinking") is True
+
+    def test_glm_thinking_type_supported_from_4_5(self):
+        assert cp_config.model_supports_setting("GLM-4.5-AIR-CODING", "thinking_type")
+        assert cp_config.model_supports_setting("glm-4.6", "thinking_type")
+        assert cp_config.model_supports_setting("zai-glm-5.1-api", "thinking_type")
+        assert not cp_config.model_supports_setting("glm-4.4", "thinking_type")
+        assert not cp_config.model_supports_setting("gpt-5", "thinking_type")
+
+    def test_glm_reasoning_effort_only_5_2_plus(self):
+        assert not cp_config.model_supports_setting(
+            "zai-glm-5.1-api", "glm_reasoning_effort"
+        )
+        assert not cp_config.model_supports_setting("glm-4.7", "glm_reasoning_effort")
+        assert cp_config.model_supports_setting(
+            "zai-glm-5.2-api", "glm_reasoning_effort"
+        )
 
     def test_with_supported_settings_list(self):
         mock_config = {"test-model": {"supported_settings": ["temperature", "seed"]}}
@@ -763,20 +711,6 @@ class TestAgentPinnedModels:
         # empty string is treated as falsy but returned by get_value
         assert not cp_config.get_agent_pinned_model("test-agent")
 
-    def test_get_all_agent_pinned_models(self):
-        cp_config.set_agent_pinned_model("a1", "m1")
-        cp_config.set_agent_pinned_model("a2", "m2")
-        pinnings = cp_config.get_all_agent_pinned_models()
-        assert pinnings.get("a1") == "m1"
-        assert pinnings.get("a2") == "m2"
-
-    def test_get_agents_pinned_to_model(self):
-        cp_config.set_agent_pinned_model("pa1", "target")
-        cp_config.set_agent_pinned_model("pa2", "other")
-        result = cp_config.get_agents_pinned_to_model("target")
-        assert "pa1" in result
-        assert "pa2" not in result
-
 
 # ---------------------------------------------------------------------------
 # Puppy token
@@ -809,6 +743,49 @@ class TestDiffColors:
         # Rich color names are normalized to '#RRGGBB' hex on write.
         cp_config.set_diff_deletion_color("red")
         assert cp_config.get_diff_deletion_color() == "#800000"
+
+    def test_unset_colors_are_derived_from_dark_theme_palette(self):
+        cp_config.set_config_value(
+            "osc_palette_json",
+            json.dumps(
+                {
+                    "bg": "#000000",
+                    "ansi": ["#000000", "#ff0000", "#00ff00"],
+                }
+            ),
+        )
+
+        assert cp_config.get_diff_addition_color() == "#003300"
+        assert cp_config.get_diff_deletion_color() == "#330000"
+
+    def test_unset_colors_are_subtle_on_light_themes(self):
+        cp_config.set_config_value(
+            "osc_palette_json",
+            json.dumps(
+                {
+                    "bg": "#ffffff",
+                    "ansi": ["#000000", "#ff0000", "#00ff00"],
+                }
+            ),
+        )
+
+        assert cp_config.get_diff_addition_color() == "#dbffdb"
+        assert cp_config.get_diff_deletion_color() == "#ffdbdb"
+
+    def test_explicit_diff_color_wins_over_theme(self):
+        cp_config.set_config_value(
+            "osc_palette_json",
+            json.dumps({"bg": "#000000", "ansi": ["#000000", "#ff0000"]}),
+        )
+        cp_config.set_diff_addition_color("#123456")
+
+        assert cp_config.get_diff_addition_color() == "#123456"
+
+    def test_malformed_theme_palette_uses_legacy_defaults(self):
+        cp_config.set_config_value("osc_palette_json", "not json")
+
+        assert cp_config.get_diff_addition_color() == "#0b1f0b"
+        assert cp_config.get_diff_deletion_color() == "#390e1a"
 
     def test_set_diff_highlight_style_noop(self):
         # Should not raise
@@ -877,12 +854,17 @@ class TestAutosaveSession:
         assert name.startswith("auto_session_")
 
     def test_set_from_session_name_with_prefix(self):
+        # Post-unification: the deprecation shim stores the full name verbatim
+        # rather than stripping the `auto_session_` prefix. Documented behavior
+        # change so the singleton always holds a loadable session filename.
         result = cp_config.set_current_autosave_from_session_name(
             "auto_session_20250101_120000"
         )
-        assert result == "20250101_120000"
+        assert result == "auto_session_20250101_120000"
 
     def test_set_from_session_name_without_prefix(self):
+        # Post-unification: non-prefixed names are stored verbatim too
+        # (a user-named session like 'mywork' must round-trip unchanged).
         result = cp_config.set_current_autosave_from_session_name("custom_id")
         assert result == "custom_id"
 
