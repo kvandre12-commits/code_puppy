@@ -11,6 +11,8 @@ import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 import code_puppy.plugins as plugins_module
 from code_puppy.plugins import (
     USER_PLUGINS_DIR,
@@ -20,6 +22,22 @@ from code_puppy.plugins import (
     get_user_plugins_dir,
     load_plugin_callbacks,
 )
+
+
+@pytest.fixture(autouse=True)
+def _default_full_runtime_for_plugin_coverage_tests():
+    """Default these legacy coverage tests to full runtime semantics.
+
+    The built-in plugin loader now consults runtime-profile allowlists.
+    Most tests in this module are generic loader-behavior checks, not
+    runtime-profile checks, so we neutralize the allowlist unless a test
+    explicitly patches it for a targeted scenario.
+    """
+    with patch(
+        "code_puppy.plugins.allowed_builtin_plugins_for_runtime",
+        return_value=None,
+    ):
+        yield
 
 
 class TestGetUserPluginsDir:

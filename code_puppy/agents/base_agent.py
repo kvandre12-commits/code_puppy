@@ -82,6 +82,8 @@ class BaseAgent(ABC):
         # so model swaps invalidate it via ``_probe_model_name``.
         self._tool_probe_agent: Any = None
         self._probe_model_name: Optional[str] = None
+        self._runtime_prompt_cache_enabled: bool = False
+        self._runtime_full_system_prompt: Optional[str] = None
 
     # ---- Abstract interface ------------------------------------------------
     @property
@@ -126,6 +128,7 @@ class BaseAgent(ABC):
         pinned, or JSON agent model configuration.
         """
         self._runtime_model_name_override = model_name
+        self._runtime_full_system_prompt = None
 
     @contextmanager
     def temporary_model_name_override(
@@ -147,6 +150,16 @@ class BaseAgent(ABC):
         return pinned if pinned else get_global_model_name()
 
     # ---- Identity ---------------------------------------------------------
+    def enable_runtime_prompt_cache(self) -> None:
+        """Reuse prompt assembly within one live agent run."""
+        self._runtime_prompt_cache_enabled = True
+        self._runtime_full_system_prompt = None
+
+    def disable_runtime_prompt_cache(self) -> None:
+        """Drop any cached runtime prompt fragments after a run ends."""
+        self._runtime_prompt_cache_enabled = False
+        self._runtime_full_system_prompt = None
+
     def get_identity(self) -> str:
         return f"{self.name}-{self.id[:6]}"
 
@@ -169,13 +182,22 @@ class BaseAgent(ABC):
         fresh every run and never get persisted into static agent definitions
         (e.g. when an agent is cloned to JSON). See ``clone_agent``.
         """
+        if (
+            self._runtime_prompt_cache_enabled
+            and self._runtime_full_system_prompt is not None
+        ):
+            return self._runtime_full_system_prompt
+
         from code_puppy import callbacks
 
         prompt = self.get_system_prompt()
         prompt_additions = callbacks.on_load_prompt()
         if prompt_additions:
             prompt += "\n" + "\n".join(prompt_additions)
-        return prompt + self.get_identity_prompt()
+        full_prompt = prompt + self.get_identity_prompt()
+        if self._runtime_prompt_cache_enabled:
+            self._runtime_full_system_prompt = full_prompt
+        return full_prompt
 
     # ---- Message history (plain dict-level access) ------------------------
     def get_message_history(self) -> List[Any]:

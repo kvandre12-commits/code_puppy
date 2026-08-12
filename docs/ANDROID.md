@@ -12,6 +12,12 @@ capabilities later, only if you actually want them.
   Code Puppy is installed.
 - **Extras** (browser/image/fuzzy/search/provider) are opt-in, not mandatory.
   The phone install stays small by default.
+- **Android runtime profile** auto-switches to a tiny built-in overlay: no
+  Playwright, no Pillow, no MCP extra, no provider zoo, and a single bundled
+  starter model (`gemini-2.5-flash-preview-05-20`). Fresh-phone discoverability
+  also stays clean: `/help` and slash completion hide detached surfaces like
+  `/mcp`, `/add_model`, `/reasoning`, `/verbosity`, and `/model_settings` until
+  you intentionally move to a heavier profile.
 
 If the goal is to **share or ship the Android story from main Code Puppy**,
 start with [`ANDROID_MAIN_FIRST_SHARE.md`](ANDROID_MAIN_FIRST_SHARE.md). That
@@ -97,6 +103,9 @@ code-puppy -i
 
 On a phone this auto-selects the **`android-termux-lean`** profile, which keeps
 the install small by leaving heavy optional extras detached until you want them.
+At runtime, Code Puppy also auto-uses the **`android-minimal`** overlay so the
+built-in plugin/model set stays tiny on fresh Termux installs, with only the
+starter Gemini model advertised by default.
 
 ### Step 3 — Already have `uv` and want prompts?
 
@@ -156,6 +165,13 @@ uvx --from code-puppy code-puppy-bootstrap plan --profile desktop-browser
 ```
 
 Then run the reattach/install command it prints.
+
+If you ever want to force the full built-in runtime on Android after that,
+launch with:
+
+```bash
+CODE_PUPPY_RUNTIME_PROFILE=full code-puppy -i
+```
 
 You can also drive deployment policy through a manifest override:
 

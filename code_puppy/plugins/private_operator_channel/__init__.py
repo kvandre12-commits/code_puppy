@@ -1,0 +1,1 @@
+"""Private operator channel plugin."""

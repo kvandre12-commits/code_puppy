@@ -1,5 +1,6 @@
 from code_puppy.callbacks import on_register_agent_tools, on_register_tools
 from code_puppy.messaging import emit_warning
+from code_puppy.runtime_profile import hidden_tool_names_for_runtime
 from code_puppy.tools.agent_tools import register_list_agents
 from code_puppy.tools.ask_user_question import register_ask_user_question
 from code_puppy.tools.command_runner import (
@@ -186,6 +187,14 @@ TOOL_EXPANSIONS: dict[str, list[str]] = {
 REMOVED_LEGACY_TOOLS: set[str] = set()
 
 _VALIDATED_PLUGIN_TOOL_CONNECTIONS: set[tuple[str, str, str]] = set()
+
+
+def _filter_tool_names_for_runtime(tool_names: list[str]) -> list[str]:
+    """Hide optional desktop-ish tools from lean Android runtime surfaces."""
+    hidden_tool_names = hidden_tool_names_for_runtime()
+    if not hidden_tool_names:
+        return tool_names
+    return [tool_name for tool_name in tool_names if tool_name not in hidden_tool_names]
 
 
 class _ToolRegistrationProbeAgent:
@@ -394,6 +403,8 @@ def register_tools_for_agent(
                 seen.add(tool_name)
     tool_names = expanded_tools
 
+    tool_names = _filter_tool_names_for_runtime(tool_names)
+
     for tool_name in tool_names:
         # Handle UC tools (prefixed with "uc:")
         if tool_name.startswith("uc:"):
@@ -558,4 +569,4 @@ def get_available_tool_names() -> list[str]:
         List of all tool names that can be registered.
     """
     _load_plugin_tools()
-    return list(TOOL_REGISTRY.keys())
+    return _filter_tool_names_for_runtime(list(TOOL_REGISTRY.keys()))

@@ -1,0 +1,1 @@
+"""Persistent prompt queue plugin."""

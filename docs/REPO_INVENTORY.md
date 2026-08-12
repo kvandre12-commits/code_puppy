@@ -143,6 +143,7 @@ If you are tired and need the shortest path back into the system, start here:
 6. `DroidPuppy/docs/ORCHESTRA_AGENT.md` — the architecture constitution
 7. `DroidPuppy/contracts/README.md` — contract model and boundaries
 8. `docs/robinhood_mcp_config_only_proof.md` — current Robinhood path in this repo
+9. `docs/PHONE_PORT_WORKSPACE_MAP.md` — why the surrounding Termux workspace contains so many Code Puppy clones, worktrees, venvs, and proof directories
 
 ## Plain-English identity
 

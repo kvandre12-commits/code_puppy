@@ -399,6 +399,36 @@ class TestSlashCompleter:
             completions = list(c.get_completions(self._make_doc("/"), None))
             assert completions == []
 
+    def test_hides_android_minimal_commands(self):
+        from code_puppy.command_line.prompt_toolkit_completion import SlashCompleter
+
+        c = SlashCompleter()
+        help_cmd = MagicMock()
+        help_cmd.name = "help"
+        help_cmd.description = "Show help"
+        help_cmd.aliases = []
+        mcp_cmd = MagicMock()
+        mcp_cmd.name = "mcp"
+        mcp_cmd.description = "Manage MCP servers"
+        mcp_cmd.aliases = []
+
+        with (
+            patch(
+                "code_puppy.command_line.prompt_toolkit_completion.get_unique_commands",
+                return_value=[help_cmd, mcp_cmd],
+            ),
+            patch(
+                "code_puppy.command_line.prompt_toolkit_completion.command_visible_in_runtime",
+                side_effect=lambda name: name != "mcp",
+            ),
+            patch("code_puppy.plugins.load_plugin_callbacks"),
+            patch("code_puppy.callbacks.on_custom_command_help", return_value=[]),
+        ):
+            completions = list(c.get_completions(self._make_doc("/"), None))
+            names = {completion.text for completion in completions}
+            assert "help" in names
+            assert "mcp" not in names
+
 
 class TestGetPromptWithActiveModel:
     def test_basic(self):

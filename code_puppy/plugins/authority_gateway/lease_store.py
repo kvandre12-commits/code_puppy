@@ -4,6 +4,7 @@ import datetime as dt
 import json
 import os
 import uuid
+from shutil import move
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable
@@ -24,6 +25,10 @@ SUPPORTED_CONSTRAINT_KEYS = {
     "intent_actions",
     "intent_packages",
     "browser_packages",
+    "android_packages",
+}
+CONSTRAINT_KEY_ALIASES = {
+    "allowed_packages": "android_packages",
 }
 LEGACY_CAPABILITY_ALIASES: dict[str, set[str]] = {
     "shell.exec": {
@@ -32,6 +37,13 @@ LEGACY_CAPABILITY_ALIASES: dict[str, set[str]] = {
         "network.lan.connect",
         "adb.wireless.connect",
     }
+}
+LEASE_BUCKET_BY_STATUS = {
+    "active": "active",
+    "expired": "expired",
+    "used": "completed",
+    "revoked": "failed",
+    "failed": "failed",
 }
 
 
@@ -140,8 +152,28 @@ def get_eyes_root() -> Path:
     return DEFAULT_EYES_ROOT
 
 
+def get_leases_root() -> Path:
+    return get_eyes_root() / "leases"
+
+
+def _lease_bucket_dir(bucket: str) -> Path:
+    return get_leases_root() / bucket
+
+
 def get_active_leases_dir() -> Path:
-    return get_eyes_root() / "leases" / "active"
+    return _lease_bucket_dir("active")
+
+
+def get_completed_leases_dir() -> Path:
+    return _lease_bucket_dir("completed")
+
+
+def get_expired_leases_dir() -> Path:
+    return _lease_bucket_dir("expired")
+
+
+def get_failed_leases_dir() -> Path:
+    return _lease_bucket_dir("failed")
 
 
 def _read_json(path: Path) -> dict[str, Any]:
@@ -149,6 +181,7 @@ def _read_json(path: Path) -> dict[str, Any]:
 
 
 def _write_json(path: Path, payload: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
 
 
@@ -183,14 +216,20 @@ def _normalize_constraints(raw: dict[str, Any] | None) -> dict[str, Any]:
         return {}
     if not isinstance(raw, dict):
         raise ValueError("constraints must be a JSON object")
-    unknown = sorted(set(raw) - SUPPORTED_CONSTRAINT_KEYS)
+
+    canonicalized: dict[str, Any] = {}
+    for key, value in raw.items():
+        canonical_key = CONSTRAINT_KEY_ALIASES.get(key, key)
+        canonicalized[canonical_key] = value
+
+    unknown = sorted(set(canonicalized) - SUPPORTED_CONSTRAINT_KEYS)
     if unknown:
         joined = ", ".join(unknown)
         raise ValueError(f"unsupported constraint keys: {joined}")
 
     normalized: dict[str, Any] = {}
     for key in sorted(SUPPORTED_CONSTRAINT_KEYS):
-        values = _clean_string_list(raw.get(key))
+        values = _clean_string_list(canonicalized.get(key))
         if values:
             normalized[key] = values
     return normalized
@@ -237,6 +276,46 @@ def _normalize_delegation(raw: dict[str, Any] | None) -> dict[str, Any]:
     }
 
 
+def _lease_bucket_for_status(status: str) -> str:
+    return LEASE_BUCKET_BY_STATUS.get(str(status or "").strip() or "failed", "failed")
+
+
+def _lease_storage_path(path: Path, payload: dict[str, Any]) -> Path:
+    lease_id = str(payload.get("lease_id", path.stem)).strip() or path.stem
+    bucket = _lease_bucket_for_status(str(payload.get("status", "active")))
+    return _lease_bucket_dir(bucket) / f"{lease_id}.json"
+
+
+def _persist_lease_payload(path: Path, payload: dict[str, Any]) -> LeaseRecord:
+    target_path = _lease_storage_path(path, payload)
+    _write_json(target_path, payload)
+    if path != target_path and path.exists():
+        path.unlink(missing_ok=True)
+    return LeaseRecord(path=target_path, payload=payload)
+
+
+def _archive_invalid_active_lease(path: Path) -> Path:
+    target = get_failed_leases_dir() / path.name
+    if target.exists():
+        target = target.with_name(f"{path.stem}-{uuid.uuid4().hex[:8]}{path.suffix}")
+    target.parent.mkdir(parents=True, exist_ok=True)
+    move(str(path), str(target))
+    return target
+
+
+def lease_store_inventory() -> dict[str, int]:
+    buckets = {
+        "active": get_active_leases_dir(),
+        "completed": get_completed_leases_dir(),
+        "expired": get_expired_leases_dir(),
+        "failed": get_failed_leases_dir(),
+    }
+    return {
+        name: len(list(directory.glob("*.json"))) if directory.is_dir() else 0
+        for name, directory in buckets.items()
+    }
+
+
 def mint_lease(
     *,
     principal_id: str,
@@ -277,8 +356,9 @@ def mint_lease(
         raise ValueError("lease_id cannot be blank")
 
     path = get_active_leases_dir() / f"{resolved_lease_id}.json"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    if path.exists():
+    if _lease_storage_path(
+        path, {"lease_id": resolved_lease_id, "status": "active"}
+    ).exists():
         raise ValueError(f"lease_id '{resolved_lease_id}' already exists")
 
     now = _now()
@@ -311,8 +391,7 @@ def mint_lease(
             "token_spend_used": 0,
         },
     }
-    _write_json(path, payload)
-    return LeaseRecord(path=path, payload=payload)
+    return _persist_lease_payload(path, payload)
 
 
 def _usage_limit_reached(payload: dict[str, Any]) -> bool:
@@ -338,14 +417,13 @@ def _usage_limit_reached(payload: dict[str, Any]) -> bool:
 def _mark_status(path: Path, payload: dict[str, Any], status: str) -> LeaseRecord:
     updated = dict(payload)
     updated["status"] = status
-    _write_json(path, updated)
-    return LeaseRecord(path=path, payload=updated)
+    return _persist_lease_payload(path, updated)
 
 
 def _refresh_lease_state(record: LeaseRecord) -> LeaseRecord | None:
     payload = dict(record.payload)
     if str(payload.get("status", "")) != "active":
-        return None
+        return _persist_lease_payload(record.path, payload)
 
     now = _now()
     if record.not_before and record.not_before > now:
@@ -367,9 +445,13 @@ def iter_active_leases() -> Iterable[LeaseRecord]:
         try:
             record = LeaseRecord(path=path, payload=_read_json(path))
             refreshed = _refresh_lease_state(record)
-            if refreshed is not None and refreshed.status == "active":
+            if refreshed is None:
+                records.append(record)
+                continue
+            if refreshed.status == "active":
                 records.append(refreshed)
         except Exception:
+            _archive_invalid_active_lease(path)
             continue
     return records
 
@@ -399,6 +481,38 @@ def lease_allows(
     if lease_scope == capability:
         return True
     return capability in LEGACY_SCOPE_CAPABILITIES.get(lease_scope, set())
+
+
+def reconcile_lease_store() -> dict[str, Any]:
+    active_dir = get_active_leases_dir()
+    scanned = 0
+    moved: list[dict[str, str]] = []
+    invalid_files: list[str] = []
+    for path in sorted(active_dir.glob("*.json")) if active_dir.is_dir() else []:
+        scanned += 1
+        try:
+            record = LeaseRecord(path=path, payload=_read_json(path))
+            refreshed = _refresh_lease_state(record)
+            if refreshed is None or refreshed.status == "active":
+                continue
+            moved.append(
+                {
+                    "lease_id": refreshed.lease_id,
+                    "status": refreshed.status,
+                    "bucket": _lease_bucket_for_status(refreshed.status),
+                }
+            )
+        except Exception:
+            invalid_files.append(str(_archive_invalid_active_lease(path)))
+    return {
+        "success": True,
+        "scanned": scanned,
+        "moved_count": len(moved),
+        "moved": moved,
+        "invalid_file_count": len(invalid_files),
+        "invalid_files": invalid_files,
+        "inventory": lease_store_inventory(),
+    }
 
 
 def list_matching_leases(
@@ -468,8 +582,7 @@ def consume_lease(
     if _usage_limit_reached(payload):
         payload["status"] = "used"
 
-    _write_json(record.path, payload)
-    return LeaseRecord(path=record.path, payload=payload)
+    return _persist_lease_payload(record.path, payload)
 
 
 def revoke_lease(
@@ -483,8 +596,7 @@ def revoke_lease(
     payload["revoked_at"] = _now().isoformat()
     payload["revoked_by"] = revoked_by
     payload["revocation_reason"] = reason
-    _write_json(record.path, payload)
-    return LeaseRecord(path=record.path, payload=payload)
+    return _persist_lease_payload(record.path, payload)
 
 
 def revoke_all_active_leases(

@@ -6,6 +6,10 @@ import types
 from pathlib import Path
 
 from code_puppy.callbacks import clear_loading_context, set_loading_context
+from code_puppy.runtime_profile import (
+    allowed_builtin_plugins_for_runtime,
+    get_runtime_profile,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -29,11 +33,21 @@ def _load_builtin_plugins(plugins_dir: Path) -> list[str]:
     from code_puppy.config import get_safety_permission_level
 
     loaded = []
+    runtime_profile = get_runtime_profile()
+    allowed_plugins = allowed_builtin_plugins_for_runtime(runtime_profile)
 
     for item in plugins_dir.iterdir():
         if item.is_dir() and not item.name.startswith("_"):
             plugin_name = item.name
             callbacks_file = item / "register_callbacks.py"
+
+            if allowed_plugins is not None and plugin_name not in allowed_plugins:
+                logger.debug(
+                    "Skipping builtin plugin '%s' for runtime profile '%s'",
+                    plugin_name,
+                    runtime_profile,
+                )
+                continue
 
             if callbacks_file.exists():
                 # Skip shell_safety plugin unless safety_permission_level is "low" or "none"

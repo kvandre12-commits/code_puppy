@@ -42,6 +42,35 @@ ALLOWED_ANDROID_OPEN_TARGETS = {
     "accessibility",
     "app settings",
 }
+LEASE_FREE_ANDROID_OPEN_TARGETS = {
+    "settings",
+    "wifi",
+    "wi-fi",
+    "wireless",
+    "wireless debugging",
+    "developer options",
+    "dev options",
+    "bluetooth",
+    "display",
+    "sound",
+    "battery",
+    "security",
+    "accessibility",
+    "app settings",
+}
+LEASE_FREE_ANDROID_SETTINGS_PAGES = {
+    "wifi",
+    "bluetooth",
+    "developer_options",
+    "wireless_debugging",
+    "security",
+    "accessibility",
+    "app_settings",
+    "display",
+    "sound",
+    "battery",
+}
+LEASE_FREE_ANDROID_BROWSER_PACKAGES = {"brave", "chrome"}
 ALLOWED_INTENT_ACTION_PREFIXES = (
     "android.intent.action.",
     "android.settings.",
@@ -115,7 +144,14 @@ def _is_dry_run(tool_args: dict[str, Any]) -> bool:
 
 
 def _tracked_tool(tool_name: str) -> bool:
-    return tool_name == "agent_run_shell_command" or tool_name in TOOL_CAPABILITIES
+    return (
+        tool_name
+        in {
+            "agent_run_shell_command",
+            "prompt_queue_run_once",
+        }
+        or tool_name in TOOL_CAPABILITIES
+    )
 
 
 def _summarize_tool_args(tool_args: dict[str, Any]) -> dict[str, Any]:
@@ -231,14 +267,18 @@ def _evaluate_android_open(tool_args: dict[str, Any]) -> PolicyDecision:
             "Live browser launches require an active execution lease.",
         )
 
-    if _normalize_text(target) not in ALLOWED_ANDROID_OPEN_TARGETS:
+    normalized_target = _normalize_text(target)
+    if normalized_target not in ALLOWED_ANDROID_OPEN_TARGETS:
         return _block(
             "[BLOCKED] android_open only allows built-in shortcut targets in live mode."
         )
 
+    if normalized_target in LEASE_FREE_ANDROID_OPEN_TARGETS:
+        return _allow()
+
     return _require_lease(
         "android.app.open",
-        "Launching apps or settings through android_open requires an active execution lease.",
+        "Launching apps through android_open requires an active execution lease.",
     )
 
 
@@ -249,8 +289,27 @@ def evaluate_tool_call(tool_name: str, tool_args: dict[str, Any]) -> PolicyDecis
             cwd=str(tool_args.get("cwd", "") or ""),
         )
 
+    if tool_name == "prompt_queue_run_once":
+        if bool(tool_args.get("demo_mode")):
+            return _allow()
+        max_jobs = int(tool_args.get("max_jobs") or 1)
+        if max_jobs > 1:
+            return _block("[BLOCKED] Live prompt-queue runs are capped at max_jobs=1.")
+        return _require_lease(
+            "prompt_queue.run_live",
+            "Live prompt-queue execution invokes agents and requires an active execution lease.",
+        )
+
     if tool_name == "android_intent_send":
         return _evaluate_intent(tool_args)
+
+    if tool_name == "android_open_settings":
+        page = str(tool_args.get("page", "app_settings")).strip().lower()
+        if page in LEASE_FREE_ANDROID_SETTINGS_PAGES:
+            return _allow()
+
+    if tool_name == "android_open_notification_settings":
+        return _allow()
 
     if tool_name == "android_handoff_file":
         if _is_dry_run(tool_args):
@@ -269,6 +328,12 @@ def evaluate_tool_call(tool_name: str, tool_args: dict[str, Any]) -> PolicyDecis
             return _block(
                 "[BLOCKED] System-browser URL launches are disallowed; use brave or chrome explicitly."
             )
+        url = str(tool_args.get("url", "")).strip()
+        if browser in LEASE_FREE_ANDROID_BROWSER_PACKAGES and _looks_like_url(url):
+            return _allow()
+        return _block(
+            "[BLOCKED] Browser URL launches must use brave or chrome with a valid http/https URL."
+        )
 
     if tool_name == "android_open":
         return _evaluate_android_open(tool_args)

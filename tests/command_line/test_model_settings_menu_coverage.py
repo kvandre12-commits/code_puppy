@@ -52,6 +52,7 @@ class TestGetSettingChoices:
         }
         choices = _get_setting_choices("reasoning_effort", "gpt-5")
         assert "xhigh" not in choices
+        assert "max" not in choices
         assert "high" in choices
 
     @patch("code_puppy.command_line.model_settings_menu.ModelFactory")
@@ -61,6 +62,15 @@ class TestGetSettingChoices:
         }
         choices = _get_setting_choices("reasoning_effort", "codex")
         assert "xhigh" in choices
+        assert "max" not in choices
+
+    @patch("code_puppy.command_line.model_settings_menu.ModelFactory")
+    def test_reasoning_effort_for_sol_family(self, mock_factory):
+        mock_factory.load_config.return_value = {
+            "gpt-5.6-sol": {"openai_family": "sol", "name": "gpt-5.6-sol"}
+        }
+        choices = _get_setting_choices("reasoning_effort", "gpt-5.6-sol")
+        assert choices == ["none", "low", "medium", "high", "xhigh", "max"]
 
     def test_non_choice_setting(self):
         choices = _get_setting_choices("temperature")
@@ -69,7 +79,8 @@ class TestGetSettingChoices:
     @patch("code_puppy.command_line.model_settings_menu.ModelFactory")
     def test_reasoning_effort_no_model_name(self, mock_factory):
         choices = _get_setting_choices("reasoning_effort")
-        assert "xhigh" in choices  # no filtering without model
+        assert "xhigh" in choices
+        assert "max" in choices
 
 
 # --------------- ModelSettingsMenu properties ---------------
@@ -414,7 +425,7 @@ class TestRenderDetailsPanel:
         text = "".join(t for _, t in lines)
         assert "Setting Details" in text
         assert "Options" in text
-        assert "Global setting" in text
+        assert "Global OpenAI setting" in text
 
     @patch("code_puppy.command_line.model_settings_menu.model_supports_setting")
     @patch(
@@ -518,7 +529,7 @@ class TestRenderDetailsPanel:
         menu.view_mode = "settings"
         lines = menu._render_details_panel()
         text = "".join(t for _, t in lines)
-        assert "Global setting" in text
+        assert "Global OpenAI setting" in text
 
 
 # --------------- State transitions ---------------

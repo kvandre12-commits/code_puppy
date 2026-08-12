@@ -11,6 +11,7 @@ from .identity import bind_runtime_actor_context
 from .policy import build_pre_tool_response, handle_post_tool_result
 from .tooling import (
     authority_gateway_grant_lease as authority_gateway_grant_lease_impl,
+    authority_gateway_grant_workflow_lease as authority_gateway_grant_workflow_lease_impl,
     authority_gateway_list_active_leases as authority_gateway_list_active_leases_impl,
     authority_gateway_quarantine_status as authority_gateway_quarantine_status_impl,
     authority_gateway_recent_audit as authority_gateway_recent_audit_impl,
@@ -25,6 +26,7 @@ _RECENT_AUDIT = "authority_gateway_recent_audit"
 _QUARANTINE_STATUS = "authority_gateway_quarantine_status"
 _RELEASE_QUARANTINE = "authority_gateway_release_quarantine"
 _GRANT_LEASE = "authority_gateway_grant_lease"
+_GRANT_WORKFLOW_LEASE = "authority_gateway_grant_workflow_lease"
 _REVOKE_ALL = "authority_gateway_revoke_all"
 
 
@@ -173,6 +175,28 @@ def register_authority_gateway_grant_lease(agent: Any) -> None:
         )
 
 
+def register_authority_gateway_grant_workflow_lease(agent: Any) -> None:
+    @agent.tool
+    async def authority_gateway_grant_workflow_lease(
+        context: RunContext,
+        root: str = "",
+        workflow_id: str = "",
+        granted_by: str = "operator",
+        reason_override: str = "",
+        lease_id: str = "",
+        allow_nondefault_principal: bool = False,
+    ) -> dict[str, Any]:
+        del context
+        return authority_gateway_grant_workflow_lease_impl(
+            root=root,
+            workflow_id=workflow_id,
+            granted_by=granted_by,
+            reason_override=reason_override,
+            lease_id=lease_id,
+            allow_nondefault_principal=allow_nondefault_principal,
+        )
+
+
 def register_authority_gateway_revoke_all(agent: Any) -> None:
     @agent.tool
     async def authority_gateway_revoke_all(
@@ -212,8 +236,21 @@ def register_tools_callback() -> list[dict[str, Any]]:
             "name": _GRANT_LEASE,
             "register_func": register_authority_gateway_grant_lease,
         },
+        {
+            "name": _GRANT_WORKFLOW_LEASE,
+            "register_func": register_authority_gateway_grant_workflow_lease,
+        },
         {"name": _REVOKE_ALL, "register_func": register_authority_gateway_revoke_all},
     ]
+
+
+def _grant_enabled_agent(agent_name: str | None) -> bool:
+    normalized = str(agent_name or "").strip()
+    if not normalized:
+        return False
+    if normalized.startswith("code-puppy"):
+        return True
+    return normalized in {"governance-orchestrator", "approval-decision"}
 
 
 def _advertise_tools_to_agent(agent_name: str | None = None) -> list[str]:
@@ -225,8 +262,8 @@ def _advertise_tools_to_agent(agent_name: str | None = None) -> list[str]:
         _RELEASE_QUARANTINE,
         _REVOKE_ALL,
     ]
-    if agent_name in {"governance-orchestrator", "approval-decision"}:
-        tools.append(_GRANT_LEASE)
+    if _grant_enabled_agent(agent_name):
+        tools.extend([_GRANT_LEASE, _GRANT_WORKFLOW_LEASE])
     return tools
 
 

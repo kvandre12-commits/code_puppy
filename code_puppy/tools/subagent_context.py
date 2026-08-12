@@ -55,18 +55,26 @@ __all__ = [
     "subagent_context",
     "is_subagent",
     "get_subagent_name",
+    "get_subagent_chain",
     "get_subagent_depth",
+    "get_subagent_model_name",
 ]
 
 # Track sub-agent depth (0 = main agent, 1+ = sub-agent)
 _subagent_depth: ContextVar[int] = ContextVar("subagent_depth", default=0)
 
-# Track current sub-agent name (None = main agent)
+# Track current sub-agent identity (None = main agent)
 _subagent_name: ContextVar[str | None] = ContextVar("subagent_name", default=None)
+_subagent_model_name: ContextVar[str | None] = ContextVar(
+    "subagent_model_name", default=None
+)
+_subagent_chain: ContextVar[tuple[str, ...]] = ContextVar("subagent_chain", default=())
 
 
 @contextmanager
-def subagent_context(agent_name: str) -> Generator[None, None, None]:
+def subagent_context(
+    agent_name: str, model_name: str | None = None
+) -> Generator[None, None, None]:
     """Context manager for tracking sub-agent execution.
 
     Increments the sub-agent depth and sets the current agent name on entry,
@@ -90,20 +98,22 @@ def subagent_context(agent_name: str) -> Generator[None, None, None]:
         is properly restored. This is especially important in async environments
         where multiple tasks may be running concurrently.
     """
-    # Get current depth for incrementing
+    # Snapshot the parent context before pushing this child.
     current_depth = _subagent_depth.get()
+    current_chain = _subagent_chain.get()
 
-    # Set new values and save tokens for restoration
     depth_token = _subagent_depth.set(current_depth + 1)
     name_token = _subagent_name.set(agent_name)
+    model_token = _subagent_model_name.set(model_name)
+    chain_token = _subagent_chain.set(current_chain + (agent_name,))
 
     try:
         yield
     finally:
-        # Use token-based reset for proper async isolation
-        # This ensures the context is restored even if an exception occurs
         _subagent_depth.reset(depth_token)
         _subagent_name.reset(name_token)
+        _subagent_model_name.reset(model_token)
+        _subagent_chain.reset(chain_token)
 
 
 def is_subagent() -> bool:
@@ -136,6 +146,16 @@ def get_subagent_name() -> str | None:
         'code-puppy'
     """
     return _subagent_name.get()
+
+
+def get_subagent_model_name() -> str | None:
+    """Return the effective model running the current sub-agent."""
+    return _subagent_model_name.get()
+
+
+def get_subagent_chain() -> tuple[str, ...]:
+    """Return the async-local invocation chain, outermost child first."""
+    return _subagent_chain.get()
 
 
 def get_subagent_depth() -> int:

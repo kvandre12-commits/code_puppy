@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+import time
+from pathlib import Path
 from typing import Any
+
+from code_puppy.plugins.authority_gateway.lease_store import reconcile_lease_store
 
 from .bus import get_project_os_bus_status, tail_project_os_events
 from .inspection import inspect_manifest
@@ -103,6 +107,54 @@ def project_os_supervisor_reset_state(confirm: bool = False) -> dict[str, Any]:
             "reason": "Set confirm=True to clear supervisor state.",
         }
     return clear_supervisor_state()
+
+
+def project_os_runtime_reset(
+    confirm: bool = False,
+    start_minimal_stack: bool = True,
+    manifest_output_path: str = "outputs/project_os_authority_manifest.json",
+    startup_pause_seconds: float = 0.15,
+) -> dict[str, Any]:
+    if not confirm:
+        return {
+            "success": False,
+            "reason": "Set confirm=True to reset supervisor state and reconcile lease storage.",
+        }
+
+    supervisor_reset = clear_supervisor_state()
+    lease_hygiene = reconcile_lease_store()
+    result: dict[str, Any] = {
+        "success": True,
+        "supervisor_reset": supervisor_reset,
+        "lease_hygiene": lease_hygiene,
+        "start_minimal_stack": start_minimal_stack,
+    }
+
+    if not start_minimal_stack:
+        result["bus_status"] = get_project_os_bus_status(timeout_seconds=0.1)
+        return result
+
+    manifest_path = str(Path(manifest_output_path).expanduser())
+    manifest_written = write_authority_manifest(manifest_path)
+    result["manifest_written"] = manifest_written
+    if not manifest_written.get("success"):
+        result["success"] = False
+        return result
+
+    start_result = start_manifest(manifest_path=manifest_written["manifest_path"])
+    result["start_result"] = start_result
+    if not start_result.get("success"):
+        result["success"] = False
+        return result
+
+    if startup_pause_seconds > 0:
+        time.sleep(startup_pause_seconds)
+    result["status"] = supervisor_status(
+        manifest_path=manifest_written["manifest_path"]
+    )
+    result["bus_status"] = get_project_os_bus_status(timeout_seconds=0.25)
+    result["manifest_path"] = manifest_written["manifest_path"]
+    return result
 
 
 def project_os_supervisor_write_isolated_job_manifest(

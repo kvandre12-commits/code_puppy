@@ -1,0 +1,44 @@
+{
+  "name": "android_paginated_crawl_freecash_example",
+  "description": "Example scaffolding for crawling a paginated Android offer list such as Freecash My Offers. This is a planning artifact until a generic workflow executor consumes paginated crawl plans directly.",
+  "notes": [
+    "Use the android_paginated_crawl_run tool once the plugin surface is loaded in the running tool host.",
+    "Calibrate page-turn coordinates and recovery swipe once, then reuse the plan."
+  ],
+  "plan": {
+    "artifact_prefix": "freecash-sample",
+    "current_page_label": "3",
+    "capture_current_page": true,
+    "pagination_recovery_swipe": {
+      "x1": 550,
+      "y1": 1460,
+      "x2": 550,
+      "y2": 1750,
+      "duration_ms": 250
+    },
+    "page_turns": [
+      {"label": "4", "x": 994, "y": 1908},
+      {"label": "27", "x": 861, "y": 1908}
+    ],
+    "item_taps": [
+      {
+        "page_label": "3",
+        "label": "screw-guru",
+        "x": 472,
+        "y": 1492,
+        "capture_stage": "detail-screw-guru",
+        "close_tap": {"x": 1008, "y": 1185}
+      }
+    ],
+    "scroll_passes_per_page": 2,
+    "capture_swipe": {
+      "x1": 550,
+      "y1": 1830,
+      "x2": 550,
+      "y2": 1410,
+      "duration_ms": 350
+    },
+    "capture_after_recovery": false,
+    "settle_ms": 250
+  }
+}

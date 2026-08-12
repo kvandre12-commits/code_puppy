@@ -13,6 +13,7 @@ GOALS = {
     "browser_debugging": "Prepare wireless ADB and CDP browser control.",
     "notifications": "Understand notification capability and fallback behavior.",
     "reconnect": "Recover a dropped wireless ADB session quickly.",
+    "sharing": "Prepare a video so Android apps like LinkedIn can actually find it.",
 }
 
 
@@ -35,6 +36,7 @@ def android_setup_doctor() -> dict[str, Any]:
             "Use android_setup_next_steps(goal='basics') if you are just starting.",
             "Use android_setup_next_steps(goal='browser') for browser launch and page-reading setup.",
             "Use android_setup_next_steps(goal='browser_debugging') when you want wireless ADB and CDP control.",
+            "Use android_setup_next_steps(goal='sharing') when an Android app picker refuses to show your demo video.",
         ],
         "diagnostics": {
             "utility": utility,
@@ -82,6 +84,13 @@ def android_setup_next_steps(goal: str = "basics") -> dict[str, Any]:
             "Run android_reconnect_doctor(host=..., connect_port=...) to probe the socket.",
             "Run android_reconnect_quick(..., dry_run=True) first.",
             "If the port is closed or the device is stale, use android_reconnect_full(..., dry_run=True) with fresh pairing data.",
+        ],
+        "sharing": [
+            "Give the finished clip a clean filename like SharpEdge-Android-Demo.mp4 instead of an ugly timestamp goblin name.",
+            "Copy the clip into /storage/emulated/0/Movies and /storage/emulated/0/DCIM so Android media pickers have multiple obvious places to index.",
+            "Run termux-media-scan on the copied file(s) after staging them so LinkedIn and similar apps refresh their media database.",
+            "In LinkedIn, check Collections -> Videos or Collections -> Movies for the indexed copy.",
+            "If the in-app picker is still being stupid, open Files/Gallery/Photos first and use Share -> LinkedIn to bypass the picker entirely.",
         ],
     }
 

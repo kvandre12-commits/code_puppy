@@ -350,9 +350,8 @@ def is_cert_bundle_available() -> bool:
 def find_available_port(start_port=8090, end_port=9010, host="127.0.0.1"):
     for port in range(start_port, end_port + 1):
         try:
-            # Try to bind to the port to check if it's available
+            # Bind without SO_REUSEADDR so genuinely busy ports fail fast.
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-                sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
                 sock.bind((host, port))
                 return port
         except OSError:

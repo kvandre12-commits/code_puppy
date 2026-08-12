@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import subprocess
 from pathlib import Path
 
@@ -42,7 +43,33 @@ def test_termux_installer_dry_run_supports_version_pin():
     )
     assert "+ uv tool install --refresh code-puppy==9.9.9" in result.stdout
     assert "+ code-puppy --help" in result.stdout
+    assert "command -v rustc" not in result.stdout
+    assert "command -v clang" not in result.stdout
     assert "+ code-puppy -i" not in result.stdout
+
+
+def test_termux_installer_require_clean_rejects_contaminated_env():
+    env = dict(os.environ)
+    env["VIRTUAL_ENV"] = "/tmp/fake-venv"
+
+    result = subprocess.run(
+        [
+            "bash",
+            str(SCRIPT),
+            "--dry-run",
+            "--yes",
+            "--no-launch",
+            "--skip-upgrade",
+            "--require-clean",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+        cwd=ROOT,
+        env=env,
+    )
+    assert result.returncode != 0
+    assert "clean-run contamination detected" in result.stderr
 
 
 def test_termux_installer_help_mentions_clean_run_support():

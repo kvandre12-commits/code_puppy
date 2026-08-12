@@ -26,14 +26,17 @@ from .utils import (
 def _custom_help() -> List[Tuple[str, str]]:
     return [
         (
-            "chatgpt-auth",
-            "Authenticate with ChatGPT via OAuth and import available models",
+            "chatgpt-auth / codex-auth / codex",
+            "Authenticate with ChatGPT/Codex via OAuth and import available models",
         ),
         (
-            "chatgpt-status",
-            "Check ChatGPT OAuth authentication status and configured models",
+            "chatgpt-status / codex-status",
+            "Check ChatGPT/Codex OAuth authentication status and configured models",
         ),
-        ("chatgpt-logout", "Remove ChatGPT OAuth tokens and imported models"),
+        (
+            "chatgpt-logout / codex-logout",
+            "Remove ChatGPT/Codex OAuth tokens and imported models",
+        ),
     ]
 
 
@@ -60,7 +63,7 @@ def _handle_chatgpt_status() -> None:
             emit_warning("⚠️ No ChatGPT models configured yet.")
     else:
         emit_warning("🔓 ChatGPT OAuth: Not authenticated")
-        emit_info("🌐 Run /chatgpt-auth to launch the browser sign-in flow.")
+        emit_info(" Run /codex-auth to launch the browser sign-in flow.")
 
 
 def _handle_chatgpt_logout() -> None:
@@ -79,20 +82,24 @@ def _handle_chatgpt_logout() -> None:
     emit_success("ChatGPT logout complete")
 
 
+def _handle_auth_command() -> None:
+    run_oauth_flow()
+    set_model_and_reload_agent("codex-gpt-5.6-sol")
+
+
 def _handle_custom_command(command: str, name: str) -> Optional[bool]:
     if not name:
         return None
 
-    if name == "chatgpt-auth":
-        run_oauth_flow()
-        set_model_and_reload_agent("chatgpt-gpt-5.4")
+    if name in {"chatgpt-auth", "codex-auth", "codex"}:
+        _handle_auth_command()
         return True
 
-    if name == "chatgpt-status":
+    if name in {"chatgpt-status", "codex-status"}:
         _handle_chatgpt_status()
         return True
 
-    if name == "chatgpt-logout":
+    if name in {"chatgpt-logout", "codex-logout"}:
         _handle_chatgpt_logout()
         return True
 
@@ -118,7 +125,7 @@ def _create_chatgpt_oauth_model(
     if not access_token:
         emit_warning(
             f"Failed to get valid ChatGPT OAuth token; skipping model '{model_config.get('name')}'. "
-            "Run /chatgpt-auth to authenticate."
+            "Run /codex-auth to authenticate."
         )
         return None
 
@@ -128,13 +135,13 @@ def _create_chatgpt_oauth_model(
     if not account_id:
         emit_warning(
             f"No account_id found in ChatGPT OAuth tokens; skipping model '{model_config.get('name')}'. "
-            "Run /chatgpt-auth to re-authenticate."
+            "Run /codex-auth to re-authenticate."
         )
         return None
 
     # Build headers for ChatGPT Codex API
     originator = CHATGPT_OAUTH_CONFIG.get("originator", "codex_cli_rs")
-    client_version = CHATGPT_OAUTH_CONFIG.get("client_version", "0.72.0")
+    client_version = CHATGPT_OAUTH_CONFIG.get("client_version", "0.144.1")
 
     headers = {
         "ChatGPT-Account-Id": account_id,

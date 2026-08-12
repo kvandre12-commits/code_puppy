@@ -9,6 +9,7 @@ from code_puppy.command_line.add_model_menu import (
     AddModelMenu,
     derive_provider_identity,
     interactive_model_picker,
+    prioritize_provider_models,
 )
 from code_puppy.models_dev_parser import ModelInfo, ProviderInfo
 
@@ -545,6 +546,33 @@ class TestProviderIdentityHelpers:
 
 
 class TestNavigationMethods:
+    def test_prioritize_provider_models_recommends_gpt_5_6_sol_first_for_openai(self):
+        provider = _make_provider(pid="openai", name="OpenAI")
+        models = [
+            _make_model(model_id="gpt-4.1-mini", name="GPT-4.1 Mini"),
+            _make_model(model_id="gpt-5.6", name="GPT-5.6"),
+            _make_model(model_id="gpt-5.6-sol", name="GPT-5.6 Sol"),
+        ]
+
+        ordered = prioritize_provider_models(provider, models)
+
+        assert [model.model_id for model in ordered] == [
+            "gpt-5.6-sol",
+            "gpt-5.6",
+            "gpt-4.1-mini",
+        ]
+
+    def test_prioritize_provider_models_preserves_non_openai_order(self):
+        provider = _make_provider(pid="xai", name="xAI")
+        models = [
+            _make_model(provider_id="xai", model_id="grok-4", name="Grok 4"),
+            _make_model(provider_id="xai", model_id="grok-code", name="Grok Code"),
+        ]
+
+        ordered = prioritize_provider_models(provider, models)
+
+        assert [model.model_id for model in ordered] == ["grok-4", "grok-code"]
+
     def test_enter_provider(self):
         p = _make_provider()
         models = [_make_model()]
@@ -561,6 +589,31 @@ class TestNavigationMethods:
         menu._enter_provider()
         assert menu.view_mode == "models"
         assert menu.current_provider == p
+
+    def test_enter_provider_prioritizes_recommended_openai_model(self):
+        p = _make_provider(pid="openai", name="OpenAI")
+        models = [
+            _make_model(model_id="gpt-4.1-mini", name="GPT-4.1 Mini"),
+            _make_model(model_id="gpt-5.6-sol", name="GPT-5.6 Sol"),
+            _make_model(model_id="gpt-5.6", name="GPT-5.6"),
+        ]
+        with patch(
+            "code_puppy.command_line.add_model_menu.ModelsDevRegistry"
+        ) as mock_cls:
+            mock_reg = MagicMock()
+            mock_reg.get_providers.return_value = [p]
+            mock_reg.get_models.return_value = models
+            mock_cls.return_value = mock_reg
+            menu = AddModelMenu()
+        menu.menu_control = MagicMock()
+        menu.preview_control = MagicMock()
+        menu._enter_provider()
+        assert [model.model_id for model in menu.current_models[:3]] == [
+            "gpt-5.6-sol",
+            "gpt-5.6",
+            "gpt-4.1-mini",
+        ]
+        assert menu.selected_model_idx == 0
 
     def test_enter_provider_no_provider(self):
         menu = _make_menu_with_providers([])

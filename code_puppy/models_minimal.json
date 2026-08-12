@@ -1,0 +1,10 @@
+{
+  "gemini-2.5-flash-preview-05-20": {
+    "type": "gemini",
+    "name": "gemini-2.5-flash-preview-05-20",
+    "max_requests_per_minute": 10,
+    "max_retries": 3,
+    "retry_base_delay": 10,
+    "description": "Android-minimal starter model. Set GEMINI_API_KEY and go."
+  }
+}

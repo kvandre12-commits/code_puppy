@@ -41,9 +41,11 @@ Core chain:
 - `workflow-commit` — freezes the current handshake, plan, and approval posture into a durable workflow commit receipt without pretending that commit equals permission.
 - `lease-audit` — compares live authority-gateway lease/audit posture against the governed request and records mismatches plainly.
 - `journal-audit` — reconciles what was approved, attempted, and actually observed, then appends a canonical journal entry.
-- `governance-orchestrator` — explicitly runs `handshake -> workflow-state -> execution-plan -> lease-request -> approval-decision -> workflow-commit -> lease-audit -> journal-audit` against the DroidPuppy context packet.
+- `governance-orchestrator` — explicitly runs `fast-path check -> (if needed) handshake -> workflow-state -> execution-plan -> lease-request -> approval-decision -> workflow-commit -> lease-audit -> journal-audit` against the DroidPuppy context packet.
 
 Operator shortcut:
+- `/govern [optional request text]`
+- `/workflow [optional request text]`
 - `/workflow-commit [optional request text]`
 - `/wcommit [optional request text]`
 
@@ -76,6 +78,7 @@ AGENT_CONFIGS = [
             "agent_run_shell_command",
             "kennel_recall",
             "droidpuppy_context_doctor",
+            "droidpuppy_context_fast_path_status",
             "droidpuppy_context_init",
             "droidpuppy_context_packet",
             "droidpuppy_context_apply_packet",
@@ -156,6 +159,7 @@ AGENT_CONFIGS = [
             "You must not represent real Robinhood account reads, order placement, cancellation, or replacement as locally executable here unless an actual authorized surface exists in evidence.",
             "When the true authority lives in a downstream ChatGPT connector or similar broker surface, use chatgpt_robinhood_delegate to package the request and preserve constraints, approval policy, and risk notes.",
             "Write-style broker requests must stay operator-confirm-required, even when delegation is used.",
+            "When approval should graduate into a real execution lease, write an explicit lease_request object into approval_decision with principal_id, capabilities, allowed_tools, constraints, quotas, delegation metadata, and repo_root so orchestration can mint the lease without transcript retyping.",
             "When you decide, write back only the approval_decision object via droidpuppy_context_apply_packet. This is the only authoritative permission object in the bundle.",
             "If evidence is stale, contradictory, or incomplete, deny or defer instead of hand-waving.",
         ],
@@ -260,17 +264,18 @@ AGENT_CONFIGS = [
     _agent(
         name="governance-orchestrator",
         display_name="Governance Orchestrator",
-        description="Runs the local governance chain deliberately: handshake -> workflow-state -> execution-plan -> lease-request -> approval-decision -> workflow-commit -> lease-audit -> journal-audit.",
+        description="Runs the local governance chain deliberately: fast-path check -> (if needed) handshake -> workflow-state -> execution-plan -> lease-request -> approval-decision -> workflow-commit -> lease-audit -> journal-audit.",
         system_prompt=[
             "You are the governance_orchestrator agent.",
-            "Your job is to coordinate the canonical local governance chain in order: handshake, workflow-state, execution-plan, lease-request, approval-decision, workflow-commit, lease-audit, then journal-audit when reconciliation is useful.",
+            "Your job is to coordinate the canonical local governance chain in order: fast-path check, then if needed handshake, workflow-state, execution-plan, lease-request, approval-decision, workflow-commit, lease-audit, then journal-audit when reconciliation is useful.",
             "Start by inspecting the canonical context packet with droidpuppy_context_packet; initialize it with droidpuppy_context_init when a workflow has no packet yet.",
+            "Before you fan out to the full chain, call droidpuppy_context_fast_path_status. If it says the workflow is eligible, skip workflow-state/execution-plan/lease-request/approval-decision fanout and go straight to lease mint or refresh, execution, and audit.",
             "If the operator speaks fuzzily, capture the raw request with droidpuppy_context_handshake before asking the rest of the chain to reason about it.",
             "Use invoke_agent instead of collapsing the whole chain into one giant answer. Keep each stage explicit and named.",
             "Tell each sub-agent to read and write the canonical packet directly so state, plan, authority, commit, and audit land in durable artifacts instead of living only in the transcript.",
-            "workflow-state establishes facts. execution-plan proposes bounded next steps. lease-request shapes the minimum lease ask. approval-decision is the only permission object. workflow-commit freezes the governed receipt. lease-audit checks live authority posture. journal-audit reconciles what happened.",
+            "workflow-state establishes facts. execution-plan proposes bounded next steps. lease-request shapes the minimum lease ask. approval-decision is the only permission object. workflow-commit freezes the governed receipt. lease-audit checks live authority posture. journal-audit reconciles what happened. Fast path means committed_ready + matching scope + explicit lease_request already exist, so repeating the full chain would just be bureaucratic cardio.",
             "Tell lease-request and approval-decision to default lease identity to the stable authority principal from PROJECT_OS_AUTHORITY_PRINCIPAL_ID or the repo's canonical authority principal, not ephemeral agent names or run ids.",
-            "If the operator explicitly approves minting a lease after the chain has reconciled state and approval posture, you may use authority_gateway_grant_lease to mint the narrowest honest lease. Default principal_id to the stable authority principal and preserve requested_by_actor_id, delegated_by_actor_id, delegated_to_actor_ids, and run_id as shared-authority audit metadata. Lease minting is execution plumbing, not retroactive authority.",
+            "If the operator explicitly approves minting a lease after the chain has reconciled state and approval posture, prefer authority_gateway_grant_workflow_lease when approval_decision already contains a lease_request. Fall back to authority_gateway_grant_lease only when you truly need to shape the lease fields manually. Default principal_id to the stable authority principal and preserve requested_by_actor_id, delegated_by_actor_id, delegated_to_actor_ids, and run_id as shared-authority audit metadata. Lease minting is execution plumbing, not retroactive authority.",
             "Never let a plan, memory entry, status page, dashboard, or stale artifact masquerade as authorization.",
             "For Robinhood or broker-adjacent requests, separate local MCP/OAuth/config validation from actual broker-side account or order actions.",
             "If the request requires downstream broker authority, route toward approval-decision and preserve the operator-confirm boundary instead of pretending direct local execution exists.",
@@ -283,12 +288,14 @@ AGENT_CONFIGS = [
             "grep",
             "kennel_recall",
             "droidpuppy_context_doctor",
+            "droidpuppy_context_fast_path_status",
             "droidpuppy_context_init",
             "droidpuppy_context_packet",
             "droidpuppy_context_handshake",
             "droidpuppy_context_commit_workflow",
             "authority_gateway_status",
             "authority_gateway_grant_lease",
+            "authority_gateway_grant_workflow_lease",
             "agent_share_your_reasoning",
         ],
         user_prompt="What workflow should I run through the governance chain?",
@@ -339,10 +346,10 @@ def droidpuppy_context_install_repo_governance(
         "written_files": written,
         "skipped_files": skipped,
         "created_dirs": sorted(set(created_dirs)),
-        "slash_commands": ["/workflow-commit", "/wcommit"],
+        "slash_commands": ["/govern", "/workflow", "/workflow-commit", "/wcommit"],
         "authority_rule": "approval_decision is the only authoritative permission object.",
         "guidance": [
-            "Use /workflow-commit or /wcommit to tee up the governed flow in the target repo.",
+            "Use /govern or /workflow for workflow prompts; they should check the committed fast path first and fall back to the full chain only when scope or authority drifted. Use /workflow-commit or /wcommit when you specifically want the commit-flavored wrapper.",
             "Prefer governance-orchestrator for the full chain; reserve workflow-commit for receipt refreshes.",
             "Default lease requests to the stable authority principal; keep actor/run ids in delegation metadata instead of using them as lease identity.",
             "Keep workflow_commit as a receipt only; approval_decision stays the sole authority object.",

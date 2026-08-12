@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from code_puppy.plugins.authority_gateway import anomaly, audit
+from code_puppy.plugins.authority_gateway import anomaly, audit, constraints
 from code_puppy.plugins.authority_gateway.audit import revoke_all_leases_with_audit
 from code_puppy.plugins.authority_gateway.identity import bind_runtime_actor_context
 from code_puppy.plugins.authority_gateway.lease_store import (
@@ -176,39 +176,91 @@ class TestAndroidPolicy:
         assert decision.blocked
         assert "outputs/ directory" in decision.reason
 
+    def test_open_settings_is_allowed_without_lease(self):
+        decision = evaluate_tool_call("android_open_settings", {"page": "wifi"})
+        assert not decision.blocked
+        assert not decision.lease_required
+
+    def test_open_notification_settings_is_allowed_without_lease(self):
+        decision = evaluate_tool_call("android_open_notification_settings", {})
+        assert not decision.blocked
+        assert not decision.lease_required
+
+    def test_android_open_settings_shortcut_is_allowed_without_lease(self):
+        decision = evaluate_tool_call(
+            "android_open",
+            {"target": "developer options", "browser": "brave", "dry_run": False},
+        )
+        assert not decision.blocked
+        assert not decision.lease_required
+
+    def test_android_open_app_shortcut_still_requires_lease(self):
+        decision = evaluate_tool_call(
+            "android_open",
+            {"target": "brave", "browser": "brave", "dry_run": False},
+        )
+        assert not decision.blocked
+        assert decision.lease_required
+        assert decision.capability == "android.app.open"
+
+    def test_android_browser_open_url_is_allowed_without_lease(self):
+        decision = evaluate_tool_call(
+            "android_browser_open_url",
+            {"url": "https://example.com", "browser": "chrome", "dry_run": False},
+        )
+        assert not decision.blocked
+        assert not decision.lease_required
+
 
 class TestLeaseBinding:
-    def test_live_tool_blocks_without_matching_lease(self, monkeypatch, tmp_path):
+    def test_settings_tool_is_allowed_without_matching_lease(
+        self, monkeypatch, tmp_path
+    ):
         monkeypatch.setenv("PROJECT_OS_EYES_ROOT", str(tmp_path))
         result = build_pre_tool_response("android_open_settings", {"page": "wifi"})
-        assert result is not None
-        assert result["blocked"] is True
-        assert "active execution lease" in result["error_message"]
+        assert result is None
 
         events = sorted((tmp_path / "audit" / "events").glob("*.json"))
         assert len(events) == 1
         payload = json.loads(events[0].read_text())
-        assert payload["event_type"] == "tool_blocked"
+        assert payload["event_type"] == "tool_allowed"
 
-    def test_v2_lease_allows_settings_open_and_consumes_use(
+    def test_browser_open_url_is_allowed_without_matching_lease(
         self, monkeypatch, tmp_path
     ):
+        monkeypatch.setenv("PROJECT_OS_EYES_ROOT", str(tmp_path))
+        result = build_pre_tool_response(
+            "android_browser_open_url",
+            {"url": "https://example.com", "browser": "chrome"},
+        )
+        assert result is None
+
+        events = sorted((tmp_path / "audit" / "events").glob("*.json"))
+        assert len(events) == 1
+        payload = json.loads(events[0].read_text())
+        assert payload["event_type"] == "tool_allowed"
+
+    def test_v2_lease_allows_app_launch_and_consumes_use(self, monkeypatch, tmp_path):
         monkeypatch.setenv("PROJECT_OS_EYES_ROOT", str(tmp_path))
         lease_path = _write_lease(
             tmp_path,
             _v2_lease(
                 "lease-123",
-                capabilities=["android.settings.open"],
+                capabilities=["android.app.launch"],
                 remaining_uses=1,
             ),
         )
 
-        pre = build_pre_tool_response("android_open_settings", {"page": "wifi"})
+        pre = build_pre_tool_response(
+            "android_launch_app", {"package_name": "com.termux"}
+        )
         assert pre is None
         assert reservation_debug_state()["lease_id"] == "lease-123"
 
-        handle_post_tool_result("android_open_settings", {"success": True})
-        payload = json.loads(lease_path.read_text())
+        handle_post_tool_result("android_launch_app", {"success": True})
+        archived_path = tmp_path / "leases" / "completed" / "lease-123.json"
+        payload = json.loads(archived_path.read_text())
+        assert not lease_path.exists()
         assert payload["quotas"]["remaining_uses"] == 0
         assert payload["status"] == "used"
         assert reservation_debug_state()["lease_id"] is None
@@ -318,7 +370,9 @@ class TestLeaseBinding:
             assert allowed is None
             handle_post_tool_result("agent_run_shell_command", {"success": True})
 
-        payload = json.loads(lease_path.read_text())
+        archived_path = tmp_path / "leases" / "completed" / "lease-stable.json"
+        payload = json.loads(archived_path.read_text())
+        assert not lease_path.exists()
         assert payload["quotas"]["shell_commands_used"] == 1
         assert payload["principal_id"] == "stable-authority"
 
@@ -381,16 +435,80 @@ class TestLeaseBinding:
         )
 
         denied = build_pre_tool_response(
-            "android_browser_open_url",
-            {"url": "https://example.com", "browser": "brave"},
+            "android_open",
+            {"target": "https://example.com", "browser": "brave"},
         )
         assert denied is not None
         assert denied["blocked"] is True
         assert "specific browser packages" in denied["error_message"]
 
         allowed = build_pre_tool_response(
-            "android_browser_open_url",
-            {"url": "https://example.com", "browser": "chrome"},
+            "android_open",
+            {"target": "https://example.com", "browser": "chrome"},
+        )
+        assert allowed is None
+
+    def test_android_package_constraint_locks_input_to_foreground_app(
+        self, monkeypatch, tmp_path
+    ):
+        monkeypatch.setenv("PROJECT_OS_EYES_ROOT", str(tmp_path))
+        _write_lease(
+            tmp_path,
+            _v2_lease(
+                "lease-android-package",
+                capabilities=["android.ui.input"],
+                constraints={"android_packages": ["com.freecash.app2"]},
+            ),
+        )
+
+        monkeypatch.setattr(
+            constraints,
+            "_foreground_android_package",
+            lambda: "com.termux",
+        )
+        denied = build_pre_tool_response(
+            "android_input_tap",
+            {"x": 10, "y": 20, "dry_run": False},
+        )
+        assert denied is not None
+        assert denied["blocked"] is True
+        assert "specific packages are foregrounded" in denied["error_message"]
+
+        monkeypatch.setattr(
+            constraints,
+            "_foreground_android_package",
+            lambda: "com.freecash.app2",
+        )
+        allowed = build_pre_tool_response(
+            "android_input_swipe",
+            {"x1": 1, "y1": 2, "x2": 3, "y2": 4, "dry_run": False},
+        )
+        assert allowed is None
+
+    def test_android_package_constraint_locks_launch_target_package(
+        self, monkeypatch, tmp_path
+    ):
+        monkeypatch.setenv("PROJECT_OS_EYES_ROOT", str(tmp_path))
+        _write_lease(
+            tmp_path,
+            _v2_lease(
+                "lease-launch-package",
+                capabilities=["android.app.launch"],
+                constraints={"android_packages": ["com.freecash.app2"]},
+            ),
+        )
+
+        denied = build_pre_tool_response(
+            "android_launch_app",
+            {"package_name": "com.other.app"},
+        )
+        assert denied is not None
+        assert denied["blocked"] is True
+        assert "specific Android packages" in denied["error_message"]
+
+        allowed = build_pre_tool_response(
+            "android_launch_app",
+            {"package_name": "com.freecash.app2"},
         )
         assert allowed is None
 
@@ -493,7 +611,7 @@ class TestLeaseBinding:
         assert "Security isolation triggered" in result["error_message"]
 
         lease_payload = json.loads(
-            (tmp_path / "leases" / "active" / "lease-breaker.json").read_text()
+            (tmp_path / "leases" / "failed" / "lease-breaker.json").read_text()
         )
         assert lease_payload["status"] == "revoked"
         assert "constraint violations" in lease_payload["revocation_reason"]
@@ -541,7 +659,7 @@ class TestLeaseBinding:
         assert reservation_debug_state()["lease_id"] is None
 
         lease_payload = json.loads(
-            (tmp_path / "leases" / "active" / "lease-runaway.json").read_text()
+            (tmp_path / "leases" / "failed" / "lease-runaway.json").read_text()
         )
         assert lease_payload["status"] == "revoked"
 
@@ -675,7 +793,9 @@ class TestLeaseStoreHelpers:
             capability="shell.repo.write",
             tool_name="agent_run_shell_command",
         )
-        payload = json.loads(lease_path.read_text())
+        archived_path = tmp_path / "leases" / "completed" / "lease-helper.json"
+        payload = json.loads(archived_path.read_text())
+        assert not lease_path.exists()
         assert payload["quotas"]["remaining_uses"] == 0
         assert payload["quotas"]["tool_calls_used"] == 1
         assert payload["quotas"]["shell_commands_used"] == 1
@@ -692,7 +812,9 @@ class TestLeaseStoreHelpers:
         )
         assert len(revoked) == 1
 
-        payload = json.loads(lease_path.read_text())
+        archived_path = tmp_path / "leases" / "failed" / "lease-revoke.json"
+        payload = json.loads(archived_path.read_text())
+        assert not lease_path.exists()
         assert payload["status"] == "revoked"
         assert payload["revocation_reason"] == "loop detected"
         assert payload["revoked_by"] == "watchdog"

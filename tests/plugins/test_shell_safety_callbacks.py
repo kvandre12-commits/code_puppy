@@ -16,44 +16,48 @@ from code_puppy.plugins.shell_safety.register_callbacks import (
 from code_puppy.tools.command_runner import ShellSafetyAssessment
 
 
-class TestShellSafetyCallbackOAuthBypass:
-    """Test OAuth model bypass in shell_safety_callback."""
+class TestShellSafetyCallbackModelIndependence:
+    """Test that shell safety does not bypass by model family."""
 
     @pytest.mark.anyio
-    async def test_callback_skips_for_oauth_model_anthropic(self):
-        """Test callback returns None for Anthropic OAuth models."""
-        with patch(
-            "code_puppy.plugins.shell_safety.register_callbacks.get_global_model_name",
-            return_value="claude-code-123",
+    @pytest.mark.parametrize(
+        "model_name",
+        ["claude-code-123", "chatgpt-4", "gemini-oauth-pro"],
+    )
+    async def test_callback_does_not_bypass_oauth_like_model_names(self, model_name):
+        """OAuth-like model names should still obey shell safety rules."""
+        cached = CachedAssessment(risk="high", reasoning="Dangerous command")
+
+        with (
+            patch(
+                "code_puppy.plugins.shell_safety.register_callbacks.get_global_model_name",
+                return_value=model_name,
+            ),
+            patch(
+                "code_puppy.plugins.shell_safety.register_callbacks.get_yolo_mode",
+                return_value=True,
+            ),
+            patch(
+                "code_puppy.plugins.shell_safety.register_callbacks.get_safety_permission_level",
+                return_value="medium",
+            ),
+            patch(
+                "code_puppy.plugins.shell_safety.register_callbacks.get_cached_assessment",
+                return_value=cached,
+            ),
+            patch(
+                "code_puppy.plugins.shell_safety.register_callbacks.emit_info"
+            ) as mock_emit,
         ):
             result = await shell_safety_callback(
                 context=None, command="rm -rf /", cwd=None, timeout=60
             )
-            assert result is None
 
-    @pytest.mark.anyio
-    async def test_callback_skips_for_oauth_model_openai(self):
-        """Test callback returns None for OpenAI OAuth models."""
-        with patch(
-            "code_puppy.plugins.shell_safety.register_callbacks.get_global_model_name",
-            return_value="chatgpt-4",
-        ):
-            result = await shell_safety_callback(
-                context=None, command="rm -rf /", cwd=None, timeout=60
-            )
-            assert result is None
-
-    @pytest.mark.anyio
-    async def test_callback_skips_for_oauth_model_google(self):
-        """Test callback returns None for Google OAuth models."""
-        with patch(
-            "code_puppy.plugins.shell_safety.register_callbacks.get_global_model_name",
-            return_value="gemini-oauth-pro",
-        ):
-            result = await shell_safety_callback(
-                context=None, command="rm -rf /", cwd=None, timeout=60
-            )
-            assert result is None
+            assert result is not None
+            assert result["blocked"] is True
+            assert result["risk"] == "high"
+            assert result["reasoning"] == "Dangerous command"
+            mock_emit.assert_called_once()
 
 
 class TestShellSafetyCallbackYoloModeBypass:

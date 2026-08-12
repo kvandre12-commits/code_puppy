@@ -7,13 +7,26 @@ and assesses their safety risk before execution.
 from typing import Any, Dict, Optional
 
 from code_puppy.callbacks import register_callback
-from code_puppy.config import get_safety_permission_level, get_yolo_mode
+from code_puppy.config import (
+    get_global_model_name as _config_get_global_model_name,
+    get_safety_permission_level,
+    get_yolo_mode,
+)
 from code_puppy.messaging import emit_info
 from code_puppy.plugins.shell_safety.command_cache import (
     cache_assessment,
     get_cached_assessment,
 )
 from code_puppy.tools.command_runner import ShellSafetyAssessment
+
+
+def get_global_model_name() -> str | None:
+    """Compatibility seam for older tests/importers.
+
+    Shell safety no longer branches on the active model family, but some
+    tests still patch this module attribute directly.
+    """
+    return _config_get_global_model_name()
 
 
 def is_oauth_model(model_name: str | None) -> bool:

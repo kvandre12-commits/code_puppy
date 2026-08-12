@@ -28,6 +28,8 @@ _BUILTIN_PROFILES: dict[str, dict[str, Any]] = {
         "notes": [
             "Avoid browser/image/fuzzy/search/provider extras during initial attach.",
             "Reattach optional capabilities only after the target environment is known.",
+            "Runtime still defaults to the full plugin/model surface; use android-minimal only as an explicit emergency-lean override.",
+            "Bundled models stay on the normal inventory unless android-minimal is explicitly selected.",
         ],
         "system_packages": [
             "pkg install ripgrep",
@@ -246,6 +248,8 @@ def build_install_plan(
             "browser automation extras detached",
             "provider SDK extras detached",
             "image/fuzzy/search extras detached",
+            "runtime still defaults to the full plugin/model surface",
+            "android-minimal overlay is available only as an explicit override",
         ]
 
     missing_system_packages = []

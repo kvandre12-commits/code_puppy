@@ -42,7 +42,10 @@ def test_android_handoff_packet_checkout_lane_renders_copy_paste_command() -> No
     )
     assert result.returncode == 0, result.stderr
     assert "Android handoff lane: checkout-ref" in result.stdout
-    assert "Repo/package target: https://github.com/example/code_puppy.git" in result.stdout
+    assert (
+        "Repo/package target: https://github.com/example/code_puppy.git"
+        in result.stdout
+    )
     assert "Git ref: feature/android-demo" in result.stdout
     assert (
         "https://raw.githubusercontent.com/example/code_puppy/feature/android-demo/"

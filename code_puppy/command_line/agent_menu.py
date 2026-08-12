@@ -23,7 +23,6 @@ from code_puppy.agents import (
     get_current_agent,
     is_clone_agent_name,
 )
-from code_puppy.command_line.mcp_binding_menu import interactive_mcp_binding_menu
 from code_puppy.mcp_.agent_bindings import get_bound_servers
 from code_puppy.command_line.model_picker_completion import (
     ModelSelectionMenu,
@@ -673,6 +672,10 @@ async def interactive_agent_picker() -> Optional[str]:
             if pending_action[0] == "bind":
                 entry = get_current_entry()
                 if entry:
+                    from code_puppy.command_line.mcp_binding_menu import (
+                        interactive_mcp_binding_menu,
+                    )
+
                     await interactive_mcp_binding_menu(entry[0])
                 continue
 

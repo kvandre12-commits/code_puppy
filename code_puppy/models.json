@@ -41,6 +41,102 @@
     "max_retries": 3,
     "retry_base_delay": 10
   },
+  "gpt-5.6-sol": {
+    "type": "openai",
+    "name": "gpt-5.6-sol",
+    "openai_family": "sol",
+    "openai_transport": "responses",
+    "supported_settings": [
+      "reasoning_effort",
+      "summary",
+      "verbosity"
+    ],
+    "reasoning_effort_choices": [
+      "none",
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+      "max"
+    ],
+    "supports_xhigh_reasoning": true,
+    "max_requests_per_minute": 100,
+    "max_retries": 3,
+    "retry_base_delay": 10,
+    "description": "OpenAI GPT-5.6 Sol via the Responses API."
+  },
+  "gpt-5.6": {
+    "type": "openai",
+    "name": "gpt-5.6",
+    "openai_family": "sol",
+    "openai_transport": "responses",
+    "supported_settings": [
+      "reasoning_effort",
+      "summary",
+      "verbosity"
+    ],
+    "reasoning_effort_choices": [
+      "none",
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+      "max"
+    ],
+    "supports_xhigh_reasoning": true,
+    "max_requests_per_minute": 100,
+    "max_retries": 3,
+    "retry_base_delay": 10,
+    "description": "OpenAI GPT-5.6 alias currently routing to Sol via the Responses API."
+  },
+  "gpt-5.6-luna": {
+    "type": "openai",
+    "name": "gpt-5.6-luna",
+    "openai_family": "luna",
+    "openai_transport": "responses",
+    "supported_settings": [
+      "reasoning_effort",
+      "summary",
+      "verbosity"
+    ],
+    "reasoning_effort_choices": [
+      "none",
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+      "max"
+    ],
+    "supports_xhigh_reasoning": true,
+    "max_requests_per_minute": 100,
+    "max_retries": 3,
+    "retry_base_delay": 10,
+    "description": "OpenAI GPT-5.6 Luna via the Responses API."
+  },
+  "gpt-5.6-terra": {
+    "type": "openai",
+    "name": "gpt-5.6-terra",
+    "openai_family": "terra",
+    "openai_transport": "responses",
+    "supported_settings": [
+      "reasoning_effort",
+      "summary",
+      "verbosity"
+    ],
+    "reasoning_effort_choices": [
+      "none",
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+      "max"
+    ],
+    "supports_xhigh_reasoning": true,
+    "max_requests_per_minute": 100,
+    "max_retries": 3,
+    "retry_base_delay": 10,
+    "description": "OpenAI GPT-5.6 Terra via the Responses API."
+  },
   "ollama-llama3.3": {
     "type": "custom_openai",
     "name": "llama3.3",

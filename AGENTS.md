@@ -65,6 +65,8 @@ and skills (`<CWD>/.code_puppy/skills/`).
 | `post_tool_call` | After tool finishes | `(tool_name, tool_args, result, duration_ms, context=None) -> Any` |
 | `custom_command` | Unknown `/slash` cmd | `(command, name) -> True \| str \| None` |
 | `custom_command_help` | `/help` menu | `() -> list[tuple[str, str]]` |
+| `register_cli_args` | Before `parse_args()` | `(parser: argparse.ArgumentParser) -> None` — live parser mutation, fail-fast, not error-isolated |
+| `handle_cli_args` | After `parse_args()` | `(args: argparse.Namespace) -> dict \| None` — first `{"handled": True}` short-circuits startup; include `exit_code` to control process status |
 | `register_tools` | Tool registration | `() -> list[dict]` with `{"name": str, "register_func": callable}` |
 | `register_agent_tools` | Advertise tools to an agent's available list | `(agent_name: str \| None) -> list[str]` — tool names from `TOOL_REGISTRY` to merge into the agent's hardcoded `get_available_tools()` |
 | `register_agents` | Agent catalogue | `() -> list[dict]` with `{"name": str, "class": type}` |
@@ -78,6 +80,13 @@ and skills (`<CWD>/.code_puppy/skills/`).
 | `pre_mcp_autostart` | Before bound MCP servers auto-start | `(agent_name, server_names) -> None` (refresh tokens / mint creds here) |
 
 Full list + rarely-used hooks: see `code_puppy/callbacks.py` source.
+
+## CLI exit contract
+
+- `handle_cli_args` is the plugin-owned early-exit seam for top-level CLI flags.
+- Return `{"handled": True, "exit_code": <int>}` to stop normal startup immediately.
+- `cli_runner.main()` returns that exit code, and `main_entry()` forwards it with `sys.exit(...)`.
+- If you omit `exit_code`, the process exits `0`. No sneaky half-success zombie exits. Cute, but no.
 
 ## Rules
 

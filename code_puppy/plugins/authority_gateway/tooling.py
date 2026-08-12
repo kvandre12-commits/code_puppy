@@ -6,6 +6,7 @@ from typing import Any
 
 from .anomaly import get_active_quarantines, release_quarantine
 from .identity import get_execution_identity
+from code_puppy.plugins.droidpuppy_context_kit.store import load_bundle, load_governance
 from .audit import (
     emit_authority_event,
     list_authority_events,
@@ -22,6 +23,25 @@ from .lease_store import (
 STATUS_WINDOW_SECONDS = 300
 DEFAULT_AUDIT_LIMIT = 20
 _REPO_WRITE_CAPABILITIES = {"shell.repo.write"}
+_APPROVAL_READY = {"approved", "operator_confirmed", "lease_ready", "delegated"}
+_WORKFLOW_LEASE_FIELDS = {
+    "principal_id",
+    "capabilities",
+    "allowed_tools",
+    "constraints",
+    "ttl_seconds",
+    "max_uses",
+    "max_tool_calls",
+    "max_shell_commands",
+    "requested_by_actor_id",
+    "delegated_by_actor_id",
+    "delegated_to_actor_ids",
+    "run_id",
+    "repo_root",
+    "reason",
+    "lease_id",
+    "allow_nondefault_principal",
+}
 
 
 def _serialize_lease(record: Any) -> dict[str, Any]:
@@ -337,6 +357,159 @@ def _normalize_grant_constraints(
     return normalized
 
 
+def _clean_string_list(values: Any) -> list[str]:
+    if not isinstance(values, list):
+        return []
+    cleaned: list[str] = []
+    for value in values:
+        text = str(value).strip()
+        if text and text not in cleaned:
+            cleaned.append(text)
+    return cleaned
+
+
+def _coerce_int(value: Any, *, default: int) -> int:
+    if value in (None, ""):
+        return default
+    return int(value)
+
+
+def _coerce_optional_int(value: Any) -> int | None:
+    if value in (None, ""):
+        return None
+    return int(value)
+
+
+def _workflow_id_from_context(
+    bundle: dict[str, Any], governance: dict[str, Any], workflow_id: str
+) -> str:
+    candidates = [
+        workflow_id,
+        bundle.get("approval_decision", {}).get("workflow_id"),
+        bundle.get("workflow_state", {}).get("workflow_id"),
+        governance.get("intent_handshake", {}).get("workflow_id"),
+    ]
+    for candidate in candidates:
+        text = str(candidate or "").strip()
+        if text:
+            return text
+    return "default-workflow"
+
+
+def _extract_workflow_lease_request(approval: dict[str, Any]) -> dict[str, Any]:
+    payload = approval.get("lease_request")
+    request = dict(payload) if isinstance(payload, dict) else {}
+    for key in _WORKFLOW_LEASE_FIELDS:
+        if key not in request and key in approval:
+            request[key] = approval[key]
+    return request
+
+
+def authority_gateway_grant_workflow_lease(
+    root: str = "",
+    workflow_id: str = "",
+    granted_by: str = "operator",
+    reason_override: str = "",
+    lease_id: str = "",
+    allow_nondefault_principal: bool = False,
+) -> dict[str, Any]:
+    bundle = load_bundle(root, workflow_id=workflow_id or "default-workflow")
+    governance = load_governance(root, workflow_id=workflow_id or "default-workflow")
+    resolved_workflow_id = _workflow_id_from_context(bundle, governance, workflow_id)
+    approval = bundle.get("approval_decision") or {}
+    handshake = governance.get("intent_handshake") or {}
+    approval_status = str(approval.get("status") or "review_required").strip().lower()
+    if approval_status not in _APPROVAL_READY:
+        return {
+            "success": False,
+            "granted": False,
+            "workflow_id": resolved_workflow_id,
+            "approval_status": approval_status,
+            "reason": (
+                "approval_decision.status must be approved, operator_confirmed, "
+                "lease_ready, or delegated before a workflow lease can be minted"
+            ),
+        }
+
+    lease_request = _extract_workflow_lease_request(approval)
+    capabilities = _clean_string_list(lease_request.get("capabilities"))
+    if not capabilities:
+        return {
+            "success": False,
+            "granted": False,
+            "workflow_id": resolved_workflow_id,
+            "approval_status": approval_status,
+            "reason": (
+                "approval_decision.lease_request.capabilities is required before "
+                "minting a workflow lease"
+            ),
+        }
+
+    constraints = lease_request.get("constraints") or {}
+    if not isinstance(constraints, dict):
+        return {
+            "success": False,
+            "granted": False,
+            "workflow_id": resolved_workflow_id,
+            "approval_status": approval_status,
+            "reason": "approval_decision.lease_request.constraints must be a JSON object",
+        }
+
+    identity = get_execution_identity()
+    effective_reason = (
+        str(reason_override).strip()
+        or str(lease_request.get("reason") or "").strip()
+        or str(approval.get("rationale") or "").strip()
+        or str(handshake.get("intent_summary") or "").strip()
+        or f"Workflow-approved lease for {resolved_workflow_id}."
+    )
+    result = authority_gateway_grant_lease(
+        principal_id=str(lease_request.get("principal_id") or "").strip(),
+        capabilities=capabilities,
+        reason=effective_reason,
+        granted_by=granted_by,
+        allowed_tools=_clean_string_list(lease_request.get("allowed_tools")),
+        constraints_json=json.dumps(constraints),
+        ttl_seconds=_coerce_int(lease_request.get("ttl_seconds"), default=3600),
+        max_uses=_coerce_int(lease_request.get("max_uses"), default=25),
+        max_tool_calls=_coerce_optional_int(lease_request.get("max_tool_calls")),
+        max_shell_commands=_coerce_optional_int(
+            lease_request.get("max_shell_commands")
+        ),
+        lease_id=lease_id or str(lease_request.get("lease_id") or "").strip(),
+        requested_by_actor_id=(
+            str(lease_request.get("requested_by_actor_id") or "").strip()
+            or str(handshake.get("requester") or "").strip()
+            or identity.actor_id
+        ),
+        delegated_by_actor_id=str(
+            lease_request.get("delegated_by_actor_id") or ""
+        ).strip(),
+        delegated_to_actor_ids=_clean_string_list(
+            lease_request.get("delegated_to_actor_ids")
+        ),
+        run_id=(
+            str(lease_request.get("run_id") or "").strip() or identity.run_id or ""
+        ),
+        repo_root=str(lease_request.get("repo_root") or root or ".").strip(),
+        allow_nondefault_principal=bool(
+            lease_request.get("allow_nondefault_principal")
+            if "allow_nondefault_principal" in lease_request
+            else allow_nondefault_principal
+        ),
+    )
+    return {
+        **result,
+        "workflow_id": resolved_workflow_id,
+        "approval_status": approval_status,
+        "lease_request": {
+            "capabilities": capabilities,
+            "allowed_tools": _clean_string_list(lease_request.get("allowed_tools")),
+            "constraints": constraints,
+        },
+    }
+
+
 def authority_gateway_grant_lease(
     principal_id: str,
     capabilities: list[str],
@@ -354,7 +527,7 @@ def authority_gateway_grant_lease(
     delegated_to_actor_ids: list[str] | None = None,
     run_id: str = "",
     repo_root: str = "",
-    allow_nondefault_principal: bool = True,
+    allow_nondefault_principal: bool = False,
 ) -> dict[str, Any]:
     """Mint a narrow execution lease.
 

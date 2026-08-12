@@ -86,12 +86,14 @@ def test_governance_json_agents_metadata() -> None:
             "available_tools": ["list_files", "read_file", "invoke_agent"],
             "config_tools": [
                 "droidpuppy_context_doctor",
+                "droidpuppy_context_fast_path_status",
                 "droidpuppy_context_init",
                 "droidpuppy_context_packet",
                 "droidpuppy_context_handshake",
                 "droidpuppy_context_commit_workflow",
                 "authority_gateway_status",
                 "authority_gateway_grant_lease",
+                "authority_gateway_grant_workflow_lease",
             ],
         },
     }
@@ -121,6 +123,9 @@ def test_approval_decision_agent_declares_delegate_tool_and_broker_routing() -> 
     assert "stable authority principal" in prompt_text
     assert "shared_authority delegation metadata" in prompt_text
     assert "local MCP/OAuth/configuration validation" in prompt_text
+    assert (
+        "write an explicit lease_request object into approval_decision" in prompt_text
+    )
     assert "write back only the approval_decision object" in prompt_text
     assert (
         "Write-style broker requests must stay operator-confirm-required" in prompt_text
@@ -180,7 +185,7 @@ def test_governance_orchestrator_declares_chain_tools() -> None:
     prompt_text = agent.get_system_prompt()
 
     assert (
-        "handshake, workflow-state, execution-plan, lease-request, approval-decision, workflow-commit, lease-audit, then journal-audit"
+        "fast-path check, then if needed handshake, workflow-state, execution-plan, lease-request, approval-decision, workflow-commit, lease-audit, then journal-audit"
         in prompt_text
     )
     assert (
@@ -193,10 +198,13 @@ def test_governance_orchestrator_declares_chain_tools() -> None:
     assert "droidpuppy_context_commit_workflow" in config["tools"]
     assert "authority_gateway_status" in config["tools"]
     assert "authority_gateway_grant_lease" in config["tools"]
+    assert "authority_gateway_grant_workflow_lease" in config["tools"]
     assert "kennel_recall" in config["tools"]
     assert "stable authority principal" in prompt_text
     assert "PROJECT_OS_AUTHORITY_PRINCIPAL_ID" in prompt_text
     assert "requested_by_actor_id" in prompt_text
+    assert "droidpuppy_context_fast_path_status" in prompt_text
+    assert "authority_gateway_grant_workflow_lease" in prompt_text
     assert "Lease minting is execution plumbing" in prompt_text
 
 

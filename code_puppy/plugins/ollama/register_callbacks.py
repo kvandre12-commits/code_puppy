@@ -34,6 +34,9 @@ import logging
 import os
 from typing import Any
 
+from pydantic_ai.models.openai import OpenAIChatModel
+from pydantic_ai.providers.openai import OpenAIProvider
+
 from code_puppy.callbacks import register_callback
 from code_puppy.http_utils import create_async_client
 from code_puppy.model_factory import get_custom_config
@@ -70,7 +73,11 @@ def create_ollama_model(
     """
     try:
         if "custom_endpoint" in model_config:
-            url, headers, verify, api_key, _timeout = get_custom_config(model_config)
+            custom_config = get_custom_config(model_config)
+            if len(custom_config) == 4:
+                url, headers, verify, api_key = custom_config
+            else:
+                url, headers, verify, api_key, _timeout = custom_config
         else:
             # Derive base URL: OLLAMA_HOST env var → default
             ollama_host = os.environ.get("OLLAMA_HOST", "").rstrip("/")
@@ -94,9 +101,6 @@ def create_ollama_model(
             provider_args["api_key"] = api_key
         else:
             provider_args["api_key"] = _DEFAULT_OLLAMA_API_KEY
-
-        from pydantic_ai.models.openai import OpenAIChatModel
-        from pydantic_ai.providers.openai import OpenAIProvider
 
         provider = OpenAIProvider(**provider_args)
 

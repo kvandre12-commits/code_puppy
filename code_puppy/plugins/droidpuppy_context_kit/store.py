@@ -129,6 +129,7 @@ def approval_decision_default(
         "allowed_actions": [],
         "blocked_actions": [],
         "rationale": "",
+        "lease_request": {},
         "evidence_refs": [],
         "updated_at": utc_now(),
     }

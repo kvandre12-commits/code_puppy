@@ -7,6 +7,41 @@ from typing import Optional
 
 from code_puppy.session_storage import save_session
 
+DEFAULT_SUBAGENT_RECURSION_LIMIT = 4
+DEFAULT_SUBAGENT_RECURSION_LIMIT_GPT_5_6 = 2
+
+
+def _configured_nonnegative_int(key: str, default: int) -> int:
+    """Return a non-negative integer config value or its safe default."""
+    configured = get_value(key)
+    if configured is None:
+        return default
+    try:
+        value = int(str(configured).strip())
+    except (TypeError, ValueError):
+        return default
+    return value if value >= 0 else default
+
+
+def get_subagent_recursion_limit() -> int:
+    """Return the generic maximum nested sub-agent depth (default four)."""
+    return _configured_nonnegative_int(
+        "subagent_recursion_limit", DEFAULT_SUBAGENT_RECURSION_LIMIT
+    )
+
+
+def get_subagent_recursion_limit_gpt_5_6() -> int:
+    """Return GPT-5.6's immediate-caller depth cap (default two).
+
+    This overlays the generic limit because GPT-5.6 can over-delegate through
+    open-ended agent chains. Main -> child -> grandchild remains available;
+    a GPT-5.6 grandchild cannot create a third nested level by default.
+    """
+    return _configured_nonnegative_int(
+        "subagent_recursion_limit_gpt_5_6",
+        DEFAULT_SUBAGENT_RECURSION_LIMIT_GPT_5_6,
+    )
+
 
 def _get_xdg_dir(env_var: str, fallback: str) -> str:
     """
@@ -530,7 +565,7 @@ def _validate_model_exists(model_name: str) -> bool:
 
 
 def clear_model_cache():
-    """Clear the model validation cache. Call this when models.json changes."""
+    """Clear model-related caches. Call this when model sources change."""
     global _model_validation_cache, _default_model_cache, _default_vision_model_cache
     global _warned_no_model
     _model_validation_cache.clear()
@@ -538,6 +573,12 @@ def clear_model_cache():
     _default_vision_model_cache = None
     # Re-arm the "no model" warning so a fresh config state can warn again.
     _warned_no_model = False
+    try:
+        from code_puppy.model_factory import ModelFactory
+
+        ModelFactory.clear_config_cache()
+    except Exception:
+        pass
 
 
 def reset_session_model():
@@ -723,8 +764,13 @@ def set_puppy_token(token: str):
 
 
 def get_openai_reasoning_effort() -> str:
-    """Return the configured OpenAI reasoning effort (minimal, low, medium, high, xhigh)."""
-    allowed_values = {"minimal", "low", "medium", "high", "xhigh"}
+    """Return the configured OpenAI reasoning effort.
+
+    Accepted values are the union of current OpenAI reasoning tiers used across
+    models. Runtime model wiring still normalizes the chosen value to whatever
+    the active model actually supports.
+    """
+    allowed_values = {"none", "minimal", "low", "medium", "high", "xhigh", "max"}
     configured = (get_value("openai_reasoning_effort") or "medium").strip().lower()
     if configured not in allowed_values:
         return "medium"
@@ -733,7 +779,7 @@ def get_openai_reasoning_effort() -> str:
 
 def set_openai_reasoning_effort(value: str) -> None:
     """Persist the OpenAI reasoning effort ensuring it remains within allowed values."""
-    allowed_values = {"minimal", "low", "medium", "high", "xhigh"}
+    allowed_values = {"none", "minimal", "low", "medium", "high", "xhigh", "max"}
     normalized = (value or "").strip().lower()
     if normalized not in allowed_values:
         raise ValueError(

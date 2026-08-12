@@ -166,3 +166,41 @@ class TestLoadPluginCallbacks:
 
                 # Should not try to import
                 mock_import.assert_not_called()
+
+    def test_android_minimal_runtime_filters_builtin_plugins(self, tmp_path):
+        """Test that android-minimal runtime only loads the allowlisted plugins."""
+        import sys
+
+        import code_puppy.plugins as plugins_module
+        from code_puppy.plugins import _load_builtin_plugins
+
+        allowed_dir = tmp_path / "allowed_plugin"
+        allowed_dir.mkdir()
+        (allowed_dir / "register_callbacks.py").write_text(
+            "# allowed\n", encoding="utf-8"
+        )
+
+        blocked_dir = tmp_path / "blocked_plugin"
+        blocked_dir.mkdir()
+        (blocked_dir / "register_callbacks.py").write_text(
+            "# blocked\n", encoding="utf-8"
+        )
+
+        original_path = list(plugins_module.__path__)
+        with patch.object(plugins_module, "__path__", original_path + [str(tmp_path)]):
+            with patch(
+                "code_puppy.plugins.get_runtime_profile", return_value="android-minimal"
+            ):
+                with patch(
+                    "code_puppy.plugins.allowed_builtin_plugins_for_runtime",
+                    return_value={"allowed_plugin"},
+                ):
+                    with patch(
+                        "code_puppy.config.get_safety_permission_level",
+                        return_value="low",
+                    ):
+                        loaded = _load_builtin_plugins(tmp_path)
+
+        assert loaded == ["allowed_plugin"]
+        assert "code_puppy.plugins.allowed_plugin.register_callbacks" in sys.modules
+        assert "code_puppy.plugins.blocked_plugin.register_callbacks" not in sys.modules

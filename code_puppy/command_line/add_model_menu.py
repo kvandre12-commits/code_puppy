@@ -28,6 +28,7 @@ from code_puppy.config import EXTRA_MODELS_FILE, set_config_value
 from code_puppy.list_filtering import query_matches_text
 from code_puppy.messaging import emit_error, emit_info, emit_warning
 from code_puppy.models_dev_parser import ModelInfo, ModelsDevRegistry, ProviderInfo
+from code_puppy.openai_capabilities import merge_openai_metadata
 from code_puppy.provider_credentials import (
     credential_display,
     credential_hint,
@@ -90,6 +91,30 @@ def derive_provider_identity(provider: ProviderInfo) -> str:
     if not provider_id:
         return "unknown"
     return PROVIDER_IDENTITY_MAPPING.get(provider_id, provider_id.replace("-", "_"))
+
+
+def _openai_recommendation_rank(model: ModelInfo) -> int:
+    """Return the picker priority for built-in OpenAI recommendations."""
+    model_id = (getattr(model, "model_id", "") or "").strip().lower()
+    if model_id == "gpt-5.6-sol":
+        return 0
+    if model_id == "gpt-5.6":
+        return 1
+    return 2
+
+
+def prioritize_provider_models(
+    provider: Optional[ProviderInfo], models: List[ModelInfo]
+) -> List[ModelInfo]:
+    """Return provider models in picker order.
+
+    OpenAI gets a small recommendation boost so the real GPT-5.6 Sol model is
+    the first default choice when the operator opens that provider.
+    """
+    ordered_models = list(models)
+    if not provider or (provider.id or "").strip().lower() != "openai":
+        return ordered_models
+    return sorted(ordered_models, key=_openai_recommendation_rank)
 
 
 class AddModelMenu:
@@ -905,6 +930,13 @@ class AddModelMenu:
             # Default settings for most models
             config["supported_settings"] = ["temperature", "seed", "top_p"]
 
+        if model_type in {"openai", "custom_openai", "azure_foundry_openai"}:
+            config = merge_openai_metadata(
+                model_name,
+                config,
+                supported_settings=config.get("supported_settings", []),
+            )
+
         return config
 
     def update_display(self):
@@ -923,7 +955,10 @@ class AddModelMenu:
             return
 
         self.current_provider = provider
-        self.current_models = self.registry.get_models(provider.id)
+        self.current_models = prioritize_provider_models(
+            provider,
+            self.registry.get_models(provider.id),
+        )
         self.view_mode = "models"
         self.model_filter = ""
         self.selected_model_idx = 0

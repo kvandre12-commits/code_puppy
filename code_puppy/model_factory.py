@@ -1,7 +1,9 @@
+import copy
 import json
 import logging
 import os
 import pathlib
+from pathlib import Path
 from typing import Any, Dict
 
 import httpx
@@ -16,14 +18,151 @@ from . import callbacks
 from .claude_cache_client import ClaudeCacheAsyncClient, patch_anthropic_client_messages
 from .config import EXTRA_MODELS_FILE, get_value, get_yolo_mode
 from .http_utils import create_async_client, get_cert_bundle_path, get_http2
+from .openai_capabilities import (
+    infer_openai_transport,
+    is_openai_sol_family,
+    normalize_openai_reasoning_effort,
+)
 from .provider_identity import (
     make_anthropic_provider,
     make_openai_provider,
     resolve_provider_identity,
 )
 from .round_robin_model import RoundRobinModel
+from .runtime_profile import bundled_models_path
 
 logger = logging.getLogger(__name__)
+
+_CONFIG_CACHE: dict[str, Any] | None = None
+_CONFIG_CACHE_CALLBACK_SIG: tuple[tuple[str, int], ...] | None = None
+
+
+def _model_config_callback_signature() -> tuple[tuple[str, int], ...]:
+    hook_names = (
+        "load_model_config",
+        "load_models_config",
+        "load_model_descriptions",
+    )
+    signature: list[tuple[str, int]] = []
+    for hook_name in hook_names:
+        for callback in callbacks.get_callbacks(hook_name):
+            signature.append((hook_name, id(callback)))
+    return tuple(signature)
+
+
+def _load_and_merge_model_config() -> Dict[str, Any]:
+    load_model_config_callbacks = callbacks.get_callbacks("load_model_config")
+    if len(load_model_config_callbacks) > 0:
+        if len(load_model_config_callbacks) > 1:
+            logging.getLogger(__name__).warning(
+                "Multiple load_model_config callbacks registered, using the first"
+            )
+        config = callbacks.on_load_model_config()[0]
+    else:
+        # Always load from the runtime-selected bundled model file so packaged
+        # profile variants (for example Android minimal) resolve correctly.
+        bundled_models = bundled_models_path(base_dir=Path(__file__).parent)
+        with open(bundled_models, "r") as f:
+            config = json.load(f)
+
+    # Import OAuth model file paths from main config
+    from code_puppy.config import (
+        CHATGPT_MODELS_FILE,
+        CLAUDE_MODELS_FILE,
+        COPILOT_MODELS_FILE,
+        GEMINI_MODELS_FILE,
+    )
+
+    # Build list of extra model sources
+    extra_sources: list[tuple[pathlib.Path, str, bool]] = [
+        (pathlib.Path(EXTRA_MODELS_FILE), "extra models", False),
+        (pathlib.Path(CHATGPT_MODELS_FILE), "ChatGPT OAuth models", False),
+        (pathlib.Path(CLAUDE_MODELS_FILE), "Claude Code OAuth models", True),
+        (pathlib.Path(GEMINI_MODELS_FILE), "Gemini OAuth models", False),
+        (pathlib.Path(COPILOT_MODELS_FILE), "Copilot models", False),
+    ]
+
+    for source_path, label, use_filtered in extra_sources:
+        if not source_path.exists():
+            continue
+        try:
+            # Use filtered loading for Claude Code OAuth models to show only latest versions
+            if use_filtered:
+                try:
+                    from code_puppy.plugins.claude_code_oauth.utils import (
+                        load_claude_models_filtered,
+                    )
+
+                    extra_config = load_claude_models_filtered()
+                except ImportError:
+                    # Plugin not available, fall back to standard JSON loading
+                    logging.getLogger(__name__).debug(
+                        f"claude_code_oauth plugin not available, loading {label} as plain JSON"
+                    )
+                    with open(source_path, "r") as f:
+                        extra_config = json.load(f)
+            else:
+                with open(source_path, "r") as f:
+                    extra_config = json.load(f)
+            config.update(extra_config)
+        except json.JSONDecodeError as exc:
+            logging.getLogger(__name__).warning(
+                f"Failed to load {label} config from {source_path}: Invalid JSON - {exc}"
+            )
+        except Exception as exc:
+            logging.getLogger(__name__).warning(
+                f"Failed to load {label} config from {source_path}: {exc}"
+            )
+
+    # Let plugins add/override models via load_models_config hook
+    try:
+        from code_puppy.callbacks import on_load_models_config
+
+        results = on_load_models_config()
+        for result in results:
+            if isinstance(result, dict):
+                config.update(result)  # Plugin models override built-in
+    except Exception as exc:
+        logging.getLogger(__name__).debug(f"Failed to load plugin models config: {exc}")
+
+    # Final pass: apply description-only overlays from bundled + plugins.
+    # This avoids shallow update() calls clobbering remote model settings.
+    try:
+        from code_puppy.model_descriptions import apply_description_overlays
+
+        bundled_models = bundled_models_path(base_dir=Path(__file__).parent)
+        with open(bundled_models, "r") as f:
+            bundled_config = json.load(f)
+
+        bundled_descriptions = {
+            name: (cfg.get("description") or "")
+            for name, cfg in bundled_config.items()
+            if isinstance(cfg, dict)
+        }
+
+        plugin_descriptions: dict[str, str] = {}
+        try:
+            from code_puppy.callbacks import on_load_model_descriptions
+
+            for result in on_load_model_descriptions():
+                if isinstance(result, dict):
+                    plugin_descriptions.update(result)
+        except Exception as exc:
+            logging.getLogger(__name__).debug(
+                f"Failed to load plugin model descriptions: {exc}"
+            )
+
+        apply_description_overlays(
+            config,
+            bundled_descriptions,
+            plugin_descriptions,
+        )
+    except Exception as exc:
+        logging.getLogger(__name__).debug(
+            f"Failed to apply model description overlays: {exc}"
+        )
+
+    return config
 
 
 def _load_async_anthropic():
@@ -137,6 +276,9 @@ def _make_zai_chat_model_class():
             return super()._process_response(response)
 
     return ZaiChatModel
+
+
+ZaiChatModel = _make_zai_chat_model_class()
 
 
 # Registry for custom model provider classes from plugins
@@ -334,14 +476,29 @@ def make_model_settings(
         # Just use plain OpenAIChatModelSettings without reasoning params.
         model_settings = _make_openai_chat_settings(model_settings_dict)
 
+    elif is_openai_sol_family(model_name, model_config):
+        model_settings_dict["openai_reasoning_effort"] = (
+            normalize_openai_reasoning_effort(
+                model_name,
+                get_openai_reasoning_effort(),
+                model_config,
+            )
+        )
+        model_settings_dict["openai_reasoning_summary"] = get_openai_reasoning_summary()
+        model_settings_dict["openai_text_verbosity"] = get_openai_verbosity()
+        model_settings = _make_openai_responses_settings(model_settings_dict)
+
     elif "gpt-5" in model_name:
-        model_settings_dict["openai_reasoning_effort"] = get_openai_reasoning_effort()
+        model_settings_dict["openai_reasoning_effort"] = (
+            normalize_openai_reasoning_effort(
+                model_name,
+                get_openai_reasoning_effort(),
+                model_config,
+            )
+        )
 
         uses_responses_api = (
-            model_type == "chatgpt_oauth"
-            or model_type == "azure_foundry_openai"
-            or (model_type == "openai" and "codex" in model_name)
-            or (model_type == "custom_openai" and "codex" in model_name)
+            infer_openai_transport(model_name, model_config) == "responses"
         )
 
         if uses_responses_api:
@@ -511,121 +668,20 @@ class ModelFactory:
 
     @staticmethod
     def load_config() -> Dict[str, Any]:
-        load_model_config_callbacks = callbacks.get_callbacks("load_model_config")
-        if len(load_model_config_callbacks) > 0:
-            if len(load_model_config_callbacks) > 1:
-                logging.getLogger(__name__).warning(
-                    "Multiple load_model_config callbacks registered, using the first"
-                )
-            config = callbacks.on_load_model_config()[0]
-        else:
-            # Always load from the bundled models.json so upstream
-            # updates propagate automatically.  User additions belong
-            # in extra_models.json (overlay loaded below).
-            bundled_models = pathlib.Path(__file__).parent / "models.json"
-            with open(bundled_models, "r") as f:
-                config = json.load(f)
+        global _CONFIG_CACHE, _CONFIG_CACHE_CALLBACK_SIG
 
-        # Import OAuth model file paths from main config
-        from code_puppy.config import (
-            CHATGPT_MODELS_FILE,
-            CLAUDE_MODELS_FILE,
-            COPILOT_MODELS_FILE,
-            GEMINI_MODELS_FILE,
-        )
+        callback_signature = _model_config_callback_signature()
+        if _CONFIG_CACHE is None or _CONFIG_CACHE_CALLBACK_SIG != callback_signature:
+            _CONFIG_CACHE = _load_and_merge_model_config()
+            _CONFIG_CACHE_CALLBACK_SIG = callback_signature
 
-        # Build list of extra model sources
-        extra_sources: list[tuple[pathlib.Path, str, bool]] = [
-            (pathlib.Path(EXTRA_MODELS_FILE), "extra models", False),
-            (pathlib.Path(CHATGPT_MODELS_FILE), "ChatGPT OAuth models", False),
-            (pathlib.Path(CLAUDE_MODELS_FILE), "Claude Code OAuth models", True),
-            (pathlib.Path(GEMINI_MODELS_FILE), "Gemini OAuth models", False),
-            (pathlib.Path(COPILOT_MODELS_FILE), "Copilot models", False),
-        ]
+        return copy.deepcopy(_CONFIG_CACHE)
 
-        for source_path, label, use_filtered in extra_sources:
-            if not source_path.exists():
-                continue
-            try:
-                # Use filtered loading for Claude Code OAuth models to show only latest versions
-                if use_filtered:
-                    try:
-                        from code_puppy.plugins.claude_code_oauth.utils import (
-                            load_claude_models_filtered,
-                        )
-
-                        extra_config = load_claude_models_filtered()
-                    except ImportError:
-                        # Plugin not available, fall back to standard JSON loading
-                        logging.getLogger(__name__).debug(
-                            f"claude_code_oauth plugin not available, loading {label} as plain JSON"
-                        )
-                        with open(source_path, "r") as f:
-                            extra_config = json.load(f)
-                else:
-                    with open(source_path, "r") as f:
-                        extra_config = json.load(f)
-                config.update(extra_config)
-            except json.JSONDecodeError as exc:
-                logging.getLogger(__name__).warning(
-                    f"Failed to load {label} config from {source_path}: Invalid JSON - {exc}"
-                )
-            except Exception as exc:
-                logging.getLogger(__name__).warning(
-                    f"Failed to load {label} config from {source_path}: {exc}"
-                )
-
-        # Let plugins add/override models via load_models_config hook
-        try:
-            from code_puppy.callbacks import on_load_models_config
-
-            results = on_load_models_config()
-            for result in results:
-                if isinstance(result, dict):
-                    config.update(result)  # Plugin models override built-in
-        except Exception as exc:
-            logging.getLogger(__name__).debug(
-                f"Failed to load plugin models config: {exc}"
-            )
-
-        # Final pass: apply description-only overlays from bundled + plugins.
-        # This avoids shallow update() calls clobbering remote model settings.
-        try:
-            from code_puppy.model_descriptions import apply_description_overlays
-
-            bundled_models = pathlib.Path(__file__).parent / "models.json"
-            with open(bundled_models, "r") as f:
-                bundled_config = json.load(f)
-
-            bundled_descriptions = {
-                name: (cfg.get("description") or "")
-                for name, cfg in bundled_config.items()
-                if isinstance(cfg, dict)
-            }
-
-            plugin_descriptions: dict[str, str] = {}
-            try:
-                from code_puppy.callbacks import on_load_model_descriptions
-
-                for result in on_load_model_descriptions():
-                    if isinstance(result, dict):
-                        plugin_descriptions.update(result)
-            except Exception as exc:
-                logging.getLogger(__name__).debug(
-                    f"Failed to load plugin model descriptions: {exc}"
-                )
-
-            apply_description_overlays(
-                config,
-                bundled_descriptions,
-                plugin_descriptions,
-            )
-        except Exception as exc:
-            logging.getLogger(__name__).debug(
-                f"Failed to apply model description overlays: {exc}"
-            )
-
-        return config
+    @staticmethod
+    def clear_config_cache() -> None:
+        global _CONFIG_CACHE, _CONFIG_CACHE_CALLBACK_SIG
+        _CONFIG_CACHE = None
+        _CONFIG_CACHE_CALLBACK_SIG = None
 
     @staticmethod
     def get_model(model_name: str, config: Dict[str, Any]) -> Any:
@@ -673,12 +729,11 @@ class ModelFactory:
 
             OpenAIChatModel, _, OpenAIResponsesModel, _ = _load_openai_model_classes()
             provider = make_openai_provider(provider_identity, api_key=api_key)
-            model = OpenAIChatModel(model_name=model_config["name"], provider=provider)
-            if "codex" in model_name:
-                model = OpenAIResponsesModel(
+            if infer_openai_transport(model_name, model_config) == "responses":
+                return OpenAIResponsesModel(
                     model_name=model_config["name"], provider=provider
                 )
-            return model
+            return OpenAIChatModel(model_name=model_config["name"], provider=provider)
 
         elif model_type == "anthropic":
             api_key = get_api_key("ANTHROPIC_API_KEY")
@@ -771,6 +826,7 @@ class ModelFactory:
             # Ensure cache_control is injected at the Anthropic SDK layer
             patch_anthropic_client_messages(anthropic_client)
 
+            AnthropicModel, _ = _load_anthropic_model_classes()
             provider = make_anthropic_provider(
                 provider_identity, anthropic_client=anthropic_client
             )
@@ -850,10 +906,9 @@ class ModelFactory:
                 provider_args["api_key"] = api_key
             OpenAIChatModel, _, OpenAIResponsesModel, _ = _load_openai_model_classes()
             provider = make_openai_provider(provider_identity, **provider_args)
-            model = OpenAIChatModel(model_name=model_config["name"], provider=provider)
-            if model_name == "chatgpt-gpt-5-codex":
-                model = OpenAIResponsesModel(model_config["name"], provider=provider)
-            return model
+            if infer_openai_transport(model_name, model_config) == "responses":
+                return OpenAIResponsesModel(model_config["name"], provider=provider)
+            return OpenAIChatModel(model_name=model_config["name"], provider=provider)
         elif model_type == "zai_coding":
             api_key = get_api_key("ZAI_API_KEY")
             if not api_key:
@@ -866,7 +921,7 @@ class ModelFactory:
                 api_key=api_key,
                 base_url="https://api.z.ai/api/coding/paas/v4",
             )
-            return _make_zai_chat_model_class()(
+            return ZaiChatModel(
                 model_name=model_config["name"],
                 provider=provider,
             )
@@ -882,7 +937,7 @@ class ModelFactory:
                 api_key=api_key,
                 base_url="https://api.z.ai/api/paas/v4/",
             )
-            return _make_zai_chat_model_class()(
+            return ZaiChatModel(
                 model_name=model_config["name"],
                 provider=provider,
             )

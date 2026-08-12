@@ -118,24 +118,30 @@ class TestAuthorityGatewayToolRegistration:
             "authority_gateway_quarantine_status",
             "authority_gateway_release_quarantine",
             "authority_gateway_grant_lease",
+            "authority_gateway_grant_workflow_lease",
             "authority_gateway_revoke_all",
         }
 
-    def test_register_agent_tools_keeps_grant_surface_narrow(self):
-        advertised = register_callbacks._advertise_tools_to_agent("code-puppy")
-        assert advertised == [
-            "authority_gateway_status",
-            "authority_gateway_list_active_leases",
-            "authority_gateway_recent_audit",
-            "authority_gateway_quarantine_status",
-            "authority_gateway_release_quarantine",
-            "authority_gateway_revoke_all",
-        ]
+    def test_register_agent_tools_exposes_grant_surface_to_governor_agents(self):
+        code_puppy_tools = register_callbacks._advertise_tools_to_agent("code-puppy")
+        assert "authority_gateway_grant_lease" in code_puppy_tools
+        assert "authority_gateway_grant_workflow_lease" in code_puppy_tools
+
+        suffixed_tools = register_callbacks._advertise_tools_to_agent(
+            "code-puppy-8c2b76"
+        )
+        assert "authority_gateway_grant_lease" in suffixed_tools
+        assert "authority_gateway_grant_workflow_lease" in suffixed_tools
 
         governance_tools = register_callbacks._advertise_tools_to_agent(
             "governance-orchestrator"
         )
         assert "authority_gateway_grant_lease" in governance_tools
+        assert "authority_gateway_grant_workflow_lease" in governance_tools
+
+        non_governor_tools = register_callbacks._advertise_tools_to_agent("lease-audit")
+        assert "authority_gateway_grant_lease" not in non_governor_tools
+        assert "authority_gateway_grant_workflow_lease" not in non_governor_tools
 
 
 class TestAuthorityGatewayTooling:
@@ -187,6 +193,37 @@ class TestAuthorityGatewayTooling:
         assert leases["count"] == 2
         assert filtered["count"] == 1
         assert filtered["leases"][0]["principal_id"] == "worker-beta"
+
+    def test_list_active_leases_rehomes_stale_records_out_of_active(
+        self, monkeypatch, tmp_path
+    ):
+        monkeypatch.setenv("PROJECT_OS_EYES_ROOT", str(tmp_path))
+        expired = _v2_lease("lease-expired")
+        expired["expires_at"] = "2000-01-01T00:00:00+00:00"
+        revoked = _v2_lease("lease-revoked")
+        revoked["status"] = "revoked"
+        _write_lease(tmp_path, _v2_lease("lease-live"))
+        expired_path = _write_lease(tmp_path, expired)
+        revoked_path = _write_lease(tmp_path, revoked)
+
+        leases = tooling.authority_gateway_list_active_leases()
+
+        assert leases["count"] == 1
+        assert leases["leases"][0]["lease_id"] == "lease-live"
+        assert not expired_path.exists()
+        assert not revoked_path.exists()
+        assert (
+            json.loads(
+                (tmp_path / "leases" / "expired" / "lease-expired.json").read_text()
+            )["status"]
+            == "expired"
+        )
+        assert (
+            json.loads(
+                (tmp_path / "leases" / "failed" / "lease-revoked.json").read_text()
+            )["status"]
+            == "revoked"
+        )
 
     def test_status_degrades_gracefully_when_topology_snapshot_is_unavailable(
         self, monkeypatch, tmp_path
@@ -319,6 +356,38 @@ class TestAuthorityGatewayTooling:
         assert result["principal_id"] == "stable-authority"
         assert result["constraints"]["allowed_paths"] == [str(repo_root.resolve())]
 
+    def test_grant_lease_accepts_allowed_packages_alias_for_android_constraints(
+        self, monkeypatch, tmp_path
+    ):
+        monkeypatch.setenv("PROJECT_OS_EYES_ROOT", str(tmp_path))
+        monkeypatch.setenv("PROJECT_OS_AUTHORITY_PRINCIPAL_ID", "stable-authority")
+
+        result = tooling.authority_gateway_grant_lease(
+            principal_id="stable-authority",
+            capabilities=["android.ui.input"],
+            reason="Operator granted Android input for a single app.",
+            allowed_tools=["android_input_tap", "android_input_swipe"],
+            constraints_json=json.dumps({"allowed_packages": ["com.freecash.app2"]}),
+            lease_id="android-package-locked",
+        )
+
+        assert result["success"] is True
+        assert result["constraints"]["android_packages"] == ["com.freecash.app2"]
+
+    def test_grant_lease_rejects_unknown_constraint_keys(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("PROJECT_OS_EYES_ROOT", str(tmp_path))
+        monkeypatch.setenv("PROJECT_OS_AUTHORITY_PRINCIPAL_ID", "stable-authority")
+
+        result = tooling.authority_gateway_grant_lease(
+            principal_id="stable-authority",
+            capabilities=["android.ui.input"],
+            reason="Operator typo test.",
+            constraints_json=json.dumps({"purpose": ["nope"]}),
+        )
+
+        assert result["success"] is False
+        assert "unsupported constraint keys: purpose" in result["reason"]
+
     def test_grant_lease_rejects_nondefault_principal_without_explicit_override(
         self, monkeypatch, tmp_path
     ):
@@ -355,6 +424,92 @@ class TestAuthorityGatewayTooling:
         assert result["success"] is True
         assert result["principal_id"] == "other-principal"
 
+    def test_grant_workflow_lease_mints_from_approved_packet(
+        self, monkeypatch, tmp_path
+    ):
+        monkeypatch.setenv("PROJECT_OS_EYES_ROOT", str(tmp_path / "eyes"))
+        monkeypatch.setenv("PROJECT_OS_AUTHORITY_PRINCIPAL_ID", "stable-authority")
+        root = str(tmp_path / "ctx")
+        from code_puppy.plugins.droidpuppy_context_kit.tooling import (
+            droidpuppy_context_apply_packet,
+            droidpuppy_context_handshake,
+            droidpuppy_context_init,
+        )
+
+        droidpuppy_context_init(root=root, workflow_id="dashboard-open")
+        droidpuppy_context_handshake(
+            root=root,
+            workflow_id="dashboard-open",
+            requester="governor",
+            raw_request="open the SharpEdge dashboard safely",
+        )
+        droidpuppy_context_apply_packet(
+            root=root,
+            approval_decision_json=json.dumps(
+                {
+                    "status": "approved",
+                    "rationale": "Governor approved local dashboard open.",
+                    "lease_request": {
+                        "capabilities": [
+                            "shell.process.exec",
+                            "android.browser.open_url",
+                        ],
+                        "allowed_tools": [
+                            "agent_run_shell_command",
+                            "android_browser_open_url",
+                        ],
+                        "constraints": {
+                            "allowed_paths": [str(tmp_path.resolve())],
+                            "browser_packages": ["brave"],
+                        },
+                        "ttl_seconds": 900,
+                        "max_uses": 4,
+                        "max_shell_commands": 2,
+                        "repo_root": str(tmp_path.resolve()),
+                    },
+                }
+            ),
+        )
+
+        result = tooling.authority_gateway_grant_workflow_lease(
+            root=root,
+            workflow_id="dashboard-open",
+            granted_by="mike",
+        )
+
+        assert result["success"] is True
+        assert result["granted"] is True
+        assert result["workflow_id"] == "dashboard-open"
+        assert result["approval_status"] == "approved"
+        assert result["principal_id"] == "stable-authority"
+        assert result["capabilities"] == [
+            "shell.process.exec",
+            "android.browser.open_url",
+        ]
+        assert result["constraints"]["browser_packages"] == ["brave"]
+        assert result["delegation"]["requested_by_actor_id"] == "governor"
+
+    def test_grant_workflow_lease_rejects_unapproved_packets(
+        self, monkeypatch, tmp_path
+    ):
+        monkeypatch.setenv("PROJECT_OS_EYES_ROOT", str(tmp_path / "eyes"))
+        root = str(tmp_path / "ctx")
+        from code_puppy.plugins.droidpuppy_context_kit.tooling import (
+            droidpuppy_context_init,
+        )
+
+        droidpuppy_context_init(root=root, workflow_id="dashboard-open")
+
+        result = tooling.authority_gateway_grant_workflow_lease(
+            root=root,
+            workflow_id="dashboard-open",
+        )
+
+        assert result["success"] is False
+        assert result["granted"] is False
+        assert result["approval_status"] == "review_required"
+        assert "approval_decision.status" in result["reason"]
+
     def test_revoke_all_vaporizes_every_active_lease(self, monkeypatch, tmp_path):
         monkeypatch.setenv("PROJECT_OS_EYES_ROOT", str(tmp_path))
         lease_one = _write_lease(tmp_path, _v2_lease("lease-one"))
@@ -368,8 +523,20 @@ class TestAuthorityGatewayTooling:
         assert result["success"] is True
         assert result["count"] == 2
         assert sorted(result["lease_ids"]) == ["lease-one", "lease-two"]
-        assert json.loads(lease_one.read_text())["status"] == "revoked"
-        assert json.loads(lease_two.read_text())["status"] == "revoked"
+        assert not lease_one.exists()
+        assert not lease_two.exists()
+        assert (
+            json.loads((tmp_path / "leases" / "failed" / "lease-one.json").read_text())[
+                "status"
+            ]
+            == "revoked"
+        )
+        assert (
+            json.loads((tmp_path / "leases" / "failed" / "lease-two.json").read_text())[
+                "status"
+            ]
+            == "revoked"
+        )
 
         events = [
             json.loads(path.read_text())
@@ -378,3 +545,40 @@ class TestAuthorityGatewayTooling:
         kinds = [event["event_type"] for event in events]
         assert kinds.count("lease_revoked") == 2
         assert kinds[-1] == "leases_revoked"
+
+
+def test_prompt_queue_run_once_demo_mode_is_lease_free():
+    from code_puppy.plugins.authority_gateway.policy import evaluate_tool_call
+
+    decision = evaluate_tool_call(
+        "prompt_queue_run_once",
+        {"demo_mode": True, "max_jobs": 99},
+    )
+
+    assert decision.blocked is False
+    assert decision.lease_required is False
+
+
+def test_prompt_queue_run_once_live_requires_lease():
+    from code_puppy.plugins.authority_gateway.policy import evaluate_tool_call
+
+    decision = evaluate_tool_call(
+        "prompt_queue_run_once",
+        {"demo_mode": False, "max_jobs": 1},
+    )
+
+    assert decision.blocked is False
+    assert decision.lease_required is True
+    assert decision.capability == "prompt_queue.run_live"
+
+
+def test_prompt_queue_run_once_live_blocks_batch_amplification():
+    from code_puppy.plugins.authority_gateway.policy import evaluate_tool_call
+
+    decision = evaluate_tool_call(
+        "prompt_queue_run_once",
+        {"demo_mode": False, "max_jobs": 2},
+    )
+
+    assert decision.blocked is True
+    assert "max_jobs=1" in decision.reason

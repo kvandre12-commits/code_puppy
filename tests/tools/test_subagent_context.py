@@ -24,7 +24,9 @@ spec.loader.exec_module(subagent_context_module)
 subagent_context = subagent_context_module.subagent_context
 is_subagent = subagent_context_module.is_subagent
 get_subagent_name = subagent_context_module.get_subagent_name
+get_subagent_chain = subagent_context_module.get_subagent_chain
 get_subagent_depth = subagent_context_module.get_subagent_depth
+get_subagent_model_name = subagent_context_module.get_subagent_model_name
 
 
 class TestSubagentContextBasics:
@@ -34,15 +36,19 @@ class TestSubagentContextBasics:
         """Test that initial state indicates main agent (not sub-agent)."""
         assert is_subagent() is False
         assert get_subagent_name() is None
+        assert get_subagent_model_name() is None
+        assert get_subagent_chain() == ()
         assert get_subagent_depth() == 0
 
     def test_context_sets_subagent_state(self):
         """Test that entering context sets sub-agent state."""
         assert is_subagent() is False
 
-        with subagent_context("retriever"):
+        with subagent_context("retriever", "codex-gpt-5.6-sol"):
             assert is_subagent() is True
             assert get_subagent_name() == "retriever"
+            assert get_subagent_model_name() == "codex-gpt-5.6-sol"
+            assert get_subagent_chain() == ("retriever",)
             assert get_subagent_depth() == 1
 
         # Should restore to main agent state
@@ -88,21 +94,32 @@ class TestNestedSubagents:
             assert get_subagent_depth() == 1
             assert get_subagent_name() == "retriever"
 
-            with subagent_context("terrier"):
+            with subagent_context("terrier", "chatgpt-gpt-5.4"):
                 assert get_subagent_depth() == 2
                 assert get_subagent_name() == "terrier"
+                assert get_subagent_model_name() == "chatgpt-gpt-5.4"
+                assert get_subagent_chain() == ("retriever", "terrier")
 
-                with subagent_context("code-puppy"):
+                with subagent_context("code-puppy", "codex-gpt-5.6-sol"):
                     assert get_subagent_depth() == 3
                     assert get_subagent_name() == "code-puppy"
+                    assert get_subagent_chain() == (
+                        "retriever",
+                        "terrier",
+                        "code-puppy",
+                    )
 
                 # Back to terrier
                 assert get_subagent_depth() == 2
                 assert get_subagent_name() == "terrier"
+                assert get_subagent_model_name() == "chatgpt-gpt-5.4"
+                assert get_subagent_chain() == ("retriever", "terrier")
 
             # Back to retriever
             assert get_subagent_depth() == 1
             assert get_subagent_name() == "retriever"
+            assert get_subagent_model_name() is None
+            assert get_subagent_chain() == ("retriever",)
 
         # Back to main agent
         assert get_subagent_depth() == 0

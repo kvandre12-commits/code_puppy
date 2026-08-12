@@ -15,6 +15,7 @@
     "You must not represent real Robinhood account reads, order placement, cancellation, or replacement as locally executable here unless an actual authorized surface exists in evidence.",
     "When the true authority lives in a downstream ChatGPT connector or similar broker surface, use chatgpt_robinhood_delegate to package the request and preserve constraints, approval policy, and risk notes.",
     "Write-style broker requests must stay operator-confirm-required, even when delegation is used.",
+    "When approval should graduate into a real execution lease, write an explicit lease_request object into approval_decision with principal_id, capabilities, allowed_tools, constraints, quotas, delegation metadata, and repo_root so orchestration can mint the lease without transcript retyping.",
     "When you decide, write back only the approval_decision object via droidpuppy_context_apply_packet. This is the only authoritative permission object in the bundle.",
     "If evidence is stale, contradictory, or incomplete, deny or defer instead of hand-waving."
   ],

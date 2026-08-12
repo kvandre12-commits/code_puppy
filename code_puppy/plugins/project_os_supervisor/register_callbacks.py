@@ -10,6 +10,7 @@ from .tooling import (
     project_os_supervisor_init_sandbox as project_os_supervisor_init_sandbox_impl,
     project_os_supervisor_inspect_manifest as project_os_supervisor_inspect_manifest_impl,
     project_os_supervisor_operator_snapshot as project_os_supervisor_operator_snapshot_impl,
+    project_os_runtime_reset as project_os_runtime_reset_impl,
     project_os_supervisor_reset_state as project_os_supervisor_reset_state_impl,
     project_os_supervisor_start_isolated_job as project_os_supervisor_start_isolated_job_impl,
     project_os_supervisor_start_manifest as project_os_supervisor_start_manifest_impl,
@@ -31,6 +32,7 @@ _START_ISOLATED_JOB = "project_os_supervisor_start_isolated_job"
 _STOP_SERVICE = "project_os_supervisor_stop_service"
 _STOP_MANIFEST = "project_os_supervisor_stop_manifest"
 _RESET_STATE = "project_os_supervisor_reset_state"
+_RUNTIME_RESET = "project_os_runtime_reset"
 _WRITE_ISOLATED_JOB_MANIFEST = "project_os_supervisor_write_isolated_job_manifest"
 _OPERATOR_SNAPSHOT = "project_os_supervisor_operator_snapshot"
 _BUS_STATUS = "project_os_bus_status"
@@ -163,6 +165,24 @@ def register_project_os_supervisor_reset_state(agent: Any) -> None:
         return project_os_supervisor_reset_state_impl(confirm=confirm)
 
 
+def register_project_os_runtime_reset(agent: Any) -> None:
+    @agent.tool
+    async def project_os_runtime_reset(
+        context: RunContext,
+        confirm: bool = False,
+        start_minimal_stack: bool = True,
+        manifest_output_path: str = "outputs/project_os_authority_manifest.json",
+        startup_pause_seconds: float = 0.15,
+    ) -> dict[str, Any]:
+        del context
+        return project_os_runtime_reset_impl(
+            confirm=confirm,
+            start_minimal_stack=start_minimal_stack,
+            manifest_output_path=manifest_output_path,
+            startup_pause_seconds=startup_pause_seconds,
+        )
+
+
 def register_project_os_supervisor_write_isolated_job_manifest(agent: Any) -> None:
     @agent.tool
     async def project_os_supervisor_write_isolated_job_manifest(
@@ -281,6 +301,10 @@ def register_tools_callback() -> list[dict[str, Any]]:
             "register_func": register_project_os_supervisor_reset_state,
         },
         {
+            "name": _RUNTIME_RESET,
+            "register_func": register_project_os_runtime_reset,
+        },
+        {
             "name": _WRITE_ISOLATED_JOB_MANIFEST,
             "register_func": register_project_os_supervisor_write_isolated_job_manifest,
         },
@@ -305,6 +329,7 @@ def _advertise_tools_to_agent(agent_name: str | None = None) -> list[str]:
         _STOP_SERVICE,
         _STOP_MANIFEST,
         _RESET_STATE,
+        _RUNTIME_RESET,
         _WRITE_ISOLATED_JOB_MANIFEST,
         _OPERATOR_SNAPSHOT,
         _BUS_STATUS,

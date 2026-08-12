@@ -116,6 +116,72 @@ class TestMediaRouterTooling:
             "message": "wake word 'SharpEdge' not heard",
         }
 
+    def test_press_play_uses_fallback_ladder_until_success(self, monkeypatch):
+        monkeypatch.setattr(tooling.time, "sleep", lambda _: None)
+        monkeypatch.setattr(
+            tooling,
+            "_media_play_fallback_commands",
+            lambda dry_run: [
+                ["cmd", "media_session", "dispatch", "play"],
+                ["input", "keyevent", "KEYCODE_MEDIA_PLAY"],
+            ],
+        )
+
+        def fake_run(args, *, dry_run, timeout=30):
+            del timeout
+            if args[:4] == ["cmd", "media_session", "dispatch", "play"]:
+                return {
+                    "success": False,
+                    "dry_run": dry_run,
+                    "args": args,
+                    "error": "no active session",
+                }
+            return {"success": True, "dry_run": dry_run, "args": args}
+
+        monkeypatch.setattr(tooling, "_run", fake_run)
+        result = tooling.sharpedge_play(
+            query="PROF Creek Boy",
+            provider="youtube",
+            dry_run=False,
+            press_play=True,
+        )
+
+        play_action = result["actions"][-1]
+        assert play_action["name"] == "press_media_play"
+        assert play_action["result"]["success"] is True
+        assert len(play_action["result"]["attempts"]) == 2
+        assert play_action["result"]["command"] == [
+            "input",
+            "keyevent",
+            "KEYCODE_MEDIA_PLAY",
+        ]
+
+    def test_press_play_reports_unavailable_when_no_fallback_exists(self, monkeypatch):
+        monkeypatch.setattr(tooling.time, "sleep", lambda _: None)
+        monkeypatch.setattr(
+            tooling, "_media_play_fallback_commands", lambda dry_run: []
+        )
+        monkeypatch.setattr(
+            tooling,
+            "_run",
+            lambda args, *, dry_run, timeout=30: {
+                "success": True,
+                "dry_run": dry_run,
+                "args": args,
+            },
+        )
+        result = tooling.sharpedge_play(
+            query="PROF Creek Boy",
+            provider="youtube",
+            dry_run=False,
+            press_play=True,
+        )
+
+        play_action = result["actions"][-1]
+        assert play_action["name"] == "press_media_play_unavailable"
+        assert play_action["result"]["success"] is False
+        assert play_action["result"]["attempts"] == []
+
     def test_doctor_and_examples_are_shaped(self, monkeypatch):
         monkeypatch.setattr(tooling, "STATE_PATH", Path("/tmp/sharpedge_media.json"))
         doctor = tooling.android_media_router_doctor()
@@ -123,6 +189,7 @@ class TestMediaRouterTooling:
 
         assert doctor["success"] is True
         assert "commands" in doctor
+        assert "media_play_fallback_commands" in doctor
         assert examples["success"] is True
         assert any("favorite song" in str(row).lower() for row in examples["examples"])
 

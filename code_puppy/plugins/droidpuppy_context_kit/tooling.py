@@ -57,6 +57,58 @@ def _clean_list(values: list[str] | None) -> list[str]:
     return cleaned
 
 
+def _normalize_text(value: str) -> str:
+    return " ".join(
+        str(value or "").strip().lower().replace("_", " ").replace("-", " ").split()
+    )
+
+
+def _text_tokens(value: str) -> set[str]:
+    return {token for token in _normalize_text(value).split() if len(token) > 2}
+
+
+def _request_scope_match(
+    raw_request: str, candidates: list[str]
+) -> tuple[bool, dict[str, Any]]:
+    normalized_request = _normalize_text(raw_request)
+    if not normalized_request:
+        return True, {"mode": "empty-request", "score": 1.0}
+    request_tokens = _text_tokens(raw_request)
+    if not request_tokens:
+        return True, {"mode": "tokenless-request", "score": 1.0}
+
+    best_score = 0.0
+    best_candidate = ""
+    best_mode = "no-match"
+    for candidate in candidates:
+        normalized_candidate = _normalize_text(candidate)
+        if not normalized_candidate:
+            continue
+        if (
+            normalized_request in normalized_candidate
+            or normalized_candidate in normalized_request
+        ):
+            return True, {
+                "mode": "substring",
+                "score": 1.0,
+                "matched_text": candidate,
+            }
+        candidate_tokens = _text_tokens(candidate)
+        if not candidate_tokens:
+            continue
+        overlap = request_tokens & candidate_tokens
+        score = len(overlap) / max(1, len(request_tokens))
+        if score > best_score:
+            best_score = score
+            best_candidate = candidate
+            best_mode = "token-overlap"
+    return best_score >= 0.6, {
+        "mode": best_mode,
+        "score": round(best_score, 3),
+        "matched_text": best_candidate,
+    }
+
+
 def _merge(base: dict[str, Any], patch: dict[str, Any]) -> dict[str, Any]:
     merged = copy.deepcopy(base)
     for key, value in patch.items():
@@ -320,6 +372,76 @@ def droidpuppy_context_packet(
         "workflow_commit": governance["workflow_commit"],
         "journal_event_tail": read_jsonl_tail(
             resolved["journal_events"], limit=history_limit
+        ),
+    }
+
+
+def droidpuppy_context_fast_path_status(
+    root: str = "",
+    workflow_id: str = "",
+    raw_request: str = "",
+    require_commit_ready: bool = True,
+) -> dict[str, Any]:
+    bundle = load_bundle(root, workflow_id=workflow_id or "default-workflow")
+    governance = load_governance(root, workflow_id=workflow_id or "default-workflow")
+    resolved_workflow_id = (
+        workflow_id.strip()
+        or _workflow_id_from_bundle(bundle)
+        or _workflow_id_from_governance(governance)
+    )
+    approval = bundle["approval_decision"]
+    state = bundle["workflow_state"]
+    commit = governance["workflow_commit"]
+    handshake = governance["intent_handshake"]
+
+    blockers: list[str] = []
+    commit_status = str(commit.get("status") or "uncommitted").strip()
+    approval_status = str(approval.get("status") or "review_required").strip().lower()
+    lease_request = approval.get("lease_request")
+    if require_commit_ready and commit_status != "committed_ready":
+        blockers.append("workflow_commit.status is not committed_ready")
+    if approval_status not in _APPROVAL_READY:
+        blockers.append("approval_decision.status is not ready for execution")
+    if not isinstance(lease_request, dict) or not lease_request:
+        blockers.append("approval_decision.lease_request is missing")
+    elif not _clean_list(lease_request.get("capabilities")):
+        blockers.append("approval_decision.lease_request.capabilities is missing")
+
+    candidate_texts = [
+        str(handshake.get("raw_request") or ""),
+        str(handshake.get("intent_summary") or ""),
+        str(state.get("summary") or ""),
+        str(state.get("current_goal") or ""),
+        *[str(item) for item in approval.get("allowed_actions") or []],
+    ]
+    scope_match, scope_details = _request_scope_match(raw_request, candidate_texts)
+    if raw_request.strip() and not scope_match:
+        blockers.append("raw request does not match the committed workflow scope")
+
+    return {
+        "success": True,
+        "workflow_id": resolved_workflow_id,
+        "eligible": not blockers,
+        "blockers": blockers,
+        "fast_path": {
+            "commit_status": commit_status,
+            "approval_status": approval_status,
+            "require_commit_ready": require_commit_ready,
+            "scope_match": scope_match,
+            "scope_details": scope_details,
+            "lease_request_present": isinstance(lease_request, dict)
+            and bool(lease_request),
+            "lease_capabilities": _clean_list(
+                lease_request.get("capabilities")
+                if isinstance(lease_request, dict)
+                else []
+            ),
+        },
+        "guidance": (
+            "Fast path is eligible: skip workflow-state/execution-plan/approval fanout, "
+            "mint or refresh the workflow lease, execute, then audit."
+            if not blockers
+            else "Fast path is not eligible: refresh the governed chain before execution."
         ),
     }
 

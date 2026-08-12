@@ -12,6 +12,8 @@ import os
 import re
 from typing import Any
 
+from code_puppy.openai_capabilities import merge_openai_metadata
+
 from .config import (
     DEFAULT_CONTEXT_LENGTHS,
     ENV_FOUNDRY_RESOURCE,
@@ -253,15 +255,16 @@ _GPT5_SUPPORTED_SETTINGS = [
 
 
 def get_foundry_openai_supported_settings(model_name: str) -> list[str]:
-    """Return supported settings for an Azure Foundry OpenAI model.
-
-    Later GPT-5-family models support Code Puppy's reasoning/summary/verbosity
-    controls in addition to the baseline temperature setting.
-    """
+    """Return supported settings for an Azure Foundry OpenAI model."""
     supported_settings = ["temperature"]
     if model_name.startswith("gpt-5"):
         supported_settings.extend(_GPT5_SUPPORTED_SETTINGS)
-    return supported_settings
+    merged = merge_openai_metadata(
+        model_name,
+        {"type": "azure_foundry_openai"},
+        supported_settings=supported_settings,
+    )
+    return merged.get("supported_settings", supported_settings)
 
 
 def add_discovered_models_to_config(
@@ -298,16 +301,17 @@ def add_discovered_models_to_config(
             added.append(key)
 
         elif d.model_format == "OpenAI":
-            models[key] = {
-                "type": "azure_foundry_openai",
-                "provider": "azure_foundry_openai",
-                "name": d.name,
-                "foundry_resource": resource_name,
-                "context_length": get_openai_context_length(d.model_name),
-                "supported_settings": get_foundry_openai_supported_settings(
-                    d.model_name
-                ),
-            }
+            models[key] = merge_openai_metadata(
+                d.model_name,
+                {
+                    "type": "azure_foundry_openai",
+                    "provider": "azure_foundry_openai",
+                    "name": d.name,
+                    "foundry_resource": resource_name,
+                    "context_length": get_openai_context_length(d.model_name),
+                },
+                supported_settings=get_foundry_openai_supported_settings(d.model_name),
+            )
             added.append(key)
 
     if added and save_extra_models(models):

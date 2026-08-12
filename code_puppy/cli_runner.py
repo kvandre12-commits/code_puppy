@@ -146,7 +146,13 @@ async def main():
     parser.add_argument(
         "command", nargs="*", help="Run a single command (deprecated, use -p instead)"
     )
+    callbacks.on_register_cli_args(parser)
     args = parser.parse_args()
+
+    cli_args_result = await callbacks.on_handle_cli_args(args)
+    if cli_args_result and cli_args_result.get("handled") is True:
+        exit_code = cli_args_result.get("exit_code")
+        return 0 if exit_code is None else exit_code
 
     from code_puppy.messaging import (
         RichConsoleRenderer,
@@ -1123,12 +1129,15 @@ def _force_utf8_stdio():
 def main_entry():
     """Entry point for the installed CLI tool."""
     _force_utf8_stdio()
+    rc = None
     try:
-        asyncio.run(main())
+        rc = asyncio.run(main())
     except KeyboardInterrupt:
         # Note: Using sys.stderr for crash output - messaging system may not be available
         sys.stderr.write(traceback.format_exc())
-        return 0
+        rc = 0
     finally:
         # Reset terminal on Unix-like systems (not Windows)
         reset_unix_terminal()
+
+    sys.exit(rc if rc is not None else 0)

@@ -26,5 +26,10 @@
     "droidpuppy_context_apply_packet",
     "agent_share_your_reasoning"
   ],
+  "mcp_servers": {
+    "sharpedge-governance-readonly": {
+      "auto_start": true
+    }
+  },
   "user_prompt": "What governed request should I audit against the live lease posture?"
 }

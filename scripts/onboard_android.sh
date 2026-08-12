@@ -17,7 +17,19 @@ SKIP_ADB_INSTALL=0
 LAUNCH_AT_END=0
 OVERLAY_DIR=""
 OVERLAY_REPO_URL="$DEFAULT_OVERLAY_REPO_URL"
+OVERLAY_PROFILE="basic"
 TMP_OVERLAY_DIR=""
+
+BASIC_OVERLAY_PLUGINS=(
+  "android_utility_kit"
+  "android_brave_bridge"
+  "android_cdp_bridge"
+  "android_notification_kit"
+  "android_reconnect_helper"
+  "android_setup_helper"
+  "android_friendly_router"
+  "droidpuppy_doctor"
+)
 
 CORE_STATUS="PENDING"
 CORE_DETAIL=""
@@ -40,7 +52,7 @@ Professional Android first-run onboarding for Code Puppy + DroidPuppy.
 
 This command owns the milestone-1 journey:
   1. lean Code Puppy install on Termux
-  2. optional DroidPuppy overlay attach
+  2. optional DroidPuppy overlay attach (basic bundle by default)
   3. adb/android-tools detection or install
   4. staged readiness summary with next actions
 
@@ -50,6 +62,7 @@ Options:
   --dry-run               Print the commands without executing them
   --skip-upgrade          Skip `pkg update && pkg upgrade`
   --skip-overlay          Do not install the DroidPuppy overlay
+  --overlay-profile <p>   Overlay bundle to install: basic (default) or full
   --overlay-dir <path>    Use an existing DroidPuppy checkout instead of cloning
   --overlay-repo-url <u>  Override the DroidPuppy git clone URL
   --skip-adb-install      Detect adb only; do not install android-tools if missing
@@ -59,6 +72,7 @@ Options:
 
 Examples:
   bash scripts/onboard_android.sh --yes
+  bash scripts/onboard_android.sh --yes --overlay-profile full
   bash scripts/onboard_android.sh --yes --version 0.0.569
   curl -fsSL https://raw.githubusercontent.com/mpfaffenberger/code_puppy/main/scripts/onboard_android.sh | \
     bash -s -- --yes --version 0.0.569
@@ -329,6 +343,13 @@ install_overlay_stage() {
 
   local install_command
   install_command="$(printf '%q ' "$python_cmd" "$source_dir/scripts/install_overlay.py")--overwrite"
+  if [[ "$OVERLAY_PROFILE" == "basic" ]]; then
+    install_command+=" --plugins"
+    local plugin
+    for plugin in "${BASIC_OVERLAY_PLUGINS[@]}"; do
+      install_command+=" $(printf '%q' "$plugin")"
+    done
+  fi
   if [[ "$DRY_RUN" -eq 1 ]]; then
     install_command="$install_command --dry-run"
   fi
@@ -350,13 +371,13 @@ install_overlay_stage() {
 
   if [[ "$DRY_RUN" -eq 1 ]]; then
     OVERLAY_STATUS="DRY-RUN"
-    OVERLAY_DETAIL="Overlay install was previewed but not executed."
+    OVERLAY_DETAIL="Overlay install (${OVERLAY_PROFILE} bundle) was previewed but not executed."
     return 0
   fi
 
   if overlay_is_installed; then
     OVERLAY_STATUS="READY"
-    OVERLAY_DETAIL="Detected Android overlay plugin files under $DEFAULT_USER_PLUGIN_DIR."
+    OVERLAY_DETAIL="Detected Android overlay plugin files under $DEFAULT_USER_PLUGIN_DIR (${OVERLAY_PROFILE} bundle requested)."
     return 0
   fi
 
@@ -470,6 +491,11 @@ main() {
         SKIP_OVERLAY=1
         shift
         ;;
+      --overlay-profile)
+        [[ $# -ge 2 ]] || { warn "--overlay-profile requires a value"; exit 1; }
+        OVERLAY_PROFILE="$2"
+        shift 2
+        ;;
       --overlay-dir)
         [[ $# -ge 2 ]] || { warn "--overlay-dir requires a value"; exit 1; }
         OVERLAY_DIR="$2"
@@ -503,10 +529,19 @@ main() {
     esac
   done
 
+  case "$OVERLAY_PROFILE" in
+    basic|full) ;;
+    *)
+      warn "unknown overlay profile: $OVERLAY_PROFILE"
+      exit 1
+      ;;
+  esac
+
   log "Android onboarding command"
   log "  package version : ${PACKAGE_VERSION:-latest}"
   log "  mode            : $([[ "$DRY_RUN" -eq 1 ]] && printf 'dry-run' || printf 'live')"
   log "  overlay         : $([[ "$SKIP_OVERLAY" -eq 1 ]] && printf 'skip' || printf 'install')"
+  log "  overlay profile : $OVERLAY_PROFILE"
   log "  adb             : $([[ "$SKIP_ADB_INSTALL" -eq 1 ]] && printf 'detect-only' || printf 'install-if-missing')"
   log "  launch          : $([[ "$LAUNCH_AT_END" -eq 1 ]] && printf 'after-summary' || printf 'no')"
 

@@ -20,6 +20,7 @@ from .templates import (
     start_isolated_job,
     write_isolated_job_manifest,
 )
+from .tooling import project_os_runtime_reset
 
 
 def _parse_env_assignments(values: list[str] | None) -> dict[str, str]:
@@ -91,6 +92,15 @@ def main() -> None:
     status = subparsers.add_parser("status")
     status.add_argument("--manifest", default="")
     status.add_argument("--service", default="")
+
+    runtime_reset = subparsers.add_parser("runtime-reset")
+    runtime_reset.add_argument("--confirm", action="store_true")
+    runtime_reset.add_argument(
+        "--manifest-output",
+        default="outputs/project_os_authority_manifest.json",
+    )
+    runtime_reset.add_argument("--no-start-minimal-stack", action="store_true")
+    runtime_reset.add_argument("--startup-pause-seconds", type=float, default=0.15)
 
     start_isolated = subparsers.add_parser("start-isolated-job")
     start_isolated.add_argument("--manifest", required=True)
@@ -177,6 +187,15 @@ def main() -> None:
         result = supervisor_status(
             manifest_path=args.manifest or None,
             service_name=args.service,
+        )
+        print(json.dumps(result, indent=2, sort_keys=True))
+        raise SystemExit(0 if result.get("success") else 1)
+    if args.command == "runtime-reset":
+        result = project_os_runtime_reset(
+            confirm=args.confirm,
+            start_minimal_stack=not args.no_start_minimal_stack,
+            manifest_output_path=args.manifest_output,
+            startup_pause_seconds=args.startup_pause_seconds,
         )
         print(json.dumps(result, indent=2, sort_keys=True))
         raise SystemExit(0 if result.get("success") else 1)

@@ -39,6 +39,14 @@ def test_auto_profile_prefers_android_termux(monkeypatch):
     assert plan["profile"] == "android-termux-lean"
     assert plan["extras"] == []
     assert "browser automation extras detached" in plan["degraded_capabilities"]
+    assert (
+        "runtime uses android-minimal plugin/model overlay"
+        in plan["degraded_capabilities"]
+    )
+    assert (
+        "bundled models narrowed to the single starter model"
+        in plan["degraded_capabilities"]
+    )
 
 
 def test_build_install_plan_applies_manifest_overrides(tmp_path: Path):

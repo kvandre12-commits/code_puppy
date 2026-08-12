@@ -179,6 +179,50 @@ def _intent_command(url: str, provider: str) -> list[str]:
     return command
 
 
+def _media_play_fallback_commands(*, dry_run: bool) -> list[list[str]]:
+    candidates = [
+        ["cmd", "media_session", "dispatch", "play"],
+        ["media", "dispatch", "play"],
+        ["input", "keyevent", "KEYCODE_MEDIA_PLAY"],
+        ["termux-media-player", "play"],
+    ]
+    if dry_run:
+        return candidates
+    return [command for command in candidates if _which(command[0])]
+
+
+def _press_media_play_with_fallbacks(*, dry_run: bool) -> dict[str, Any]:
+    attempts: list[dict[str, Any]] = []
+    commands = _media_play_fallback_commands(dry_run=dry_run)
+    if not commands:
+        return {
+            "success": False,
+            "dry_run": dry_run,
+            "attempts": [],
+            "error": "no local media-play fallback command is available",
+        }
+
+    for command in commands:
+        result = _run(command, dry_run=dry_run)
+        attempts.append({"command": command, "result": result})
+        if result.get("success"):
+            return {
+                "success": True,
+                "dry_run": dry_run,
+                "command": command,
+                "result": result,
+                "attempts": attempts,
+            }
+
+    return {
+        "success": False,
+        "dry_run": dry_run,
+        "attempts": attempts,
+        "error": "all local media-play fallback commands failed",
+        "result": attempts[-1]["result"],
+    }
+
+
 def set_favorite(
     target: str, provider: str = "youtube", dry_run: bool = True
 ) -> dict[str, Any]:
@@ -249,12 +293,15 @@ def sharpedge_play(
     if press_play and route["press_play_allowed"]:
         if not dry_run:
             time.sleep(1)
+        play_result = _press_media_play_with_fallbacks(dry_run=dry_run)
         actions.append(
             {
-                "name": "press_media_play",
-                "result": _run(
-                    ["input", "keyevent", "KEYCODE_MEDIA_PLAY"], dry_run=dry_run
+                "name": (
+                    "press_media_play"
+                    if play_result.get("success")
+                    else "press_media_play_unavailable"
                 ),
+                "result": play_result,
             }
         )
     elif press_play:
@@ -416,10 +463,14 @@ def android_media_router_doctor() -> dict[str, Any]:
         "state": read_state(),
         "commands": {
             "am": _which("am"),
+            "cmd": _which("cmd"),
+            "media": _which("media"),
             "input": _which("input"),
+            "termux-media-player": _which("termux-media-player"),
             "termux-volume": _which("termux-volume"),
             "termux-speech-to-text": _which("termux-speech-to-text"),
         },
+        "media_play_fallback_commands": _media_play_fallback_commands(dry_run=True),
     }
 
 

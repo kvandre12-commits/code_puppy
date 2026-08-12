@@ -39,8 +39,8 @@ jobs:
         # tests/integration/test_dbos_enabled.py
         run: uv pip install -e ".[durable]"
 
-      - name: Install pexpect for integration tests
-        run: uv pip install pexpect>=4.9.0
+      - name: Install test-only build tooling
+        run: uv pip install build pexpect>=4.9.0
 
       - name: Provision CI model (lilac synthetic GLM-5.1)
         # models.json ships empty. CI gets its model from extra_models.json,
@@ -134,6 +134,10 @@ jobs:
       - name: Build package
         run: |
           uv build
+
+      - name: Verify wheel metadata
+        run: |
+          python scripts/check_wheel_metadata.py --pyproject pyproject.toml dist/*.whl
 
       - name: Publish to PyPI
         env:

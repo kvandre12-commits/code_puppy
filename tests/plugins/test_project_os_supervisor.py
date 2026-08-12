@@ -53,6 +53,7 @@ class TestProjectOsSupervisorRegistration:
             "project_os_supervisor_stop_service",
             "project_os_supervisor_stop_manifest",
             "project_os_supervisor_reset_state",
+            "project_os_runtime_reset",
             "project_os_supervisor_write_isolated_job_manifest",
             "project_os_supervisor_operator_snapshot",
             "project_os_bus_status",
@@ -70,6 +71,7 @@ class TestProjectOsSupervisorRegistration:
             "project_os_supervisor_stop_service",
             "project_os_supervisor_stop_manifest",
             "project_os_supervisor_reset_state",
+            "project_os_runtime_reset",
             "project_os_supervisor_write_isolated_job_manifest",
             "project_os_supervisor_operator_snapshot",
             "project_os_bus_status",
@@ -90,6 +92,88 @@ class TestProjectOsSupervisorTooling:
             "event_bus",
             "authority_daemon",
         ]
+
+    def test_runtime_reset_rehomes_stale_leases_and_starts_fresh_stack(
+        self, monkeypatch, tmp_path
+    ):
+        monkeypatch.setenv("PROJECT_OS_SUPERVISOR_ROOT", str(tmp_path / "supervisor"))
+        monkeypatch.setenv("PROJECT_OS_EYES_ROOT", str(tmp_path / "eyes"))
+        supervisor_root = tmp_path / "supervisor"
+        supervisor_root.mkdir(parents=True, exist_ok=True)
+        (supervisor_root / "stale.txt").write_text("junk")
+        leases_dir = tmp_path / "eyes" / "leases" / "active"
+        leases_dir.mkdir(parents=True, exist_ok=True)
+        (leases_dir / "lease-expired.json").write_text(
+            json.dumps(
+                {
+                    "lease_id": "lease-expired",
+                    "principal_id": "stable-authority",
+                    "capabilities": ["shell.exec"],
+                    "allowed_tools": [],
+                    "constraints": {},
+                    "delegation": {"mode": "direct", "delegated_to_actor_ids": []},
+                    "status": "active",
+                    "quotas": {
+                        "max_uses": 1,
+                        "remaining_uses": 1,
+                        "max_tool_calls": 1,
+                        "max_shell_commands": 1,
+                        "tool_calls_used": 0,
+                        "shell_commands_used": 0,
+                        "token_spend_used": 0,
+                        "max_token_spend": None,
+                    },
+                    "not_before": "2000-01-01T00:00:00+00:00",
+                    "expires_at": "2000-01-01T00:05:00+00:00",
+                },
+                indent=2,
+            )
+            + "\n"
+        )
+
+        result = tooling.project_os_runtime_reset(
+            confirm=True,
+            manifest_output_path=str(tmp_path / "authority.json"),
+            startup_pause_seconds=0.05,
+        )
+
+        assert result["success"] is True
+        assert result["lease_hygiene"]["inventory"]["active"] == 0
+        assert result["lease_hygiene"]["inventory"]["expired"] == 1
+        assert Path(result["manifest_path"]).is_file()
+        assert (
+            json.loads(
+                (
+                    tmp_path / "eyes" / "leases" / "expired" / "lease-expired.json"
+                ).read_text()
+            )["status"]
+            == "expired"
+        )
+
+        status = _wait_for(
+            lambda: (
+                (
+                    current
+                    if current["count"] == 2
+                    and any(
+                        service["state"] == "running" for service in current["services"]
+                    )
+                    else None
+                )
+                if (
+                    current := tooling.project_os_supervisor_status(
+                        manifest_path=result["manifest_path"]
+                    )
+                )
+                else None
+            )
+        )
+        assert {service["service_name"] for service in status["services"]} == {
+            "event-bus",
+            "authority-daemon",
+        }
+
+        tooling.project_os_supervisor_stop_manifest(result["manifest_path"])
 
     def test_write_isolated_job_manifest_helper_uses_authority_defaults(
         self, monkeypatch, tmp_path

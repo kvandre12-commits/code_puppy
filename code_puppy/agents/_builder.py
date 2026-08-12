@@ -23,6 +23,7 @@ from code_puppy.agents._steer_processor import make_steer_history_processor
 from code_puppy.agents.event_stream_handler import event_stream_handler
 from code_puppy.callbacks import (
     on_pre_mcp_autostart,
+    on_pre_mcp_autostart_sync,
     on_wrap_pydantic_agent,
 )
 from code_puppy.config import (
@@ -35,6 +36,7 @@ from code_puppy.config import (
 from code_puppy.mcp_ import get_mcp_manager
 from code_puppy.messaging import emit_error, emit_info, emit_warning
 from code_puppy.model_factory import ModelFactory, make_model_settings
+from code_puppy.pydantic_compat import history_processor_kwargs
 
 _AGENT_RULE_FILES = ("AGENTS.md", "AGENT.md", "agents.md", "agent.md")
 _CODE_PUPPY_DIR = ".code_puppy"
@@ -255,8 +257,7 @@ def _autostart_bound_servers(manager: Any, agent_name: str) -> None:
     targets = list(_iter_autostart_targets(manager, agent_name))
     if not targets:
         return
-    # temp debug
-    # on_pre_mcp_autostart_sync(agent_name, [name for name, _ in targets])
+    on_pre_mcp_autostart_sync(agent_name, [name for name, _ in targets])
     for server_name, config in targets:
         try:
             manager.start_server_sync(config.id)
@@ -458,11 +459,11 @@ def build_pydantic_agent(
             output_type=output_type,
             retries=3,
             toolsets=toolsets,
+            model_settings=model_settings,
             # Order is critical: compaction first (may trim history to fit
             # context), THEN steer injection (the steer must NOT be subject
             # to compaction on this call — it just arrived).
-            history_processors=[history_processor, steer_processor],
-            model_settings=model_settings,
+            **history_processor_kwargs(history_processor, steer_processor),
         )
 
     # Pass 1: build with empty toolsets so we can see what pydantic-ai + our

@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from code_puppy.plugins.chatgpt_oauth import config, utils
+from code_puppy.plugins.chatgpt_oauth import config, register_callbacks, utils
 
 
 def test_config_paths():
@@ -29,7 +29,7 @@ def test_oauth_config():
     """Test OAuth configuration values."""
     assert config.CHATGPT_OAUTH_CONFIG["issuer"] == "https://auth.openai.com"
     assert config.CHATGPT_OAUTH_CONFIG["client_id"] == "app_EMoamEEZ73f0CkXaXp7hrann"
-    assert config.CHATGPT_OAUTH_CONFIG["prefix"] == "chatgpt-"
+    assert config.CHATGPT_OAUTH_CONFIG["prefix"] == "codex-"
 
 
 def test_jwt_parsing_with_nested_org():
@@ -280,6 +280,21 @@ def test_fetch_chatgpt_models_fallback(mock_get):
     assert "gpt-5.2" in models
 
 
+def test_codex_command_alias_runs_chatgpt_auth_flow():
+    """Test /codex remains a friendly alias for ChatGPT/Codex OAuth."""
+    with (
+        patch.object(register_callbacks, "run_oauth_flow") as mock_auth,
+        patch.object(
+            register_callbacks, "set_model_and_reload_agent"
+        ) as mock_set_model,
+    ):
+        handled = register_callbacks._handle_custom_command("/codex", "codex")
+
+    assert handled is True
+    mock_auth.assert_called_once_with()
+    mock_set_model.assert_called_once_with("codex-gpt-5.6-sol")
+
+
 def test_add_models_to_chatgpt_config(tmp_path):
     """Test adding models to chatgpt_models.json."""
     with patch.object(
@@ -290,11 +305,11 @@ def test_add_models_to_chatgpt_config(tmp_path):
         assert utils.add_models_to_extra_config(models)
 
         loaded = utils.load_chatgpt_models()
-        assert "chatgpt-gpt-4o" in loaded
-        assert "chatgpt-gpt-3.5-turbo" in loaded
-        assert loaded["chatgpt-gpt-4o"]["type"] == "chatgpt_oauth"
-        assert loaded["chatgpt-gpt-4o"]["name"] == "gpt-4o"
-        assert loaded["chatgpt-gpt-4o"]["oauth_source"] == "chatgpt-oauth-plugin"
+        assert "codex-gpt-4o" in loaded
+        assert "codex-gpt-3.5-turbo" in loaded
+        assert loaded["codex-gpt-4o"]["type"] == "chatgpt_oauth"
+        assert loaded["codex-gpt-4o"]["name"] == "gpt-4o"
+        assert loaded["codex-gpt-4o"]["oauth_source"] == "chatgpt-oauth-plugin"
 
 
 if __name__ == "__main__":

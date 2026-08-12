@@ -17,6 +17,7 @@ def get_commands_help():
     from rich.text import Text
 
     from code_puppy.command_line.command_registry import get_unique_commands
+    from code_puppy.runtime_profile import command_visible_in_runtime
 
     # Ensure plugins are loaded so custom help can register
     _ensure_plugins_loaded()
@@ -30,6 +31,8 @@ def get_commands_help():
     # Get registered commands (all categories are built-in)
     registered_commands = get_unique_commands()
     for cmd_info in sorted(registered_commands, key=lambda c: c.name):
+        if not command_visible_in_runtime(cmd_info.name):
+            continue
         builtin_cmds.append((cmd_info.usage, cmd_info.description))
 
     # Get custom commands from plugins

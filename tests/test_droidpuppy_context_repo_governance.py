@@ -22,6 +22,8 @@ def test_install_repo_governance_writes_portable_agent_stack(tmp_path) -> None:
     readme_path = agents_dir / "README.md"
 
     assert result["success"] is True
+    assert "/govern" in result["slash_commands"]
+    assert "/workflow" in result["slash_commands"]
     assert "/workflow-commit" in result["slash_commands"]
     assert orchestrator_path.exists()
     assert lease_request_path.exists()
@@ -33,10 +35,13 @@ def test_install_repo_governance_writes_portable_agent_stack(tmp_path) -> None:
 
     assert config["name"] == "governance-orchestrator"
     assert "invoke_agent" in config["tools"]
+    assert "droidpuppy_context_fast_path_status" in config["tools"]
     assert "authority_gateway_status" in config["tools"]
     assert "authority_gateway_grant_lease" in config["tools"]
+    assert "authority_gateway_grant_workflow_lease" in config["tools"]
     prompt_text = agent.get_system_prompt()
     assert "coordinate the canonical local governance chain in order" in prompt_text
+    assert "fast-path check" in prompt_text
     assert "stable authority principal" in prompt_text
     assert "PROJECT_OS_AUTHORITY_PRINCIPAL_ID" in prompt_text
 

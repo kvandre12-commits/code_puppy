@@ -127,13 +127,13 @@ print_baseline() {
   log "command -v code-puppy: $(command -v code-puppy 2>/dev/null || true)"
   log "command -v uv: $(command -v uv 2>/dev/null || true)"
   log "command -v python: $(command -v python 2>/dev/null || true)"
-  log "command -v rustc: $(command -v rustc 2>/dev/null || true)"
-  log "command -v clang: $(command -v clang 2>/dev/null || true)"
+  log "command -v rg: $(command -v rg 2>/dev/null || true)"
+  log "command -v proot: $(command -v proot 2>/dev/null || true)"
   log "VIRTUAL_ENV: ${VIRTUAL_ENV:-}"
 
   if have pkg; then
-    log "pkg list-installed (selected):"
-    pkg list-installed 2>/dev/null | grep -E '^(git|python|uv|ripgrep|proot|rust|clang)/' || true
+    log "pkg list-installed (selected lean baseline):"
+    pkg list-installed 2>/dev/null | grep -E '^(git|python|uv|ripgrep|proot)/' || true
   else
     log "pkg list-installed: pkg unavailable"
   fi
@@ -147,7 +147,7 @@ clean_run_contamination() {
     contaminated=1
   fi
 
-  for binary in code-puppy uv rg proot rustc clang; do
+  for binary in code-puppy uv rg proot; do
     if have "$binary"; then
       log "contamination: $binary already present at $(command -v "$binary")"
       contaminated=1
@@ -156,7 +156,7 @@ clean_run_contamination() {
 
   if have pkg; then
     local pkg_hits
-    pkg_hits="$(pkg list-installed 2>/dev/null | grep -E '^(uv|ripgrep|proot|rust|clang)/' || true)"
+    pkg_hits="$(pkg list-installed 2>/dev/null | grep -E '^(uv|ripgrep|proot)/' || true)"
     if [[ -n "$pkg_hits" ]]; then
       log "contamination: preinstalled Termux packages detected"
       printf '%s\n' "$pkg_hits"
@@ -164,7 +164,10 @@ clean_run_contamination() {
     fi
   fi
 
-  return "$contaminated"
+  if [[ "$contaminated" -eq 1 ]]; then
+    return 0
+  fi
+  return 1
 }
 
 ensure_termux() {

@@ -85,11 +85,25 @@ uvx --from code-puppy code-puppy-bootstrap plan --profile auto --json
 
 **Fresh-user path (recommended):** use the Android onboarding script. It owns
 the milestone-1 Android journey: core Termux install, lean Code Puppy setup,
-optional DroidPuppy overlay attach, `adb` detection/install, and a staged
-readiness summary.
+a **basic DroidPuppy overlay bundle by default**, `adb` detection/install,
+and a staged readiness summary.
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/mpfaffenberger/code_puppy/main/scripts/onboard_android.sh | bash -s -- --yes
+```
+
+Want the full DroidPuppy overlay instead of the tiny default bundle?
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/mpfaffenberger/code_puppy/main/scripts/onboard_android.sh | \
+  bash -s -- --yes --overlay-profile full
+```
+
+Want engine-only with no overlay at all?
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/mpfaffenberger/code_puppy/main/scripts/onboard_android.sh | \
+  bash -s -- --yes --skip-overlay
 ```
 
 Want to test an exact published artifact instead of “latest”? Pin it:
@@ -153,10 +167,15 @@ code-puppy -i
 
 Why this flow exists:
 
-- `android-termux-lean` is the default auto-selected profile on Termux
+- `android-termux-lean` is the default auto-selected install profile on Termux
 - it keeps Python dependencies minimal during the initial attach
 - browser/provider/image/fuzzy/search extras stay detached until the target
   environment is known-good
+- runtime still defaults to the full plugin/model surface on Android so tool
+  registration, `/help`, and Android capability plugins remain available
+- the `android-minimal` runtime overlay is still available as an explicit
+  emergency-lean override if an operator really wants the stripped-down model
+  inventory and command surface
 
 If you later want to attach optional capabilities, rerun the planner with an
 explicit profile or manifest override and use the emitted reattach command:

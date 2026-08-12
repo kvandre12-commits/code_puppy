@@ -248,19 +248,32 @@ class TestExecuteSinglePrompt:
 
 
 class TestMainEntry:
-    @patch("asyncio.run")
-    def test_normal_exit(self, mock_run):
+    def test_normal_exit(self):
         from code_puppy.cli_runner import main_entry
 
-        mock_run.return_value = None
-        with patch("code_puppy.cli_runner.reset_unix_terminal"):
-            result = main_entry()
-        assert result is None
+        def _fake_asyncio_run(coro):
+            coro.close()
+            return None
 
-    @patch("asyncio.run", side_effect=KeyboardInterrupt)
-    def test_keyboard_interrupt(self, mock_run):
+        with (
+            patch("asyncio.run", side_effect=_fake_asyncio_run),
+            patch("code_puppy.cli_runner.reset_unix_terminal"),
+            pytest.raises(SystemExit) as exc_info,
+        ):
+            main_entry()
+        assert exc_info.value.code == 0
+
+    def test_keyboard_interrupt(self):
         from code_puppy.cli_runner import main_entry
 
-        with patch("code_puppy.cli_runner.reset_unix_terminal"):
-            result = main_entry()
-        assert result == 0
+        def _fake_asyncio_run(coro):
+            coro.close()
+            raise KeyboardInterrupt
+
+        with (
+            patch("asyncio.run", side_effect=_fake_asyncio_run),
+            patch("code_puppy.cli_runner.reset_unix_terminal"),
+            pytest.raises(SystemExit) as exc_info,
+        ):
+            main_entry()
+        assert exc_info.value.code == 0

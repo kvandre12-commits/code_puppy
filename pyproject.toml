@@ -72,10 +72,14 @@ packages = ["code_puppy"]
 
 [tool.hatch.build.targets.wheel.shared-data]
 "code_puppy/models.json" = "code_puppy/models.json"
+"code_puppy/models_minimal.json" = "code_puppy/models_minimal.json"
 "code_puppy/models_dev_api.json" = "code_puppy/models_dev_api.json"
 
 [[tool.hatch.build.targets.sdist.include]]
 path = "code_puppy/models.json"
+
+[[tool.hatch.build.targets.sdist.include]]
+path = "code_puppy/models_minimal.json"
 
 [[tool.hatch.build.targets.sdist.include]]
 path = "code_puppy/models_dev_api.json"

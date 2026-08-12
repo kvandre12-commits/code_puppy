@@ -15,6 +15,17 @@ from __future__ import annotations
 import os
 from typing import Dict, List, Optional
 
+_DEFAULT_ENV_VAR_BY_MODEL_TYPE: Dict[str, str] = {
+    "anthropic": "ANTHROPIC_API_KEY",
+    "cerebras": "CEREBRAS_API_KEY",
+    "chatgpt_oauth": "CHATGPT_OAUTH_API_KEY",
+    "gemini": "GEMINI_API_KEY",
+    "openai": "OPENAI_API_KEY",
+    "openrouter": "OPENROUTER_API_KEY",
+    "zai_api": "ZAI_API_KEY",
+    "zai_coding": "ZAI_API_KEY",
+}
+
 
 def extract_env_var_from_model_config(model_config: dict) -> Optional[str]:
     """Return the ``$ENV`` key a single model config depends on, if any.
@@ -61,20 +72,41 @@ def _load_merged_model_config() -> Dict[str, dict]:
     return {}
 
 
-def required_env_vars_by_provider() -> Dict[str, List[str]]:
-    """Map each configured provider id -> sorted list of required env vars.
+def _default_env_var_for_model_config(model_config: dict) -> Optional[str]:
+    """Best-effort fallback env var for builtin model types.
 
-    Only includes providers whose models reference a ``$ENV`` credential, so
-    keyless/OAuth providers are naturally excluded.
+    Many bundled/provider-imported model configs intentionally omit an explicit
+    ``api_key`` field because ``model_factory`` knows the standard credential
+    names already (for example ``openai`` -> ``OPENAI_API_KEY``). The model
+    picker still needs to know which credential to edit, so we mirror that
+    default mapping here.
     """
+    if not isinstance(model_config, dict):
+        return None
+    model_type = str(model_config.get("type") or "").strip().lower()
+    return _DEFAULT_ENV_VAR_BY_MODEL_TYPE.get(model_type)
+
+
+def _required_env_var_for_model_config(model_config: dict) -> Optional[str]:
+    """Resolve the env var a model depends on, if any."""
+    explicit_env_var = extract_env_var_from_model_config(model_config)
+    if explicit_env_var:
+        return explicit_env_var
+    return _default_env_var_for_model_config(model_config)
+
+
+def required_env_vars_by_provider() -> Dict[str, List[str]]:
+    """Map each configured provider/type -> sorted list of required env vars."""
     grouped: Dict[str, set] = {}
     for _model_name, model_config in _load_merged_model_config().items():
         if not isinstance(model_config, dict):
             continue
-        env_var = extract_env_var_from_model_config(model_config)
+        env_var = _required_env_var_for_model_config(model_config)
         if not env_var:
             continue
-        provider = str(model_config.get("provider") or "unknown")
+        provider = str(
+            model_config.get("provider") or model_config.get("type") or "unknown"
+        )
         grouped.setdefault(provider, set()).add(env_var)
     return {provider: sorted(vars_) for provider, vars_ in sorted(grouped.items())}
 
@@ -85,7 +117,7 @@ def required_env_var_for_model(model_name: str) -> Optional[str]:
     model_config = config.get(model_name)
     if not isinstance(model_config, dict):
         return None
-    return extract_env_var_from_model_config(model_config)
+    return _required_env_var_for_model_config(model_config)
 
 
 def all_required_env_vars() -> List[str]:

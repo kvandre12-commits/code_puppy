@@ -47,11 +47,19 @@ class TestToolRegistration:
         tools = get_available_tool_names()
 
         assert isinstance(tools, list)
-        assert len(tools) == len(TOOL_REGISTRY)
+        assert len(tools) <= len(TOOL_REGISTRY)
         assert "agent_share_your_reasoning" in tools
 
         for tool in tools:
             assert tool in TOOL_REGISTRY
+
+    @patch("code_puppy.tools.get_runtime_profile", return_value="android-minimal")
+    def test_get_available_tool_names_hides_desktop_image_tool_on_android_minimal(
+        self, _mock_runtime
+    ):
+        tools = get_available_tool_names()
+
+        assert "load_image_for_analysis" not in tools
 
     def test_register_tools_for_agent(self):
         """Test registering specific tools for an agent."""
@@ -86,6 +94,22 @@ class TestToolRegistration:
 
         # Test passed if no exception was raised
         assert True
+
+    @patch("code_puppy.tools.get_runtime_profile", return_value="android-minimal")
+    def test_register_tools_for_agent_skips_hidden_android_minimal_tools(
+        self, _mock_runtime
+    ):
+        mock_agent = MagicMock()
+        mock_register = MagicMock()
+
+        with patch.dict(
+            "code_puppy.tools.TOOL_REGISTRY",
+            {"load_image_for_analysis": mock_register},
+            clear=False,
+        ):
+            register_tools_for_agent(mock_agent, ["load_image_for_analysis"])
+
+        mock_register.assert_not_called()
 
     def test_register_tools_by_category(self):
         """Test that tools from different categories can be registered."""

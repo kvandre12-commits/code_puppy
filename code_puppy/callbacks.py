@@ -54,6 +54,8 @@ PhaseType = Literal[
     "pre_compact",
     "session_end",
     "notification",
+    "register_cli_args",
+    "handle_cli_args",
 ]
 CallbackFunc = Callable[..., Any]
 
@@ -108,6 +110,8 @@ _callbacks: Dict[PhaseType, List[CallbackFunc]] = {
     "pre_compact": [],
     "session_end": [],
     "notification": [],
+    "register_cli_args": [],
+    "handle_cli_args": [],
 }
 
 logger = logging.getLogger(__name__)
@@ -232,7 +236,9 @@ def count_callbacks(phase: Optional[PhaseType] = None) -> int:
     return len(_callbacks.get(phase, []))
 
 
-def _trigger_callbacks_sync(phase: PhaseType, *args, **kwargs) -> List[Any]:
+def _trigger_callbacks_sync(
+    phase: PhaseType, *args, raise_on_error: bool = False, **kwargs
+) -> List[Any]:
     callbacks = get_callbacks(phase)
     if not callbacks:
         logger.debug(f"No callbacks registered for phase '{phase}'")
@@ -261,6 +267,8 @@ def _trigger_callbacks_sync(phase: PhaseType, *args, **kwargs) -> List[Any]:
             results.append(result)
             logger.debug(f"Successfully executed callback {callback.__name__}")
         except Exception as e:
+            if raise_on_error:
+                raise
             logger.error(
                 f"Callback {callback.__name__} failed in phase '{phase}': {e}\n"
                 f"{traceback.format_exc()}"
@@ -345,6 +353,48 @@ def on_load_model_descriptions() -> List[Any]:
         List of description overlay dicts from all registered callbacks.
     """
     return _trigger_callbacks_sync("load_model_descriptions")
+
+
+def on_register_cli_args(parser: Any) -> List[Any]:
+    """Let plugins mutate the live top-level CLI parser before ``parse_args()``.
+
+    This hook is intentionally fail-fast and not error-isolated. If a plugin
+    adds a duplicate option string or otherwise misconfigures the parser, the
+    exception should surface immediately instead of leaving startup in a weird
+    half-mutated state.
+    """
+    return _trigger_callbacks_sync("register_cli_args", parser, raise_on_error=True)
+
+
+async def on_handle_cli_args(args: Any) -> Optional[Dict[str, Any]]:
+    """Let plugins handle parsed CLI args and short-circuit startup.
+
+    Callback contract: ``(args) -> dict | None`` where a handled result looks
+    like ``{"handled": True, "exit_code": 0}``. The first handled dict wins
+    and later callbacks are skipped.
+    """
+    callbacks = get_callbacks("handle_cli_args")
+    if not callbacks:
+        logger.debug("No callbacks registered for phase 'handle_cli_args'")
+        return None
+
+    for callback in callbacks:
+        try:
+            result = callback(args)
+            if asyncio.iscoroutine(result):
+                result = await result
+            if isinstance(result, dict) and result.get("handled") is True:
+                logger.debug(
+                    f"CLI args handled by callback {callback.__name__}; short-circuiting startup"
+                )
+                return result
+        except Exception as e:
+            logger.error(
+                f"Async callback {callback.__name__} failed in phase 'handle_cli_args': {e}\n"
+                f"{traceback.format_exc()}"
+            )
+
+    return None
 
 
 def on_edit_file(*args, **kwargs) -> Any:

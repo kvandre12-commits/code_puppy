@@ -27,6 +27,7 @@ def test_android_onboarding_help_mentions_milestone_flags():
     )
     assert result.returncode == 0, result.stderr
     assert "--skip-overlay" in result.stdout
+    assert "--overlay-profile" in result.stdout
     assert "--skip-adb-install" in result.stdout
     assert "--launch" in result.stdout
 
@@ -54,7 +55,10 @@ def test_android_onboarding_dry_run_prints_staged_summary():
         "install_termux.sh --no-launch --version 9.9.9 --yes --dry-run --skip-upgrade"
         in result.stdout
     )
-    assert "install_overlay.py --overwrite --dry-run" in result.stdout
+    assert "overlay profile : basic" in result.stdout
+    assert "install_overlay.py --overwrite --plugins" in result.stdout
+    assert "android_setup_helper" in result.stdout
+    assert "droidpuppy_doctor" in result.stdout
     assert "Android Onboarding Summary" in result.stdout
     assert "Core Code Puppy:" in result.stdout
     assert "ADB / Wireless Debugging:" in result.stdout

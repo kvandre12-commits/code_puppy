@@ -318,8 +318,12 @@ class TestOpenAISettings:
         assert cp_config.get_openai_reasoning_effort() == "medium"
 
     def test_set_openai_reasoning_effort_valid(self):
-        cp_config.set_openai_reasoning_effort("high")
-        assert cp_config.get_openai_reasoning_effort() == "high"
+        cp_config.set_openai_reasoning_effort("max")
+        assert cp_config.get_openai_reasoning_effort() == "max"
+
+    def test_set_openai_reasoning_effort_none_valid(self):
+        cp_config.set_openai_reasoning_effort("none")
+        assert cp_config.get_openai_reasoning_effort() == "none"
 
     def test_set_openai_reasoning_effort_invalid(self):
         with pytest.raises(ValueError):

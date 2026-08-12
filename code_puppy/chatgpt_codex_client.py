@@ -22,19 +22,14 @@ from typing import Any
 
 import httpx
 
+from code_puppy.openai_capabilities import supports_openai_reasoning_payload
+
 logger = logging.getLogger(__name__)
 
 
 def _is_reasoning_model(model_name: str) -> bool:
     """Check if a model supports reasoning parameters."""
-    reasoning_models = [
-        "gpt-5",  # All GPT-5 variants
-        "o1",  # o1 series
-        "o3",  # o3 series
-        "o4",  # o4 series
-    ]
-    model_lower = model_name.lower()
-    return any(model_lower.startswith(prefix) for prefix in reasoning_models)
+    return supports_openai_reasoning_payload(model_name)
 
 
 class ChatGPTCodexAsyncClient(httpx.AsyncClient):

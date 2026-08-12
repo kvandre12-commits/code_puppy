@@ -13,12 +13,16 @@ from code_puppy.plugins.droidpuppy_context_kit.commands import (
 )
 
 
-def test_context_command_help_includes_workflow_commit_and_alias() -> None:
+def test_context_command_help_includes_commit_and_govern_aliases() -> None:
     entries = dict(context_command_help())
     assert "workflow-commit" in entries
     assert "wcommit" in entries
+    assert "govern" in entries
+    assert "workflow" in entries
     assert "governed handshake" in entries["workflow-commit"]
     assert "Alias: /wcommit" in entries["workflow-commit"]
+    assert "prefer the committed fast path" in entries["govern"]
+    assert "Alias: /workflow" in entries["govern"]
 
 
 def test_handle_context_command_returns_forwarded_prompt_with_args() -> None:
@@ -31,6 +35,7 @@ def test_handle_context_command_returns_forwarded_prompt_with_args() -> None:
     assert "governance-orchestrator" in result.content
     assert "droidpuppy_context_handshake" in result.content
     assert "droidpuppy_context_commit_workflow" in result.content
+    assert "authority_gateway_grant_workflow_lease" in result.content
     assert "stable authority principal" in result.content
     assert (
         "approval_decision remains the only authoritative permission object"
@@ -55,6 +60,17 @@ def test_handle_context_command_alias_supports_discord_targeting() -> None:
     assert "governance-orchestrator" in result.content
 
 
+def test_handle_govern_command_promotes_workflow_prompt_entrypoint() -> None:
+    result = handle_context_command("/govern open the dashboard safely", "govern")
+
+    assert isinstance(result, MarkdownCommandResult)
+    assert "governed workflow orchestration flow" in result.content
+    assert "droidpuppy_context_fast_path_status" in result.content
+    assert "skip workflow-state/execution-plan/approval fanout" in result.content
+    assert "authority_gateway_grant_workflow_lease" in result.content
+    assert "open the dashboard safely" in result.content
+
+
 def test_handle_context_command_ignores_other_names() -> None:
     assert handle_context_command("/not-this hello", "not-this") is None
 
@@ -68,6 +84,8 @@ def test_context_command_is_registered_with_callback_bus() -> None:
     ]
     assert any(name == "workflow-commit" for name, _desc in help_entries)
     assert any(name == "wcommit" for name, _desc in help_entries)
+    assert any(name == "govern" for name, _desc in help_entries)
+    assert any(name == "workflow" for name, _desc in help_entries)
 
     results = callbacks.on_custom_command(
         command="/workflow-commit governance me softly",
@@ -77,5 +95,15 @@ def test_context_command_is_registered_with_callback_bus() -> None:
         command="/wcommit to discord",
         name="wcommit",
     )
+    govern_results = callbacks.on_custom_command(
+        command="/govern open brave safely",
+        name="govern",
+    )
+    workflow_results = callbacks.on_custom_command(
+        command="/workflow dashboard flow",
+        name="workflow",
+    )
     assert any(isinstance(result, MarkdownCommandResult) for result in results)
     assert any(isinstance(result, MarkdownCommandResult) for result in alias_results)
+    assert any(isinstance(result, MarkdownCommandResult) for result in govern_results)
+    assert any(isinstance(result, MarkdownCommandResult) for result in workflow_results)

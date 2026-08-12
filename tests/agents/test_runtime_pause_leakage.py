@@ -306,17 +306,12 @@ def test_steer_processor_is_wired_into_builder_after_compaction():
     # Both processors must be referenced in the builder.
     assert "make_steer_history_processor" in src
     assert "make_history_processor" in src
-    # And they must appear in that order in the history_processors list.
-    # We rely on a textual check of the list literal here; the wiring test
-    # `test_steer_processor_appended_after_compaction` (below) verifies
-    # the actual list ordering on a built agent.
-    history_processors_line = next(
-        line for line in src.splitlines() if "history_processors=" in line
-    )
-    # Format is `history_processors=[history_processor, steer_processor]`.
-    # Just sanity-check both names appear and history_processor comes first.
-    h_idx = history_processors_line.find("history_processor")
-    s_idx = history_processors_line.find("steer_processor")
+    # The shared compatibility helper must receive compaction before steering.
+    wiring_start = src.index("history_processor_kwargs(")
+    wiring_end = src.index(")", wiring_start)
+    wiring = src[wiring_start:wiring_end]
+    h_idx = wiring.find("history_processor")
+    s_idx = wiring.find("steer_processor")
     assert h_idx >= 0 and s_idx > h_idx, (
-        f"steer_processor must come AFTER history_processor: {history_processors_line!r}"
+        f"steer_processor must come AFTER history_processor: {wiring!r}"
     )

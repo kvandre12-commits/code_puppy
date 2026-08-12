@@ -67,6 +67,8 @@ def _base_main_patches():
             on_startup=AsyncMock(),
             on_shutdown=AsyncMock(),
             on_version_check=AsyncMock(),
+            on_handle_cli_args=AsyncMock(return_value=None),
+            on_register_cli_args=MagicMock(),
             get_callbacks=MagicMock(return_value=[]),
         ),
         "code_puppy.cli_runner.plugins": MagicMock(),
@@ -324,6 +326,8 @@ class TestMain:
             on_startup=AsyncMock(),
             on_shutdown=AsyncMock(),
             on_version_check=AsyncMock(),
+            on_handle_cli_args=AsyncMock(return_value=None),
+            on_register_cli_args=MagicMock(),
             get_callbacks=MagicMock(return_value=[lambda: None]),
         )
         patches = _base_main_patches()
@@ -371,6 +375,8 @@ class TestMain:
             on_startup=AsyncMock(),
             on_shutdown=AsyncMock(),
             on_version_check=AsyncMock(),
+            on_handle_cli_args=AsyncMock(return_value=None),
+            on_register_cli_args=MagicMock(),
             get_callbacks=MagicMock(return_value=[]),
         )
         with ExitStack() as stack:
@@ -1731,11 +1737,16 @@ class TestImportErrorFallbacks:
 
 
 class TestMainEntryAdditional:
-    @patch("asyncio.run", side_effect=KeyboardInterrupt)
-    def test_keyboard_interrupt_stderr_output(self, mock_run):
+    def test_keyboard_interrupt_stderr_output(self):
         from code_puppy.cli_runner import main_entry
 
+        def _fake_asyncio_run(coro):
+            coro.close()
+            raise KeyboardInterrupt
+
         with ExitStack() as stack:
+            stack.enter_context(patch("asyncio.run", side_effect=_fake_asyncio_run))
             stack.enter_context(patch("code_puppy.cli_runner.reset_unix_terminal"))
-            result = main_entry()
-            assert result == 0
+            with pytest.raises(SystemExit) as exc_info:
+                main_entry()
+            assert exc_info.value.code == 0

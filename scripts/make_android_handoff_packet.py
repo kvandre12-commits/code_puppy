@@ -70,7 +70,9 @@ def _snapshot(args: argparse.Namespace) -> RepoSnapshot:
 
 
 def _github_slug(repo_url: str) -> tuple[str, str] | None:
-    https_match = re.match(r"https://github\.com/([^/]+)/([^/]+?)(?:\.git)?/?$", repo_url)
+    https_match = re.match(
+        r"https://github\.com/([^/]+)/([^/]+?)(?:\.git)?/?$", repo_url
+    )
     if https_match:
         return https_match.group(1), https_match.group(2)
     ssh_match = re.match(r"git@github\.com:([^/]+)/([^/]+?)(?:\.git)?$", repo_url)
@@ -84,7 +86,9 @@ def _script_url(repo_url: str, ref: str, script_name: str) -> str:
     if not slug:
         return f"{FALLBACK_INSTALLER_BASE}/{script_name}"
     owner, repo = slug
-    return f"https://raw.githubusercontent.com/{owner}/{repo}/{ref}/scripts/{script_name}"
+    return (
+        f"https://raw.githubusercontent.com/{owner}/{repo}/{ref}/scripts/{script_name}"
+    )
 
 
 def _published_version(args: argparse.Namespace) -> str:
@@ -123,7 +127,9 @@ def _dirty_note(dirty_count: int) -> str:
 
 
 def _checkout_packet(snapshot: RepoSnapshot, args: argparse.Namespace) -> str:
-    installer_url = _script_url(snapshot.repo_url, snapshot.ref, "install_termux_checkout.sh")
+    installer_url = _script_url(
+        snapshot.repo_url, snapshot.ref, "install_termux_checkout.sh"
+    )
     command = (
         f"curl -fsSL {installer_url} | \\\n"
         f"  bash -s -- --yes --repo-url {snapshot.repo_url} --ref {snapshot.ref} --require-clean"
@@ -160,10 +166,7 @@ Next optional validation:
 def _published_packet(snapshot: RepoSnapshot, args: argparse.Namespace) -> str:
     version = _published_version(args)
     installer_url = _script_url(snapshot.repo_url, snapshot.ref, "onboard_android.sh")
-    command = (
-        f"curl -fsSL {installer_url} | \\\n"
-        f"  bash -s -- --yes --version {version}"
-    )
+    command = f"curl -fsSL {installer_url} | \\\n  bash -s -- --yes --version {version}"
     return f"""# Android Handoff Packet
 
 Generated: {datetime.now(timezone.utc).isoformat()}
@@ -204,8 +207,12 @@ def build_parser() -> argparse.ArgumentParser:
         default="checkout-ref",
         help="Which Android handoff claim you want to make.",
     )
-    parser.add_argument("--repo-url", default="", help="Repo URL to hand another human.")
-    parser.add_argument("--ref", default="", help="Git ref/branch/tag to hand another human.")
+    parser.add_argument(
+        "--repo-url", default="", help="Repo URL to hand another human."
+    )
+    parser.add_argument(
+        "--ref", default="", help="Git ref/branch/tag to hand another human."
+    )
     parser.add_argument(
         "--published-version",
         default="",

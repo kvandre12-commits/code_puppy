@@ -14,6 +14,7 @@ from .tooling import (
     droidpuppy_context_apply_packet as context_apply_packet_impl,
     droidpuppy_context_commit_workflow as context_commit_workflow_impl,
     droidpuppy_context_doctor as context_doctor_impl,
+    droidpuppy_context_fast_path_status as context_fast_path_status_impl,
     droidpuppy_context_handshake as context_handshake_impl,
     droidpuppy_context_init as context_init_impl,
     droidpuppy_context_install_repo_governance as context_install_repo_governance_impl,
@@ -22,6 +23,7 @@ from .tooling import (
 )
 
 _DOCTOR = "droidpuppy_context_doctor"
+_FAST_PATH_STATUS = "droidpuppy_context_fast_path_status"
 _INIT = "droidpuppy_context_init"
 _RECORD = "droidpuppy_context_record"
 _PACKET = "droidpuppy_context_packet"
@@ -39,6 +41,24 @@ def register_droidpuppy_context_doctor(agent: Any) -> None:
     ) -> dict[str, Any]:
         del context
         return context_doctor_impl(root=root)
+
+
+def register_droidpuppy_context_fast_path_status(agent: Any) -> None:
+    @agent.tool
+    async def droidpuppy_context_fast_path_status(
+        context: RunContext,
+        root: str = "",
+        workflow_id: str = "",
+        raw_request: str = "",
+        require_commit_ready: bool = True,
+    ) -> dict[str, Any]:
+        del context
+        return context_fast_path_status_impl(
+            root=root,
+            workflow_id=workflow_id,
+            raw_request=raw_request,
+            require_commit_ready=require_commit_ready,
+        )
 
 
 def register_droidpuppy_context_init(agent: Any) -> None:
@@ -227,6 +247,10 @@ def register_droidpuppy_context_install_repo_governance(agent: Any) -> None:
 def register_tools_callback() -> list[dict[str, Any]]:
     return [
         {"name": _DOCTOR, "register_func": register_droidpuppy_context_doctor},
+        {
+            "name": _FAST_PATH_STATUS,
+            "register_func": register_droidpuppy_context_fast_path_status,
+        },
         {"name": _INIT, "register_func": register_droidpuppy_context_init},
         {"name": _RECORD, "register_func": register_droidpuppy_context_record},
         {"name": _PACKET, "register_func": register_droidpuppy_context_packet},
@@ -269,6 +293,7 @@ def _advertise_tools_to_agent(agent_name: str | None = None) -> list[str]:
         return []
     return [
         _DOCTOR,
+        _FAST_PATH_STATUS,
         _INIT,
         _RECORD,
         _PACKET,

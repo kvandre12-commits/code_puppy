@@ -48,6 +48,7 @@ from code_puppy.config import (
     get_puppy_name,
     get_value,
 )
+from code_puppy.runtime_profile import command_visible_in_runtime
 
 
 def _sanitize_for_encoding(text: str) -> str:
@@ -434,6 +435,9 @@ class SlashCompleter(Completer):
         partial_lower = partial.lower()
 
         for cmd in commands:
+            if not command_visible_in_runtime(cmd.name):
+                continue
+
             # Add primary command (case-insensitive matching)
             if cmd.name.lower().startswith(partial_lower):
                 all_completions.append(

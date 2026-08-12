@@ -8,6 +8,7 @@ from code_puppy.plugins.droidpuppy_context_kit.register_callbacks import (
 from code_puppy.plugins.droidpuppy_context_kit.tooling import (
     droidpuppy_context_apply_packet,
     droidpuppy_context_commit_workflow,
+    droidpuppy_context_fast_path_status,
     droidpuppy_context_handshake,
     droidpuppy_context_init,
     droidpuppy_context_packet,
@@ -101,6 +102,83 @@ def test_context_commit_ready_after_approval_and_packet_surfaces_artifacts(
     ]
 
 
+def test_fast_path_status_is_eligible_for_committed_matching_workflow(tmp_path) -> None:
+    root = str(tmp_path / "ctx")
+    droidpuppy_context_init(root=root, workflow_id="dashboard-open")
+    droidpuppy_context_handshake(
+        root=root,
+        workflow_id="dashboard-open",
+        requester="mike",
+        raw_request="start the local SharpEdge dashboard and open it in Brave",
+        intent_summary="open dashboard in brave",
+    )
+    droidpuppy_context_apply_packet(
+        root=root,
+        workflow_state_json=json.dumps(
+            {
+                "summary": "open dashboard in brave",
+                "current_goal": "reuse committed workflow",
+            }
+        ),
+        approval_decision_json=json.dumps(
+            {
+                "status": "lease_ready",
+                "allowed_actions": ["start dashboard and open brave"],
+                "lease_request": {
+                    "capabilities": ["shell.process.exec", "android.browser.open_url"]
+                },
+            }
+        ),
+    )
+    droidpuppy_context_commit_workflow(root=root, workflow_id="dashboard-open")
+
+    result = droidpuppy_context_fast_path_status(
+        root=root,
+        workflow_id="dashboard-open",
+        raw_request="open the dashboard in brave",
+    )
+
+    assert result["success"] is True
+    assert result["eligible"] is True
+    assert result["fast_path"]["commit_status"] == "committed_ready"
+    assert result["fast_path"]["scope_match"] is True
+
+
+def test_fast_path_status_rejects_scope_drift(tmp_path) -> None:
+    root = str(tmp_path / "ctx")
+    droidpuppy_context_init(root=root, workflow_id="dashboard-open")
+    droidpuppy_context_handshake(
+        root=root,
+        workflow_id="dashboard-open",
+        requester="mike",
+        raw_request="open the SharpEdge dashboard in Brave",
+    )
+    droidpuppy_context_apply_packet(
+        root=root,
+        approval_decision_json=json.dumps(
+            {
+                "status": "approved",
+                "lease_request": {"capabilities": ["android.browser.open_url"]},
+            }
+        ),
+    )
+    droidpuppy_context_commit_workflow(
+        root=root,
+        workflow_id="dashboard-open",
+        commit_message="committed for dashboard open",
+    )
+
+    result = droidpuppy_context_fast_path_status(
+        root=root,
+        workflow_id="dashboard-open",
+        raw_request="delete the repo and text everyone",
+    )
+
+    assert result["success"] is True
+    assert result["eligible"] is False
+    assert "scope" in " ".join(result["blockers"]).lower()
+
+
 def test_context_record_does_not_mutate_approval_or_clear_existing_state(
     tmp_path,
 ) -> None:
@@ -138,6 +216,9 @@ def test_context_tools_are_only_advertised_to_governance_agents() -> None:
     assert "droidpuppy_context_packet" in _advertise_tools_to_agent("code-puppy")
     assert "droidpuppy_context_commit_workflow" in _advertise_tools_to_agent(
         "workflow-commit"
+    )
+    assert "droidpuppy_context_fast_path_status" in _advertise_tools_to_agent(
+        "governance-orchestrator"
     )
     assert "droidpuppy_context_packet" in _advertise_tools_to_agent("lease-request")
     assert "droidpuppy_context_append_journal" in _advertise_tools_to_agent(

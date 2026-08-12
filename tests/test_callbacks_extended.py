@@ -1,3 +1,4 @@
+import argparse
 import asyncio
 from unittest.mock import patch
 
@@ -14,6 +15,8 @@ from code_puppy.callbacks import (
     on_load_model_config,
     on_post_tool_call,
     on_pre_tool_call,
+    on_register_cli_args,
+    on_handle_cli_args,
     on_replace_in_file,
     on_startup,
     on_stream_event,
@@ -320,6 +323,83 @@ class TestCallbacksExtended:
         assert len(callbacks1) == 2
         assert len(callbacks2) == 1
         assert len(get_callbacks("startup")) == 1
+
+
+class TestPluginCliArgCallbacks:
+    def setup_method(self):
+        clear_callbacks()
+
+    def test_register_cli_args_mutates_live_parser(self):
+        parser = argparse.ArgumentParser()
+
+        def add_flag(live_parser):
+            live_parser.add_argument("--puppy-mode", action="store_true")
+            return "added"
+
+        register_callback("register_cli_args", add_flag)
+
+        results = on_register_cli_args(parser)
+        args = parser.parse_args(["--puppy-mode"])
+
+        assert results == ["added"]
+        assert args.puppy_mode is True
+
+    def test_register_cli_args_fail_fast_duplicate_option(self):
+        parser = argparse.ArgumentParser()
+
+        def add_flag_once(live_parser):
+            live_parser.add_argument("--duplicate-bone", action="store_true")
+
+        def add_flag_twice(live_parser):
+            live_parser.add_argument("--duplicate-bone", action="store_true")
+
+        register_callback("register_cli_args", add_flag_once)
+        register_callback("register_cli_args", add_flag_twice)
+
+        with pytest.raises(argparse.ArgumentError):
+            on_register_cli_args(parser)
+
+    @pytest.mark.asyncio
+    async def test_handle_cli_args_first_handled_dict_wins(self):
+        seen = []
+
+        def first(args):
+            seen.append("first")
+            return {"handled": False}
+
+        async def second(args):
+            seen.append("second")
+            return {"handled": True, "exit_code": 23}
+
+        def third(args):
+            seen.append("third")
+            return {"handled": True, "exit_code": 99}
+
+        register_callback("handle_cli_args", first)
+        register_callback("handle_cli_args", second)
+        register_callback("handle_cli_args", third)
+
+        result = await on_handle_cli_args(argparse.Namespace())
+
+        assert result == {"handled": True, "exit_code": 23}
+        assert seen == ["first", "second"]
+
+    @pytest.mark.asyncio
+    async def test_handle_cli_args_ignores_errors_and_unhandled_results(self):
+        def boom(args):
+            raise RuntimeError("ow")
+
+        def nope(args):
+            return None
+
+        register_callback("handle_cli_args", boom)
+        register_callback("handle_cli_args", nope)
+
+        with patch("code_puppy.callbacks.logger") as mock_logger:
+            result = await on_handle_cli_args(argparse.Namespace())
+
+        assert result is None
+        mock_logger.error.assert_called_once()
 
 
 class TestPreToolCallCallback:

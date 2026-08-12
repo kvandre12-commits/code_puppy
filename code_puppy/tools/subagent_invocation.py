@@ -14,7 +14,11 @@ from code_puppy.callbacks import (
     on_agent_run_context,
     on_wrap_pydantic_agent,
 )
-from code_puppy.config import get_message_limit
+from code_puppy.config import (
+    get_message_limit,
+    get_subagent_recursion_limit,
+    get_subagent_recursion_limit_gpt_5_6,
+)
 from code_puppy.messaging import (
     SubAgentInvocationMessage,
     SubAgentResponseMessage,
@@ -33,11 +37,62 @@ from code_puppy.tools.agent_tools import (
     _save_session_history,
     _validate_session_id,
 )
+from code_puppy.pydantic_compat import history_processor_kwargs
 from code_puppy.tools.common import generate_group_id
-from code_puppy.tools.subagent_context import subagent_context
+from code_puppy.tools.subagent_context import (
+    get_subagent_chain,
+    get_subagent_depth,
+    get_subagent_model_name,
+    subagent_context,
+)
 
 # Set to track active subagent invocation tasks
 _active_subagent_tasks: Set[asyncio.Task] = set()
+
+
+def _is_gpt_5_6_family(model_name: str | None) -> bool:
+    """Return whether a configured alias identifies a GPT-5.6 model."""
+    normalized = str(model_name or "").strip().lower()
+    return "gpt-5.6" in normalized
+
+
+def _subagent_recursion_error(agent_name: str) -> str | None:
+    """Return a blocking error when another child would exceed safe depth."""
+    attempted_depth = get_subagent_depth() + 1
+    generic_limit = get_subagent_recursion_limit()
+    if attempted_depth > generic_limit:
+        return (
+            f"Cannot invoke sub-agent '{agent_name}': attempted depth "
+            f"{attempted_depth} exceeds configured limit {generic_limit}."
+        )
+
+    caller_model = get_subagent_model_name()
+    gpt_5_6_limit = get_subagent_recursion_limit_gpt_5_6()
+    if _is_gpt_5_6_family(caller_model) and attempted_depth > gpt_5_6_limit:
+        return (
+            f"Cannot invoke sub-agent '{agent_name}': GPT-5.6 caller would reach "
+            f"depth {attempted_depth}, above its configured limit {gpt_5_6_limit}."
+        )
+    return None
+
+
+def _subagent_identity_prompt(agent_name: str) -> str:
+    """Build explicit child identity and anti-recursion instructions."""
+    depth = get_subagent_depth() + 1
+    limit = get_subagent_recursion_limit()
+    chain = " -> ".join(("main agent", *get_subagent_chain(), agent_name))
+    remaining = max(limit - depth, 0)
+    return f"""## Sub-agent execution context (mandatory)
+
+You are the sub-agent `{agent_name}`, not the main agent. Your nesting depth is
+{depth} (main agent = 0). Invocation chain: {chain}. The configured maximum
+sub-agent depth is {limit}; {remaining} deeper level(s) remain.
+
+Complete your assigned task directly. NEVER invoke yourself, an agent already in
+the invocation chain, or another agent merely to repeat or continue your role.
+Default to no further delegation. If delegation is truly essential, invoke at
+most one child for a narrowly scoped task, tell that child to finish directly
+without further delegation, and then complete your own task."""
 
 
 async def _invoke_agent_impl(
@@ -50,13 +105,23 @@ async def _invoke_agent_impl(
     """Invoke a sub-agent, optionally with an explicit temporary model override."""
     from code_puppy.agents.agent_manager import load_agent
 
+    group_id = generate_group_id("invoke_agent", agent_name)
+    recursion_error = _subagent_recursion_error(agent_name)
+    if recursion_error:
+        emit_error(recursion_error, message_group=group_id)
+        return AgentInvokeOutput(
+            response=None,
+            agent_name=agent_name,
+            model_name=model_name,
+            error=recursion_error,
+        )
+
     # Validate user-provided session_id if given
     if session_id is not None:
         try:
             _validate_session_id(session_id)
         except ValueError as e:
             # Return error immediately if session_id is invalid
-            group_id = generate_group_id("invoke_agent", agent_name)
             emit_error(str(e), message_group=group_id)
             return AgentInvokeOutput(
                 response=None,
@@ -64,9 +129,6 @@ async def _invoke_agent_impl(
                 model_name=model_name,
                 error=str(e),
             )
-
-    # Generate a group ID for this tool execution
-    group_id = generate_group_id("invoke_agent", agent_name)
 
     # Check if this is an existing session or a new one
     # For user-provided session_id, check if it exists
@@ -170,14 +232,12 @@ async def _invoke_agent_impl(
             # Create a temporary agent instance to avoid interfering with current agent state
             instructions = agent_config.get_full_system_prompt()
 
-            # Add AGENTS.md content to subagents.
-            # ``load_puppy_rules`` lives on the builder module since the
-            # base_agent split in 79dfc3c8; it's not a method on the agent.
-            from code_puppy.agents._builder import load_puppy_rules
+            instructions += f"\n\n{_subagent_identity_prompt(agent_name)}"
 
-            puppy_rules = load_puppy_rules()
-            if puppy_rules:
-                instructions += f"\n\n{puppy_rules}"
+            # Main-agent AGENTS.md rules are deliberately not injected here.
+            # Rules such as "always invoke agent X" can make X recursively
+            # invoke itself. Sub-agents receive their authored prompt plus the
+            # mandatory identity/anti-cycle block above.
 
             # NOTE: ``load_prompt`` fragments (file-permission handling, kennel
             # memory, ...) are already baked into ``get_full_system_prompt``
@@ -213,13 +273,19 @@ async def _invoke_agent_impl(
             # hits the ``_running_count > 0`` no-op fast-path.
             from code_puppy.agents._builder import autostart_bound_servers_async
             from code_puppy.config import get_value
-            from code_puppy.mcp_ import get_mcp_manager
+            from code_puppy.mcp_optional import has_mcp_support
 
             mcp_servers = []
             mcp_disabled = get_value("disable_mcp_servers")
-            if not (
-                mcp_disabled and str(mcp_disabled).lower() in ("1", "true", "yes", "on")
+            if (
+                not (
+                    mcp_disabled
+                    and str(mcp_disabled).lower() in ("1", "true", "yes", "on")
+                )
+                and has_mcp_support()
             ):
+                from code_puppy.mcp_ import get_mcp_manager
+
                 manager = get_mcp_manager()
                 bound_agent_name = getattr(agent_config, "name", None)
                 if bound_agent_name:
@@ -238,8 +304,8 @@ async def _invoke_agent_impl(
                 output_type=str,
                 retries=3,
                 toolsets=mcp_servers,
-                history_processors=[make_history_processor(agent_config)],
                 model_settings=model_settings,
+                **history_processor_kwargs(make_history_processor(agent_config)),
             )
 
             # Register the tools that the agent needs
@@ -286,8 +352,8 @@ async def _invoke_agent_impl(
             else:
                 stream_handler = partial(subagent_stream_handler, session_id=session_id)
 
-            # Wrap the agent run in subagent context for tracking
-            with subagent_context(agent_name):
+            # Wrap the run with async-local identity, model, depth, and chain tracking.
+            with subagent_context(agent_name, effective_model_name):
                 run_ctxs = on_agent_run_context(
                     agent_config, temp_agent, group_id, mcp_servers
                 )

@@ -1008,6 +1008,36 @@ class TestGetCommandsHelp:
             help_text = str(get_commands_help())
             assert help_text  # Should still generate help text
 
+    def test_help_hides_android_minimal_optional_commands(self):
+        """Android-minimal help should not advertise detached surfaces."""
+        from unittest.mock import MagicMock, patch
+
+        from code_puppy.command_line.command_handler import get_commands_help
+
+        help_cmd = MagicMock()
+        help_cmd.name = "help"
+        help_cmd.usage = "/help"
+        help_cmd.description = "Show help"
+        mcp_cmd = MagicMock()
+        mcp_cmd.name = "mcp"
+        mcp_cmd.usage = "/mcp"
+        mcp_cmd.description = "Manage MCP servers"
+
+        with (
+            patch(
+                "code_puppy.command_line.command_registry.get_unique_commands",
+                return_value=[help_cmd, mcp_cmd],
+            ),
+            patch(
+                "code_puppy.runtime_profile.command_visible_in_runtime",
+                side_effect=lambda name: name != "mcp",
+            ),
+            patch("code_puppy.callbacks.on_custom_command_help", return_value=[]),
+        ):
+            help_text = str(get_commands_help())
+            assert "/help" in help_text
+            assert "/mcp" not in help_text
+
 
 class TestCommandRegistry:
     """Tests verifying commands are properly registered."""

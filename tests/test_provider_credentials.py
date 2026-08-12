@@ -115,6 +115,32 @@ class TestRequiredEnvVarForModel(unittest.TestCase):
             result = required_env_var_for_model("firepass-kimi-k2p6")
             self.assertEqual(result, "FIREWORKS_API_KEY")
 
+    def test_falls_back_to_builtin_openai_env_var(self):
+        with patch(
+            "code_puppy.provider_credentials._load_merged_model_config",
+            return_value={
+                "openai-gpt-5.4": {
+                    "type": "openai",
+                    "name": "gpt-5.4",
+                }
+            },
+        ):
+            result = required_env_var_for_model("openai-gpt-5.4")
+            self.assertEqual(result, "OPENAI_API_KEY")
+
+    def test_falls_back_to_chatgpt_oauth_env_var(self):
+        with patch(
+            "code_puppy.provider_credentials._load_merged_model_config",
+            return_value={
+                "chatgpt-gpt-5.4": {
+                    "type": "chatgpt_oauth",
+                    "name": "gpt-5.4",
+                }
+            },
+        ):
+            result = required_env_var_for_model("chatgpt-gpt-5.4")
+            self.assertEqual(result, "CHATGPT_OAUTH_API_KEY")
+
     def test_returns_none_for_unknown_model(self):
         with patch(
             "code_puppy.provider_credentials._load_merged_model_config",
@@ -137,6 +163,19 @@ class TestRequiredEnvVarsByProvider(unittest.TestCase):
             result = required_env_vars_by_provider()
             self.assertIn("firepass", result)
             self.assertIn("FIREWORKS_API_KEY", result["firepass"])
+
+    def test_groups_fallback_env_vars_by_model_type_when_provider_missing(self):
+        with patch(
+            "code_puppy.provider_credentials._load_merged_model_config",
+            return_value={
+                "openai-gpt-5.4": {
+                    "type": "openai",
+                    "name": "gpt-5.4",
+                }
+            },
+        ):
+            result = required_env_vars_by_provider()
+            self.assertEqual(result["openai"], ["OPENAI_API_KEY"])
 
     def test_returns_sorted_lists(self):
         with patch(

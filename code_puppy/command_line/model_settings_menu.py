@@ -34,6 +34,7 @@ from code_puppy.config import (
 )
 from code_puppy.messaging import emit_info
 from code_puppy.model_factory import ModelFactory
+from code_puppy.openai_capabilities import get_openai_reasoning_effort_choices
 from code_puppy.tools.command_runner import set_awaiting_user_input
 
 # Pagination config
@@ -74,9 +75,9 @@ SETTING_DEFINITIONS: Dict[str, Dict] = {
     },
     "reasoning_effort": {
         "name": "Reasoning Effort",
-        "description": "Controls how much effort GPT-5 models spend on reasoning. Higher = more thorough but slower.",
+        "description": "Controls how much effort OpenAI reasoning models spend on reasoning. Available levels vary by model.",
         "type": "choice",
-        "choices": ["minimal", "low", "medium", "high", "xhigh"],
+        "choices": ["none", "minimal", "low", "medium", "high", "xhigh", "max"],
         "default": "medium",
     },
     "summary": {
@@ -186,17 +187,12 @@ def _get_setting_choices(
 
     base_choices = setting_def.get("choices", [])
 
-    # For reasoning_effort, filter 'xhigh' based on model support
-    if setting_key == "reasoning_effort" and model_name:
+    if setting_key == "reasoning_effort":
+        if not model_name:
+            return list(base_choices)
         models_config = ModelFactory.load_config()
         model_config = models_config.get(model_name, {})
-
-        # Check if model supports xhigh reasoning
-        supports_xhigh = model_config.get("supports_xhigh_reasoning", False)
-
-        if not supports_xhigh:
-            # Remove xhigh from choices for non-codex models
-            return [c for c in base_choices if c != "xhigh"]
+        return list(get_openai_reasoning_effort_choices(model_name, model_config))
 
     return base_choices
 
@@ -552,11 +548,11 @@ class ModelSettingsMenu:
             lines.append(("", "\n"))
 
             # Show if this is a global setting
-            if setting_key in ("reasoning_effort", "verbosity"):
+            if setting_key in ("reasoning_effort", "summary", "verbosity"):
                 lines.append(
                     (
                         "fg:ansiyellow",
-                        "  ⚠ Global setting (applies to all GPT-5 models)",
+                        "   Global OpenAI setting (normalized per model when needed)",
                     )
                 )
             lines.append(("", "\n\n"))

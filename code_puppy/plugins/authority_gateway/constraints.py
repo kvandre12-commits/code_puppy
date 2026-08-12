@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import re
+import shutil
+import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -38,6 +41,38 @@ def _looks_like_url(value: str) -> bool:
     return value.startswith("http://") or value.startswith("https://")
 
 
+def _foreground_android_package() -> str:
+    adb = shutil.which("adb")
+    if not adb:
+        return ""
+    commands = [
+        [adb, "shell", "dumpsys", "window", "windows"],
+        [adb, "shell", "dumpsys", "activity", "activities"],
+    ]
+    patterns = (
+        re.compile(r"mCurrentFocus=.*?\s([A-Za-z0-9_.]+)/[A-Za-z0-9_.$]+"),
+        re.compile(r"topResumedActivity:.*?\s([A-Za-z0-9_.]+)/[A-Za-z0-9_.$]+"),
+        re.compile(r"mFocusedApp=.*?\s([A-Za-z0-9_.]+)/[A-Za-z0-9_.$]+"),
+    )
+    for command in commands:
+        try:
+            completed = subprocess.run(
+                command,
+                capture_output=True,
+                text=True,
+                timeout=20,
+                check=False,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            continue
+        haystack = "\n".join([completed.stdout or "", completed.stderr or ""])
+        for pattern in patterns:
+            match = pattern.search(haystack)
+            if match:
+                return match.group(1).strip().lower()
+    return ""
+
+
 def lease_constraint_failure(
     record: LeaseRecord,
     *,
@@ -53,6 +88,9 @@ def lease_constraint_failure(
     browser_packages = _normalize_constraint_values(
         constraints.get("browser_packages"), lower=True
     )
+    android_packages = _normalize_constraint_values(
+        constraints.get("android_packages"), lower=True
+    )
 
     if tool_name == "android_intent_send":
         action = str(tool_args.get("action", "")).strip()
@@ -64,6 +102,28 @@ def lease_constraint_failure(
                 return "[BLOCKED] Lease requires an explicit Android package target."
             if package_name not in intent_packages:
                 return "[BLOCKED] Lease only allows specific Android intent packages."
+
+    if android_packages:
+        package_arg = str(tool_args.get("package_name", "")).strip().lower()
+        if tool_name in {"android_launch_app", "android_intent_send"}:
+            if not package_arg:
+                return "[BLOCKED] Lease requires an explicit Android package target."
+            if package_arg not in android_packages:
+                return "[BLOCKED] Lease only allows specific Android packages."
+        if tool_name in {
+            "android_input_keyevent",
+            "android_input_swipe",
+            "android_input_tap",
+            "android_input_tap_bounds",
+            "android_input_text",
+            "android_ui_tap_match",
+            "android_ui_text_into_match",
+        }:
+            foreground_package = _foreground_android_package()
+            if not foreground_package:
+                return "[BLOCKED] Could not verify the foreground Android package for this lease."
+            if foreground_package not in android_packages:
+                return "[BLOCKED] Lease only allows Android input while specific packages are foregrounded."
 
     if tool_name == "android_handoff_file" and allowed_paths:
         file_path = str(tool_args.get("file_path", "")).strip()
