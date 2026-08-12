@@ -31,16 +31,10 @@ jobs:
       - name: Install uv
         run: pip install uv
 
-      - name: Setup uv virtual environment
-        run: uv venv
-
-      - name: Install dependencies
-        # [durable] extras pulls in dbos, required by integration test
-        # tests/integration/test_dbos_enabled.py
-        run: uv pip install -e ".[durable]"
-
-      - name: Install pexpect for integration tests
-        run: uv pip install pexpect>=4.9.0
+      - name: Sync test environment
+        # Runtime defaults stay lean. CI explicitly requests the dev capability
+        # group plus dbos for tests/integration/test_dbos_enabled.py.
+        run: uv sync --group dev --extra durable
 
       - name: Provision CI model (lilac synthetic GLM-5.1)
         # models.json ships empty. CI gets its model from extra_models.json,
@@ -99,7 +93,7 @@ jobs:
         run: |
           echo "Running tests (including integration tests) on ${{ runner.os }} with Python ${{ matrix.python-version }}..."
           echo "Required environment variables are set (using CI fallbacks if secrets not available)"
-          uv run pytest tests/ -v --cov=code_puppy --cov-report=term-missing
+          uv run --no-sync pytest tests/ -v --cov=code_puppy --cov-report=term-missing
 
   build-publish:
     runs-on: ubuntu-latest
@@ -139,7 +133,7 @@ jobs:
         env:
           TWINE_USERNAME: __token__
           TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
-        run: uv run twine upload --verbose dist/*
+        run: python -m twine upload --verbose dist/*
 
       - name: Push version bump and tag to GitHub
         if: ${{ success() }}
