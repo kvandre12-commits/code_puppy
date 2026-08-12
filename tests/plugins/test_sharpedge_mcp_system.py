@@ -15,6 +15,7 @@ def test_server_templates_are_first_party_and_namespaced() -> None:
 
     assert names == [
         "sharpedge-android-capability",
+        "sharpedge-financial-data-readonly",
         "sharpedge-governance-readonly",
     ]
     assert all(template.category == "SharpEdge" for template in templates)
@@ -23,6 +24,10 @@ def test_server_templates_are_first_party_and_namespaced() -> None:
         "code_puppy.plugins.sharpedge_mcp_system.servers.android_capability",
     ]
     assert templates[1].config["args"] == [
+        "-m",
+        "code_puppy.plugins.sharpedge_mcp_system.servers.financial_data",
+    ]
+    assert templates[2].config["args"] == [
         "-m",
         "code_puppy.plugins.sharpedge_mcp_system.servers.governance",
     ]
@@ -56,6 +61,7 @@ def test_status_tool_aggregates_core_surfaces(monkeypatch) -> None:
     assert status["mcp_support_installed"] is True
     assert status["catalog_server_names"] == [
         "sharpedge-android-capability",
+        "sharpedge-financial-data-readonly",
         "sharpedge-governance-readonly",
     ]
     assert status["surface_status"]["authority_gateway"]["system_state"] == "idle"

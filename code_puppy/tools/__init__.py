@@ -31,7 +31,10 @@ from code_puppy.tools.file_operations import (
 )
 from code_puppy.tools.image_tools import register_load_image
 from code_puppy.tools.model_tools import register_list_available_models
-from code_puppy.runtime_profile import hidden_tool_names_for_runtime
+from code_puppy.runtime_profile import (
+    get_runtime_profile,
+    hidden_tool_names_for_runtime,
+)
 
 # Map of tool names to their individual registration functions
 TOOL_REGISTRY = {
@@ -110,7 +113,7 @@ _VALIDATED_PLUGIN_TOOL_CONNECTIONS: set[tuple[str, str, str]] = set()
 
 def _filter_tool_names_for_runtime(tool_names: list[str]) -> list[str]:
     """Hide optional desktop tools from lean Android runtime surfaces."""
-    hidden_tool_names = hidden_tool_names_for_runtime()
+    hidden_tool_names = hidden_tool_names_for_runtime(get_runtime_profile())
     if not hidden_tool_names:
         return tool_names
     return [name for name in tool_names if name not in hidden_tool_names]

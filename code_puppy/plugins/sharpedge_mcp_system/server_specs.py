@@ -77,6 +77,29 @@ def get_server_templates() -> list[MCPServerTemplate]:
             ),
         ),
         _python_stdio_template(
+            server_id="sharpedge-financial-data-readonly",
+            name="sharpedge-financial-data-readonly",
+            display_name="SharpEdge Financial Data Readonly",
+            description=(
+                "First-party official SEC/EDGAR company profiles, filings, and "
+                "bounded XBRL company facts."
+            ),
+            module_name="financial_data",
+            tags=[
+                "sharpedge",
+                "financial-data",
+                "sec",
+                "edgar",
+                "filings",
+                "fundamentals",
+                "read-only",
+            ],
+            example_usage=(
+                "Read official company identity, recent filing metadata, and "
+                "compact reported facts without broker or execution access."
+            ),
+        ),
+        _python_stdio_template(
             server_id="sharpedge-governance-readonly",
             name="sharpedge-governance-readonly",
             display_name="SharpEdge Governance Readonly",
