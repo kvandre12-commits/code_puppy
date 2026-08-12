@@ -20,6 +20,10 @@ DEFAULT_WORKSPACE_REPO_NAMES = [
     "SharpEdge-Robinhood-Bridge",
     "DroidPuppy",
     "SharpEdge-Android",
+    "SharpEdge-Ace",
+    "SharpEdge-WMT",
+    "SE-short-detector",
+    "TENSION-MODEL",
 ]
 DEFAULT_WORKSPACE_MAP_PATH = Path("WORKSPACE_MAP.txt")
 DEFAULT_WORKSPACE_CATALOG_PATH = Path("outputs/workspace_catalog.json")

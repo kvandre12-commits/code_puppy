@@ -17,6 +17,9 @@ from code_puppy.plugins.repository_catalog.tooling import (
     register_tools_callback,
     workspace_catalog_build_impl,
 )
+from code_puppy.plugins.repository_catalog.workspace_builder import (
+    DEFAULT_WORKSPACE_REPO_NAMES,
+)
 
 
 def _write(path: Path, content: str) -> None:
@@ -106,6 +109,20 @@ def test_register_tools_callback_exposes_expected_tools() -> None:
         "repository_catalog_query",
         "workspace_catalog_build",
     ]
+
+
+def test_default_workspace_repos_cover_active_sharpedge_wrappers() -> None:
+    expected = {
+        "SharpEdge-System",
+        "SharpEdge-Robinhood-Bridge",
+        "SharpEdge-Android",
+        "SharpEdge-Ace",
+        "SharpEdge-WMT",
+        "SE-short-detector",
+        "TENSION-MODEL",
+    }
+
+    assert expected <= set(DEFAULT_WORKSPACE_REPO_NAMES)
 
 
 def test_workspace_catalog_build_writes_workspace_outputs(tmp_path: Path) -> None:
