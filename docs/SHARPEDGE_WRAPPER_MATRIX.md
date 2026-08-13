@@ -10,7 +10,7 @@ second analytics engine, broker, or Android product.
 
 | Repository | Owns | Primary contract/artifact | Code Puppy integration | Current gap |
 | --- | --- | --- | --- | --- |
-| `SharpEdge-System` | Market analytics, cockpit signals, Trade Gate, operator artifacts | `sharpedge.signal.v1`, `outputs/signal.json`, operator packets | Artifact-path conventions, skills, and downstream bridge tools | No single read-only tool that validates and summarizes the current signal contract |
+| `SharpEdge-System` | Market analytics, cockpit signals, Trade Gate, operator artifacts | `sharpedge.signal.v1`, `outputs/signal.json`, operator packets | `sharpedge_market_state` validates and projects the live signal through in-process and read-only MCP tools; downstream bridge tools remain separate | Historical candle/path queries still require a dedicated stable producer contract |
 | `SharpEdge-Robinhood-Bridge` | Broker-command classification and approval-gated handoff planning | `sharpedge.robinhood_execution_handoff.v1` | Strong: `chatgpt_robinhood_delegate` can plan, package, and audit connector handoffs | Connector boundary remains asynchronous and operator-confirmed by design |
 | `SharpEdge-Android` | Kotlin/Compose rendering and imported contract cache | `sharpedge.signal.v1`, `sharpedge.operator_packet.v1` | Generic DroidPuppy Android launch, intent, diagnostics, and UI tools | No product-specific install/build/import health wrapper |
 | `SharpEdge-Ace` | Minimal deterministic scoring core | `ace_snapshot.json` input and compact score/gate/bias output | None; Ace reads SharpEdge-System snapshots directly | No read-only Code Puppy adapter for scoring or comparing Ace with the full signal |
@@ -34,7 +34,7 @@ second analytics engine, broker, or Android product.
 ## Integration order
 
 1. Keep SEC EDGAR read-only and source-attributed.
-2. Add a read-only SharpEdge signal validator/summary adapter.
+2. Keep the read-only SharpEdge market-state adapter freshness-aware and projection-only; do not duplicate cockpit analytics.
 3. Add an Ace comparison adapter only after its input/output contract is frozen.
 4. Add a SharpEdge-Android import-health wrapper before attempting build tooling.
 5. Leave WMT unwrapped until its first durable artifact exists.

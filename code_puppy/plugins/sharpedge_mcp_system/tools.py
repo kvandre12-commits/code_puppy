@@ -9,7 +9,10 @@ from code_puppy.mcp_optional import has_mcp_support
 from .bootstrap import list_first_party_servers
 from .policy import build_autostart_readiness
 
-_TOOL_NAME = "sharpedge_mcp_system_status"
+_STATUS_TOOL_NAME = "sharpedge_mcp_system_status"
+_MARKET_STATE_TOOL_NAME = "sharpedge_market_state"
+# Backward-compatible internal alias used by older tests/extensions.
+_TOOL_NAME = _STATUS_TOOL_NAME
 
 
 def _safe_call(
@@ -67,7 +70,7 @@ def sharpedge_mcp_system_status(
     ]
     return {
         "success": True,
-        "tool_name": _TOOL_NAME,
+        "tool_name": _STATUS_TOOL_NAME,
         "mcp_support_installed": has_mcp_support(),
         "catalog_servers": catalog_servers,
         "catalog_server_names": catalog_server_names,

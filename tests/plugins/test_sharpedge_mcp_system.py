@@ -14,6 +14,7 @@ def test_server_templates_are_first_party_and_namespaced() -> None:
     names = [template.name for template in templates]
 
     assert names == [
+        "sharpedge-market-state-readonly",
         "sharpedge-android-capability",
         "sharpedge-financial-data-readonly",
         "sharpedge-governance-readonly",
@@ -21,13 +22,17 @@ def test_server_templates_are_first_party_and_namespaced() -> None:
     assert all(template.category == "SharpEdge" for template in templates)
     assert templates[0].config["args"] == [
         "-m",
-        "code_puppy.plugins.sharpedge_mcp_system.servers.android_capability",
+        "code_puppy.plugins.sharpedge_mcp_system.servers.market_state",
     ]
     assert templates[1].config["args"] == [
         "-m",
-        "code_puppy.plugins.sharpedge_mcp_system.servers.financial_data",
+        "code_puppy.plugins.sharpedge_mcp_system.servers.android_capability",
     ]
     assert templates[2].config["args"] == [
+        "-m",
+        "code_puppy.plugins.sharpedge_mcp_system.servers.financial_data",
+    ]
+    assert templates[3].config["args"] == [
         "-m",
         "code_puppy.plugins.sharpedge_mcp_system.servers.governance",
     ]
@@ -60,6 +65,7 @@ def test_status_tool_aggregates_core_surfaces(monkeypatch) -> None:
     assert status["success"] is True
     assert status["mcp_support_installed"] is True
     assert status["catalog_server_names"] == [
+        "sharpedge-market-state-readonly",
         "sharpedge-android-capability",
         "sharpedge-financial-data-readonly",
         "sharpedge-governance-readonly",
@@ -67,6 +73,19 @@ def test_status_tool_aggregates_core_surfaces(monkeypatch) -> None:
     assert status["surface_status"]["authority_gateway"]["system_state"] == "idle"
     assert status["surface_status"]["droidpuppy_context"]["root"] == "/tmp/sharpedge"
     assert status["surface_status"]["project_os_bus"]["healthy"] is True
+
+
+def test_plugin_advertises_status_and_market_state_tools() -> None:
+    registrations = plugin_callbacks.register_tools_callback()
+
+    assert [item["name"] for item in registrations] == [
+        "sharpedge_mcp_system_status",
+        "sharpedge_market_state",
+    ]
+    assert plugin_callbacks._advertise_tools_to_agent("code-puppy") == [
+        "sharpedge_mcp_system_status",
+        "sharpedge_market_state",
+    ]
 
 
 def test_governance_agents_ship_mcp_bindings() -> None:

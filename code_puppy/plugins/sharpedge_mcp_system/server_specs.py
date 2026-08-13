@@ -56,6 +56,28 @@ def get_server_templates() -> list[MCPServerTemplate]:
     """
     return [
         _python_stdio_template(
+            server_id="sharpedge-market-state-readonly",
+            name="sharpedge-market-state-readonly",
+            display_name="SharpEdge Market State Readonly",
+            description=(
+                "Freshness-aware projection of SharpEdge's live signal, levels, "
+                "microstructure, exhaustion state, and analytical permission."
+            ),
+            module_name="market_state",
+            tags=[
+                "sharpedge",
+                "market-state",
+                "signal",
+                "microstructure",
+                "exhaustion",
+                "read-only",
+            ],
+            example_usage=(
+                "Inspect the same current SharpEdge evidence as the operator "
+                "without broker or execution authority."
+            ),
+        ),
+        _python_stdio_template(
             server_id="sharpedge-android-capability",
             name="sharpedge-android-capability",
             display_name="SharpEdge Android Capability",

@@ -10,10 +10,12 @@ from code_puppy.callbacks import register_callback
 from code_puppy.messaging import emit_info, emit_warning
 
 from .bootstrap import list_first_party_servers
+from .market_state import sharpedge_market_state as sharpedge_market_state_impl
 from .policy import build_autostart_readiness
 from .server_specs import get_server_templates
 from .tools import (
-    _TOOL_NAME,
+    _MARKET_STATE_TOOL_NAME,
+    _STATUS_TOOL_NAME,
     sharpedge_mcp_system_status as sharpedge_mcp_system_status_impl,
 )
 
@@ -36,13 +38,37 @@ def register_sharpedge_mcp_system_status(agent: Any) -> None:
         )
 
 
+def register_sharpedge_market_state(agent: Any) -> None:
+    @agent.tool
+    async def sharpedge_market_state(
+        context: RunContext,
+        signal_path: str = "",
+        max_age_seconds: int = 300,
+    ) -> dict[str, Any]:
+        """Read SharpEdge's current market state without execution authority."""
+        del context
+        return sharpedge_market_state_impl(
+            signal_path=signal_path,
+            max_age_seconds=max_age_seconds,
+        )
+
+
 def register_tools_callback() -> list[dict[str, Any]]:
-    return [{"name": _TOOL_NAME, "register_func": register_sharpedge_mcp_system_status}]
+    return [
+        {
+            "name": _STATUS_TOOL_NAME,
+            "register_func": register_sharpedge_mcp_system_status,
+        },
+        {
+            "name": _MARKET_STATE_TOOL_NAME,
+            "register_func": register_sharpedge_market_state,
+        },
+    ]
 
 
 def _advertise_tools_to_agent(agent_name: str | None = None) -> list[str]:
     del agent_name
-    return [_TOOL_NAME]
+    return [_STATUS_TOOL_NAME, _MARKET_STATE_TOOL_NAME]
 
 
 def _register_mcp_catalog_servers() -> list[Any]:
