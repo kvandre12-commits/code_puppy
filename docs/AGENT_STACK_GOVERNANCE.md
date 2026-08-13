@@ -15,9 +15,10 @@ Machine-readable companion:
 ## One-sentence doctrine
 
 ```text
-SharpEdge decides what should happen.
-Code Puppy + DroidPuppy coordinate how bounded work happens.
-Capabilities perform the work through explicit contracts and authority gates.
+Kurtis owns goals, judgment, and consequential choices.
+SharpEdge builds market perception, interpretation, and decision support.
+Code Puppy + DroidPuppy coordinate how explicitly delegated bounded work happens.
+Capabilities perform that work through explicit contracts and authority gates.
 Android is one governed execution surface, not the whole architecture.
 ```
 
@@ -57,7 +58,7 @@ Read alongside:
 
 | Layer | Role | Source path(s) in this checkout | Allowed to decide | Not allowed to decide |
 | --- | --- | --- | --- | --- |
-| SharpEdge intent layer | domain goal / market intent / operator goal | mostly external to this checkout; referenced by skills/docs | what should happen | exact Android action route, broker-side autonomous execution here |
+| SharpEdge perception layer | market model, evidence, alternatives, and operator decision support | mostly external to this checkout; referenced by skills/docs | what the evidence supports and which choices are available | operator goals, consequential choices, exact Android action route, broker-side autonomous execution here |
 | Code Puppy runtime | agent runtime, tool execution, plugin loading | `code_puppy/agents/`, `code_puppy/callbacks.py` | how agents are loaded, invoked, and instrumented | domain truth, broker permission |
 | DroidPuppy overlay | Android-native orchestration + device capabilities | `DroidPuppy/`, Android plugins under `code_puppy/plugins/` | how Android-side work is performed | whether a domain action is justified or whether Android should become the architecture |
 | Project OS supervisor | operator-facing service orchestration | `code_puppy/plugins/project_os_supervisor/` | how local services/manifests are started, observed, tailed | domain authority, broker permission |
@@ -70,7 +71,8 @@ Read alongside:
 
 ### 1. Intent is upstream
 
-SharpEdge or the operator may define the goal.
+The operator defines the goal. SharpEdge may surface evidence, alternatives, and
+recommendations in support of that human-owned goal.
 
 Examples:
 - inspect an Android workflow

@@ -57,11 +57,16 @@ __pycache__/
 
 Treat generated runtime outputs as evidence, not source design.
 
-## Boundary with SharpEdge
+## Personal-AI center and boundary with SharpEdge
 
-SharpEdge decides **what** should happen.
+Kurtis owns the goals, judgment, and consequential choices. This repository and
+the surrounding SharpEdge repositories are maintained extensions of that one
+personal-AI system, not competing projects with independent authorship.
 
-DroidPuppy helps with **how Android actions/observations can be performed**.
+SharpEdge builds market perception, interpretation, and decision support.
+
+Code Puppy coordinates bounded agent labor and tool use. DroidPuppy helps with
+**how Android actions/observations can be performed**.
 
 Android is one governed execution surface, not the whole stack.
 
