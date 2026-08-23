@@ -8,13 +8,30 @@ Remote `fork/puppy-stable` is UNCHANGED at `59acbabe` (0.0.759) - nothing publis
 > Dependency, import, and behavioral proof are EARNED HERE. "Rebase done"
 > is not "release-qualified." Run steps in order; stop at first red.
 
-## Step 0 - get the candidate on the build host
+## Step 0 - get the candidate on the build host AND PROVE THE SHA
+
+The candidate is published to the NON-STABLE review branch
+`candidate/0.0.759` on the `fork` remote (github kvandre12-commits).
+The stable pointer `fork/puppy-stable` remains at `59acbabe` (bare 0.0.759).
+
+> **DO NOT `checkout puppy-stable`** - that lands you on `59acbabe`, the bare
+> upstream WITHOUT the 92 authored commits. You would qualify the wrong
+> artifact. Target `candidate/0.0.759` (or the tag) explicitly.
 
 ```sh
-git fetch <remote-with-candidate> 'refs/tags/rebase-0.0.759-complete:refs/tags/rebase-0.0.759-complete'
-git checkout -b qualify-0.0.759 rebase-0.0.759-complete
+cd ~/code_puppy
+git fetch --all --tags
+git checkout -B qualify-0.0.759 fork/candidate/0.0.759   # or: git checkout rebase-0.0.759-complete
+git status                                                # MUST be clean
+git rev-parse HEAD                                        # MUST print 1487ce96...
 ```
-(Or push the candidate to a NON-stable branch first - see "Publish vs Bless" below.)
+
+If `git rev-parse HEAD` is NOT `1487ce96...`, STOP - you are not on the
+candidate. Do not install or run anything until the SHA matches.
+
+> **Do not pull / rebase / update the candidate before qualifying it.**
+> `1487ce96` is the artifact under test. Modifying it first means you are
+> qualifying something else.
 
 ## Step 1 - dependency resolution (regenerate the lock; Termux could not)
 
