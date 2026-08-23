@@ -12,7 +12,10 @@ from code_puppy.tools.browser.browser_manager import (
     PLAYWRIGHT_EXTRA_MESSAGE,
     BrowserManager,
 )
-from code_puppy.tools.image_tools import PILLOW_EXTRA_MESSAGE, _validate_and_prepare_image
+from code_puppy.tools.image_tools import (
+    PILLOW_EXTRA_MESSAGE,
+    _validate_and_prepare_image,
+)
 
 
 def _dependency_name(requirement: str) -> str:
@@ -24,7 +27,9 @@ def _dependency_name(requirement: str) -> str:
 
 def test_dependency_monsters_are_not_core_dependencies():
     pyproject = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))
-    dependencies = {_dependency_name(dep) for dep in pyproject["project"]["dependencies"]}
+    dependencies = {
+        _dependency_name(dep) for dep in pyproject["project"]["dependencies"]
+    }
     optional = pyproject["project"]["optional-dependencies"]
 
     assert "playwright" not in dependencies

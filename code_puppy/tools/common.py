@@ -16,6 +16,7 @@ from prompt_toolkit.formatted_text import FormattedText
 from prompt_toolkit.key_binding import KeyBindings
 from prompt_toolkit.layout import Layout, Window
 from prompt_toolkit.layout.controls import FormattedTextControl
+
 try:
     from rapidfuzz.distance import JaroWinkler
 except ModuleNotFoundError:
