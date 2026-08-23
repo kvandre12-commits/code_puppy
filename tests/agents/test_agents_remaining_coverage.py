@@ -158,23 +158,23 @@ def test_planning_agent():
     assert len(prompt) > 100
 
 
-def test_code_puppy_prompt_allows_callback_additions():
+def test_code_puppy_runtime_prompt_additions_are_user_turn_context():
     from code_puppy.agents.agent_code_puppy import CodePuppyAgent
 
     agent = CodePuppyAgent()
-    # ``load_prompt`` fragments now live in get_full_system_prompt (BaseAgent),
-    # not in the authored get_system_prompt.
     with patch("code_puppy.callbacks.on_load_prompt", return_value=["extra"]):
-        prompt = agent.get_full_system_prompt()
-        assert "extra" in prompt
+        system_prompt = agent.get_full_system_prompt()
+        runtime_block = agent.format_runtime_prompt_additions()
+    assert "extra" not in system_prompt
+    assert "extra" in runtime_block
 
 
 def test_code_puppy_authored_prompt_excludes_runtime_additions():
-    """Authored prompt must NOT contain load_prompt fragments or the identity.
+    """Authored prompt must NOT contain runtime fragments or the identity.
 
     Regression for the clone bug: cloning persists get_system_prompt(), so
-    runtime-only metadata (kennel memory, live timestamps) and the per-instance
-    identity ID must stay out of it.
+    runtime-only metadata (kennel memory, live timestamps, cwd-ish hints)
+    and the per-instance identity ID must stay out of it.
     """
     from code_puppy.agents.agent_code_puppy import CodePuppyAgent
 
