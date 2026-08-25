@@ -26,12 +26,12 @@ jobs:
       - name: Install dependencies
         run: uv pip install -e .
 
-      - name: Run #853 semantic-preservation mutants only
+      - name: Run #853 all_turns provider-shaped mutants
         env:
           CI: '1'
           CODE_PUPPY_TEST_FAST: '1'
         run: |
           uv run pytest \
-            tests/test_compaction_reasoning.py \
+            tests/test_all_turns_reasoning_policy.py \
             tests/test_reasoning_semantic_preservation.py \
             -v --no-cov
