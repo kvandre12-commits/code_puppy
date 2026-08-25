@@ -153,3 +153,6 @@ async def test_completed_output_item_order_is_conserved_for_replay():
     assert output[0]["encrypted_content"] == "ordered-replay-state"
     assert output[1]["call_id"] == "call_order"
     assert output[2]["id"] == "msg_order"
+
+
+# Touch this test-only branch to trigger pull-request CI after retargeting to the #853 head.
