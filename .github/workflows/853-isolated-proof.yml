@@ -1,0 +1,37 @@
+name: 853 Isolated Proof
+
+on:
+  pull_request:
+    branches:
+      - '**'
+
+jobs:
+  reasoning-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install uv
+        run: pip install uv
+
+      - name: Setup uv virtual environment
+        run: uv venv
+
+      - name: Install dependencies
+        run: uv pip install -e .
+
+      - name: Run #853 semantic-preservation mutants only
+        env:
+          CI: '1'
+          CODE_PUPPY_TEST_FAST: '1'
+        run: |
+          uv run pytest \
+            tests/test_compaction_reasoning.py \
+            tests/test_reasoning_semantic_preservation.py \
+            -v --no-cov
