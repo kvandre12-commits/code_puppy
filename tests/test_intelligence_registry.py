@@ -99,3 +99,43 @@ def test_probe_for_unknown_resource_is_rejected() -> None:
             "missing/resource",
             ProbeResult(succeeded=True),
         )
+
+
+def test_quota_observation_preserves_provider_vocabulary() -> None:
+    from code_puppy.intelligence_registry import QuotaObservation
+
+    provider_name = (
+        "GenerateRequestsPerDayPerProjectPerModel-FreeTier"
+    )
+
+    observation = QuotaObservation(
+        provider_name=provider_name,
+        limit=20,
+        remaining=0,
+        window="day",
+        source="provider_error",
+    )
+
+    assert observation.provider_name == provider_name
+    assert observation.limit == 20
+    assert observation.remaining == 0
+    assert observation.window == "day"
+    assert observation.source == "provider_error"
+
+
+def test_quota_observations_are_not_shared_between_resources() -> None:
+    from code_puppy.intelligence_registry import QuotaObservation
+
+    first = make_resource("first/resource")
+    second = make_resource("second/resource")
+
+    first.economics.quota_observations.append(
+        QuotaObservation(
+            provider_name="premium_requests",
+            remaining=10,
+            source="provider_usage",
+        )
+    )
+
+    assert len(first.economics.quota_observations) == 1
+    assert second.economics.quota_observations == []

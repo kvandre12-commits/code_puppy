@@ -44,13 +44,27 @@ class Capability(StrEnum):
 
 
 @dataclass(slots=True)
+class QuotaObservation:
+    """One provider-reported quota or usage observation."""
+
+    provider_name: str
+    used: float | None = None
+    limit: float | None = None
+    remaining: float | None = None
+    window: str | None = None
+    resets_at: datetime | None = None
+    observed_at: datetime = field(
+        default_factory=lambda: datetime.now(timezone.utc)
+    )
+    source: str = "unknown"
+
+
+@dataclass(slots=True)
 class ResourceEconomics:
-    """Known limits and cost characteristics for one resource."""
+    """Known cost characteristics and observed quota state."""
 
     cost_class: str = "unknown"
-    requests_remaining: int | None = None
-    request_limit: int | None = None
-    token_limit: int | None = None
+    quota_observations: list[QuotaObservation] = field(default_factory=list)
 
 
 @dataclass(slots=True)
