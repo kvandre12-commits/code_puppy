@@ -381,6 +381,7 @@ def streaming_retry(
     delays: Sequence[float] = DEFAULT_STREAMING_RETRY_DELAYS,
     progress_fn: Optional[Callable[[], Any]] = None,
     max_total_attempts: Optional[int] = None,
+    observation_fn: Optional[Callable[[BaseException], Any]] = None,
 ) -> Callable[[Callable[[], Any]], Callable[[], Any]]:
     """Wrap a no-arg async callable with streaming-retry semantics.
 
@@ -436,6 +437,12 @@ def streaming_retry(
                 try:
                     return await factory()
                 except Exception as exc:
+                    if observation_fn is not None:
+                        try:
+                            observation_fn(exc)
+                        except Exception:
+                            pass
+
                     if not should_retry_streaming(exc):
                         raise
                     total += 1
