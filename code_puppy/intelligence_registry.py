@@ -15,7 +15,7 @@ import json
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import StrEnum
-from typing import Any
+from typing import Any, Callable
 
 
 class ResourceStatus(StrEnum):
@@ -256,3 +256,15 @@ def scrub_quota_observations(exc: BaseException) -> tuple[QuotaObservation, ...]
             )
 
     return tuple(observations)
+
+
+def make_resource_observer(
+    resource: IntelligenceResource,
+) -> Callable[[BaseException], None]:
+    """Bind provider-error observations to one exact intelligence resource."""
+
+    def observe(exc: BaseException) -> None:
+        observations = scrub_quota_observations(exc)
+        resource.economics.quota_observations.extend(observations)
+
+    return observe

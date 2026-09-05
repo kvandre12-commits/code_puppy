@@ -246,3 +246,82 @@ def test_resource_from_model_config_keeps_same_model_on_distinct_resources() -> 
     assert personal.id != student.id
     assert personal.provider == student.provider == "google"
     assert personal.model == student.model == "gemini-3.6-flash"
+
+
+def test_resource_observer_attaches_structured_quota_evidence() -> None:
+    from code_puppy.intelligence_registry import make_resource_observer
+
+    resource = make_resource()
+    observe = make_resource_observer(resource)
+
+    observe(
+        RuntimeError(
+            """Gemini API error 429: {
+  "error": {
+    "details": [
+      {
+        "@type": "type.googleapis.com/google.rpc.QuotaFailure",
+        "violations": [
+          {
+            "quotaMetric": "generativelanguage.googleapis.com/generate_content_free_tier_requests",
+            "quotaId": "GenerateRequestsPerDayPerProjectPerModel-FreeTier",
+            "quotaDimensions": {
+              "location": "global",
+              "model": "gemini-3.6-flash"
+            },
+            "quotaValue": "20"
+          }
+        ]
+      }
+    ]
+  }
+}"""
+        )
+    )
+
+    assert len(resource.economics.quota_observations) == 1
+    observation = resource.economics.quota_observations[0]
+    assert observation.provider_name == "GenerateRequestsPerDayPerProjectPerModel-FreeTier"
+    assert observation.limit == 20.0
+
+
+def test_resource_observer_ignores_generic_error() -> None:
+    from code_puppy.intelligence_registry import make_resource_observer
+
+    resource = make_resource()
+    observe = make_resource_observer(resource)
+
+    observe(RuntimeError("429 Too Many Requests"))
+
+    assert resource.economics.quota_observations == []
+
+
+def test_resource_observer_isolated_to_bound_resource() -> None:
+    from code_puppy.intelligence_registry import make_resource_observer
+
+    first = make_resource("first/resource")
+    second = make_resource("second/resource")
+    observe = make_resource_observer(first)
+
+    observe(
+        RuntimeError(
+            """provider error: {
+  "error": {
+    "details": [
+      {
+        "@type": "type.googleapis.com/google.rpc.QuotaFailure",
+        "violations": [
+          {
+            "quotaId": "requests-per-day",
+            "quotaValue": "20"
+          }
+        ]
+      }
+    ]
+  }
+}"""
+        )
+    )
+
+    assert len(first.economics.quota_observations) == 1
+    assert second.economics.quota_observations == []
