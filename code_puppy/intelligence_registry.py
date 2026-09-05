@@ -10,6 +10,8 @@ The registry's vocabulary should remain stable.
 
 from __future__ import annotations
 
+import json
+
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import StrEnum
@@ -48,6 +50,8 @@ class QuotaObservation:
     """One provider-reported quota or usage observation."""
 
     provider_name: str
+    provider_metric: str | None = None
+    provider_dimensions: dict[str, str] = field(default_factory=dict)
     used: float | None = None
     limit: float | None = None
     remaining: float | None = None
@@ -154,3 +158,77 @@ class IntelligenceRegistry:
             if result.succeeded
             else ResourceStatus.DEGRADED
         )
+
+
+def scrub_quota_observations(exc: BaseException) -> tuple[QuotaObservation, ...]:
+    """Extract provider-reported quota observations without inferring missing facts."""
+
+    text = str(exc)
+    json_start = text.find("{")
+    if json_start < 0:
+        return ()
+
+    try:
+        payload = json.loads(text[json_start:])
+    except (json.JSONDecodeError, TypeError):
+        return ()
+
+    error = payload.get("error")
+    if not isinstance(error, dict):
+        return ()
+
+    details = error.get("details")
+    if not isinstance(details, list):
+        return ()
+
+    observations: list[QuotaObservation] = []
+
+    for detail in details:
+        if not isinstance(detail, dict):
+            continue
+        if detail.get("@type") != "type.googleapis.com/google.rpc.QuotaFailure":
+            continue
+
+        violations = detail.get("violations")
+        if not isinstance(violations, list):
+            continue
+
+        for violation in violations:
+            if not isinstance(violation, dict):
+                continue
+
+            quota_id = violation.get("quotaId")
+            if not isinstance(quota_id, str) or not quota_id:
+                continue
+
+            quota_metric = violation.get("quotaMetric")
+            if not isinstance(quota_metric, str):
+                quota_metric = None
+
+            raw_dimensions = violation.get("quotaDimensions")
+            dimensions = (
+                {
+                    str(key): str(value)
+                    for key, value in raw_dimensions.items()
+                }
+                if isinstance(raw_dimensions, dict)
+                else {}
+            )
+
+            raw_value = violation.get("quotaValue")
+            try:
+                limit = float(raw_value) if raw_value is not None else None
+            except (TypeError, ValueError):
+                limit = None
+
+            observations.append(
+                QuotaObservation(
+                    provider_name=quota_id,
+                    provider_metric=quota_metric,
+                    provider_dimensions=dimensions,
+                    limit=limit,
+                    source="provider_error",
+                )
+            )
+
+    return tuple(observations)

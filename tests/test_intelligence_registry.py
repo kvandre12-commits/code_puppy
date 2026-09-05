@@ -139,3 +139,67 @@ def test_quota_observations_are_not_shared_between_resources() -> None:
 
     assert len(first.economics.quota_observations) == 1
     assert second.economics.quota_observations == []
+
+
+def test_scrubber_preserves_structured_google_quota_failure() -> None:
+    from code_puppy.intelligence_registry import scrub_quota_observations
+
+    exc = RuntimeError(
+        """Gemini API error 429: {
+  "error": {
+    "code": 429,
+    "message": "You exceeded your current quota.",
+    "status": "RESOURCE_EXHAUSTED",
+    "details": [
+      {
+        "@type": "type.googleapis.com/google.rpc.QuotaFailure",
+        "violations": [
+          {
+            "quotaMetric": "generativelanguage.googleapis.com/generate_content_free_tier_requests",
+            "quotaId": "GenerateRequestsPerDayPerProjectPerModel-FreeTier",
+            "quotaDimensions": {
+              "location": "global",
+              "model": "gemini-3.6-flash"
+            },
+            "quotaValue": "20"
+          }
+        ]
+      },
+      {
+        "@type": "type.googleapis.com/google.rpc.RetryInfo",
+        "retryDelay": "17s"
+      }
+    ]
+  }
+}"""
+    )
+
+    observations = scrub_quota_observations(exc)
+
+    assert len(observations) == 1
+
+    observation = observations[0]
+    assert (
+        observation.provider_name
+        == "GenerateRequestsPerDayPerProjectPerModel-FreeTier"
+    )
+    assert (
+        observation.provider_metric
+        == "generativelanguage.googleapis.com/generate_content_free_tier_requests"
+    )
+    assert observation.provider_dimensions == {
+        "location": "global",
+        "model": "gemini-3.6-flash",
+    }
+    assert observation.limit == 20.0
+    assert observation.source == "provider_error"
+
+
+def test_scrubber_does_not_infer_quota_from_generic_429() -> None:
+    from code_puppy.intelligence_registry import scrub_quota_observations
+
+    exc = RuntimeError("429 Too Many Requests")
+
+    observations = scrub_quota_observations(exc)
+
+    assert observations == ()
