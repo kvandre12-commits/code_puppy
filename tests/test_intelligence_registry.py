@@ -203,3 +203,46 @@ def test_scrubber_does_not_infer_quota_from_generic_429() -> None:
     observations = scrub_quota_observations(exc)
 
     assert observations == ()
+
+
+
+def test_resource_from_model_config_preserves_configured_identity() -> None:
+    from code_puppy.intelligence_registry import resource_from_model_config
+
+    resource = resource_from_model_config(
+        "google-gemini-3.6-flash",
+        {
+            "type": "gemini",
+            "provider": "google",
+            "name": "gemini-3.6-flash",
+        },
+    )
+
+    assert resource.id == "google-gemini-3.6-flash"
+    assert resource.provider == "google"
+    assert resource.model == "gemini-3.6-flash"
+
+
+def test_resource_from_model_config_keeps_same_model_on_distinct_resources() -> None:
+    from code_puppy.intelligence_registry import resource_from_model_config
+
+    personal = resource_from_model_config(
+        "google-personal-gemini-3.6-flash",
+        {
+            "type": "gemini",
+            "provider": "google",
+            "name": "gemini-3.6-flash",
+        },
+    )
+    student = resource_from_model_config(
+        "google-student-gemini-3.6-flash",
+        {
+            "type": "gemini",
+            "provider": "google",
+            "name": "gemini-3.6-flash",
+        },
+    )
+
+    assert personal.id != student.id
+    assert personal.provider == student.provider == "google"
+    assert personal.model == student.model == "gemini-3.6-flash"

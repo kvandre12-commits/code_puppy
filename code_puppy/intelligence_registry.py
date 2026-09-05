@@ -106,6 +106,30 @@ class IntelligenceResource:
     metadata: dict[str, Any] = field(default_factory=dict)
 
 
+def resource_from_model_config(
+    configured_key: str,
+    model_config: dict[str, Any],
+) -> IntelligenceResource:
+    """Describe one configured model as an intelligence resource."""
+
+    if not configured_key:
+        raise ValueError("configured model key cannot be empty")
+
+    from code_puppy.provider_identity import resolve_provider_identity
+
+    provider = resolve_provider_identity(configured_key, model_config)
+
+    underlying_model = model_config.get("name", configured_key)
+    if not isinstance(underlying_model, str) or not underlying_model:
+        underlying_model = configured_key
+
+    return IntelligenceResource(
+        id=configured_key,
+        provider=provider,
+        model=underlying_model,
+    )
+
+
 class IntelligenceRegistry:
     """In-memory registry of known intelligence resources."""
 
