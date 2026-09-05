@@ -236,6 +236,7 @@ def make_streaming_retry(
     model_name: Optional[str] = None,
     rng: Optional[random.Random] = None,
     progress_fn: Optional[Callable[[], object]] = None,
+    observation_fn: Optional[Callable[[BaseException], object]] = None,
 ) -> Callable[[Callable[[], object]], Callable[[], object]]:
     """Resolve the profile for ``role`` and return a configured retry decorator.
 
@@ -278,4 +279,5 @@ def make_streaming_retry(
         delays=delays,
         progress_fn=progress_fn,
         max_total_attempts=max_total_attempts,
+        observation_fn=observation_fn,
     )
