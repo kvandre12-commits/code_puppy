@@ -325,3 +325,22 @@ def test_resource_observer_isolated_to_bound_resource() -> None:
 
     assert len(first.economics.quota_observations) == 1
     assert second.economics.quota_observations == []
+
+
+def test_get_intelligence_registry_returns_singleton_instance(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Repeated calls to get_intelligence_registry() return the exact same object."""
+    import code_puppy.intelligence_registry as reg_module
+
+    monkeypatch.setattr(
+        reg_module,
+        "_process_intelligence_registry",
+        None,
+        raising=False,
+    )
+
+    from code_puppy.intelligence_registry import get_intelligence_registry
+
+    first = get_intelligence_registry()
+    second = get_intelligence_registry()
+
+    assert first is second

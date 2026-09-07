@@ -11,6 +11,7 @@ The registry's vocabulary should remain stable.
 from __future__ import annotations
 
 import json
+import threading
 
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -268,3 +269,16 @@ def make_resource_observer(
         resource.economics.quota_observations.extend(observations)
 
     return observe
+
+_process_intelligence_registry: IntelligenceRegistry | None = None
+_process_intelligence_registry_lock = threading.RLock()
+
+
+def get_intelligence_registry() -> IntelligenceRegistry:
+    """Return the process-scoped intelligence registry."""
+    global _process_intelligence_registry
+
+    with _process_intelligence_registry_lock:
+        if _process_intelligence_registry is None:
+            _process_intelligence_registry = IntelligenceRegistry()
+        return _process_intelligence_registry
