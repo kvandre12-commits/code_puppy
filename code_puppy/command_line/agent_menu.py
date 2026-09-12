@@ -23,7 +23,6 @@ from code_puppy.agents import (
     get_current_agent,
     is_clone_agent_name,
 )
-from code_puppy.command_line.mcp_binding_menu import interactive_mcp_binding_menu
 from code_puppy.mcp_.agent_bindings import get_bound_servers
 from code_puppy.command_line.model_picker_completion import (
     ModelSelectionMenu,
@@ -673,7 +672,23 @@ async def interactive_agent_picker() -> Optional[str]:
             if pending_action[0] == "bind":
                 entry = get_current_entry()
                 if entry:
-                    await interactive_mcp_binding_menu(entry[0])
+                    # MCP-only UI: import lazily so the agent picker still
+                    # works when the optional ``mcp`` extra is absent. The
+                    # binding menu itself imports ``mcp``, so importing it at
+                    # module scope would break agent startup.
+                    from code_puppy.mcp_optional import (
+                        get_mcp_install_hint,
+                        has_mcp_support,
+                    )
+
+                    if not has_mcp_support():
+                        emit_info(get_mcp_install_hint("MCP bindings"))
+                    else:
+                        from code_puppy.command_line.mcp_binding_menu import (
+                            interactive_mcp_binding_menu,
+                        )
+
+                        await interactive_mcp_binding_menu(entry[0])
                 continue
 
             if pending_action[0] == "clone":

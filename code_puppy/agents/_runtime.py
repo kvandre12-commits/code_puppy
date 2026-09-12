@@ -25,7 +25,6 @@ from typing import Any, Callable, List, Optional, Sequence, Type, Union
 
 import httpcore
 import httpx
-import mcp
 from pydantic_ai import (
     BinaryContent,
     DocumentUrl,
@@ -83,8 +82,14 @@ from code_puppy.config import (
     get_message_limit,
 )
 from code_puppy.keymap import cancel_agent_uses_signal
+from code_puppy.mcp_optional import get_mcp_run_error_type
 from code_puppy.messaging import emit_error, emit_info, emit_warning
 from code_puppy.tools.command_runner import is_awaiting_user_input
+
+# Resolved once at import time. When MCP is installed this is the real
+# ``McpError`` class; when it's absent it's a private, never-raised stand-in
+# so the ``except*`` guard below stays inert (see ``get_mcp_run_error_type``).
+_MCP_RUN_ERROR = get_mcp_run_error_type()
 
 # ---- Streaming retry helpers ------------------------------------------------
 
@@ -479,7 +484,7 @@ async def run_with_mcp(
                 "by saying 'please continue' or similar.",
                 group_id=group_id,
             )
-        except* mcp.shared.exceptions.McpError as mcp_error:
+        except* _MCP_RUN_ERROR as mcp_error:
             # Already announced once by blocking_startup.py with a /mcp logs
             # hint. Don't re-vomit the exception text — just give the user
             # a single short, actionable nudge.

@@ -32,12 +32,32 @@ from code_puppy.config import (
     get_global_model_name,
     get_value,
 )
-from code_puppy.mcp_ import get_mcp_manager
+from code_puppy.mcp_optional import (
+    MCPUnavailableError,
+    get_mcp_install_hint,
+    has_mcp_support,
+)
 from code_puppy.messaging import emit_error, emit_info, emit_warning
 from code_puppy.model_factory import ModelFactory, make_model_settings
 
 _AGENT_RULE_FILES = ("AGENTS.md", "AGENT.md", "agents.md", "agent.md")
 _CODE_PUPPY_DIR = ".code_puppy"
+
+
+def get_mcp_manager():
+    """Return the MCP manager singleton, importing ``mcp`` only on demand.
+
+    A thin module-level indirection rather than a top-level
+    ``from code_puppy.mcp_ import get_mcp_manager`` so agent construction
+    never drags in the optional ``mcp`` dependency at import time. Callers
+    must gate this behind :func:`has_mcp_support`; it will raise
+    ``MCPUnavailableError`` if invoked when the extra is absent. Kept as a
+    stable module attribute so tests can patch it.
+    """
+    from code_puppy.mcp_ import get_mcp_manager as _get_mcp_manager
+
+    return _get_mcp_manager()
+
 
 # Re-export the default so callers that imported AGENTS_MD_MAX_CHARS from
 # here keep working. The *effective* cap on any given load is whatever
@@ -162,6 +182,10 @@ def load_mcp_servers(
     by the time the agent runs.
     """
     del extra_headers  # accepted for API compatibility; manager owns headers
+    # Optional dependency: when the ``mcp`` extra isn't installed the agent
+    # still builds normally -- it just receives an empty MCP toolset.
+    if not has_mcp_support():
+        return []
     mcp_disabled = get_value("disable_mcp_servers")
     if mcp_disabled and str(mcp_disabled).lower() in ("1", "true", "yes", "on"):
         return []
@@ -295,7 +319,15 @@ async def autostart_bound_servers_async(manager: Any, agent_name: str) -> None:
 
 
 def reload_mcp_servers(agent_name: Optional[str] = None) -> List[Any]:
-    """Force re-sync from ``mcp_servers.json`` and return updated servers."""
+    """Force re-sync from ``mcp_servers.json`` and return updated servers.
+
+    Unlike :func:`load_mcp_servers`, this is only reached from explicit MCP
+    actions, so it surfaces the friendly install hint instead of silently
+    returning ``[]`` when the optional ``mcp`` extra is missing.
+    """
+    if not has_mcp_support():
+        raise MCPUnavailableError(get_mcp_install_hint("MCP support"))
+
     manager = get_mcp_manager()
     manager.sync_from_config()
     return manager.get_servers_for_agent(agent_name=agent_name)

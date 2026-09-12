@@ -48,6 +48,35 @@ _EXPORTS = {
 __all__ = list(_EXPORTS)
 
 
+def _chain_indicates_missing_mcp(exc: BaseException) -> bool:
+    """Return True iff ``exc``'s exception chain blames a missing ``mcp``.
+
+    Some dependencies (notably ``pydantic_ai.mcp``) catch the raw
+    ``ModuleNotFoundError: No module named 'mcp'`` and re-raise a plain
+    ``ImportError`` with a friendlier message, so the missing-``mcp`` signal
+    only survives on the ``__cause__``/``__context__`` chain. We walk the
+    *entire* chain (both links) and report a match only when some node is a
+    ``ModuleNotFoundError`` whose ``name`` is exactly ``mcp`` or begins with
+    ``mcp.`` -- never on unrelated import failures. The ``id()``-based seen
+    set makes the walk safe against self-referential / cyclic chains.
+    """
+    seen: set[int] = set()
+    stack: list[BaseException] = [exc]
+    while stack:
+        current = stack.pop()
+        if current is None or id(current) in seen:
+            continue
+        seen.add(id(current))
+        if isinstance(current, ModuleNotFoundError):
+            missing = getattr(current, "name", "") or ""
+            if missing == "mcp" or missing.startswith("mcp."):
+                return True
+        for link in (current.__cause__, current.__context__):
+            if link is not None and id(link) not in seen:
+                stack.append(link)
+    return False
+
+
 def __getattr__(name: str) -> Any:
     """Load public MCP exports on first access."""
     if name not in _EXPORTS:
@@ -56,9 +85,13 @@ def __getattr__(name: str) -> Any:
     module_name, attr_name = _EXPORTS[name]
     try:
         module = importlib.import_module(module_name, __name__)
-    except ModuleNotFoundError as exc:
-        missing_name = getattr(exc, "name", "") or ""
-        if missing_name == "mcp" or missing_name.startswith("mcp."):
+    except ImportError as exc:
+        # Convert to the friendly optional-extra error ONLY when the failure
+        # truly stems from ``mcp`` being absent (possibly wrapped several
+        # layers deep). Every other ImportError -- an unrelated missing
+        # dependency, a typo'd submodule, a broken third-party import -- must
+        # propagate untouched so real bugs aren't masked as "install mcp".
+        if _chain_indicates_missing_mcp(exc):
             raise MCPUnavailableError(get_mcp_install_hint("MCP support")) from exc
         raise
 
