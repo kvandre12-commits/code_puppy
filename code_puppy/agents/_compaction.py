@@ -233,8 +233,15 @@ async def compact(
         # the summary past 50 parent requests. Detach the ledger, fold it back.
         summary_usage = RunUsage()
         strategy_ctx = dataclasses.replace(ctx, usage=summary_usage)
+        # Project OS governance (disabled by default): any provider call made
+        # while compacting/summarizing is classified as auxiliary, not a primary
+        # agent turn. The marker is a cheap ContextVar no-op when governance is
+        # off, and is restored in finally even on error/cancellation.
+        from code_puppy import project_os_adapter as _pos
+
         try:
-            result = await strategy.compact(list(messages), strategy_ctx)
+            with _pos.auxiliary_calls():
+                result = await strategy.compact(list(messages), strategy_ctx)
         finally:
             ctx.usage.incr(summary_usage)
     except Exception as e:

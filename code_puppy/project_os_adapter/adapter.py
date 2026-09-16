@@ -20,12 +20,36 @@ provably untouched, and ``project_os`` is imported lazily only at activation.
 
 from __future__ import annotations
 
+import contextlib
+import contextvars
 import logging
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Optional
 
 log = logging.getLogger(__name__)
+
+# Classifies the provider call the model wrapper is about to make. Compaction /
+# summary code wraps its model calls in ``auxiliary_calls()`` so the seam records
+# them as auxiliary. A ContextVar keeps the classification correct across nested
+# scopes and concurrent asyncio tasks (each task copies the context).
+_call_kind: contextvars.ContextVar[str] = contextvars.ContextVar(
+    "project_os_call_kind", default="primary"
+)
+
+
+@contextlib.contextmanager
+def auxiliary_calls():
+    """Mark provider calls made in this scope as auxiliary (compaction/summary).
+
+    Restores the previous classification via the ContextVar token in ``finally``,
+    so exceptions and cancellations cannot leak the auxiliary marker.
+    """
+    token = _call_kind.set("auxiliary")
+    try:
+        yield
+    finally:
+        _call_kind.reset(token)
 
 ALLOW = "allow"
 DENY = "deny"
@@ -57,10 +81,13 @@ class AdapterOutcome:
         return self.effective == LIMIT
 
 
+# The final-result release gate is enforced INLINE in _runtime (see
+# before_final_result_release), NOT via a callback: the agent_run_result phase
+# isolates callback exceptions (non-blocking), which would swallow the controlled
+# GovernancePolicyError and reopen the escape path.
 _CALLBACK_BINDINGS: list[tuple[str, str]] = [
     ("message_history_processor_start", "_shim_history_observe"),
     ("pre_tool_call", "_shim_before_tool_call"),
-    ("agent_run_result", "_shim_before_final_result_release"),
     ("agent_run_end", "_shim_run_complete"),
     ("wrap_pydantic_agent", "_shim_wrap_pydantic_agent"),
 ]
@@ -285,6 +312,17 @@ def raise_policy_error(boundary: str, reason: str) -> None:
         _raise(boundary, reason)
 
 
+def note_stream_observation() -> None:
+    """Observe-mode record that enforce would have forced non-streaming."""
+    st = _state
+    if st is None:
+        return
+    try:
+        st.engine.note("streaming", "output", "would_buffer_until_release")
+    except Exception:  # noqa: BLE001
+        log.exception("project_os_adapter note_stream_observation failed")
+
+
 def run_complete(required_evidence: Any = None) -> Optional[dict]:
     st = _state
     if st is None:
@@ -315,13 +353,6 @@ async def _shim_before_tool_call(tool_name, tool_args, context=None):  # noqa: A
     return None
 
 
-async def _shim_before_final_result_release(result, agent_name, model_name):  # noqa: ANN001
-    # In enforce mode this raises GovernancePolicyError before the result is
-    # returned/saved as successful output. In observe it only records.
-    before_final_result_release()
-    return None
-
-
 async def _shim_run_complete(agent_name, model_name, session_id=None, success=True, error=None, response_text=None, metadata=None):  # noqa: ANN001
     run_complete()
     return None
@@ -339,6 +370,25 @@ def _reconcile_from_response(response) -> None:  # noqa: ANN001
         reconcile_usage(requests, stage="model_request")
 
 
+class _GovernedStream:
+    """Wrap request_stream's context manager to reconcile authoritative stream
+    usage on clean completion. Never invents usage when unavailable."""
+
+    def __init__(self, cm):  # noqa: ANN001
+        self._cm = cm
+        self._resp = None
+
+    async def __aenter__(self):
+        self._resp = await self._cm.__aenter__()
+        return self._resp
+
+    async def __aexit__(self, exc_type, exc, tb):  # noqa: ANN001
+        result = await self._cm.__aexit__(exc_type, exc, tb)
+        if exc_type is None:  # clean completion only; failure/cancel -> no usage
+            _reconcile_from_response(self._resp)
+        return result
+
+
 def _wrap_model(model) -> None:  # noqa: ANN001
     if model is None or getattr(model, "_pos_wrapped", False):
         return
@@ -346,7 +396,7 @@ def _wrap_model(model) -> None:  # noqa: ANN001
     orig_stream = getattr(model, "request_stream", None)
     if orig_request is not None:
         async def gated_request(*a, **k):
-            before_provider_request("primary")  # raises in enforce on budget denial
+            before_provider_request(_call_kind.get())  # raises in enforce on denial
             resp = await orig_request(*a, **k)
             _reconcile_from_response(resp)
             return resp
@@ -354,8 +404,8 @@ def _wrap_model(model) -> None:  # noqa: ANN001
         model.request = gated_request  # type: ignore[assignment]
     if orig_stream is not None:
         def gated_stream(*a, **k):
-            before_provider_request("primary")
-            return orig_stream(*a, **k)
+            before_provider_request(_call_kind.get())
+            return _GovernedStream(orig_stream(*a, **k))
 
         model.request_stream = gated_stream  # type: ignore[assignment]
     model._pos_wrapped = True

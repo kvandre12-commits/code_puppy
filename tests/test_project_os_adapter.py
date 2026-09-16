@@ -105,6 +105,107 @@ def test_provider_gate_wraps_model_and_denies_before_transmission():
     assert any(r["stage"] == "model_request" for r in rec["reconciliation"])  # usage reconciled
 
 
+def test_auxiliary_calls_are_counted_not_gated():
+    # Primary budget of 1: the sole agent turn consumes it. Compaction/summary
+    # calls wrapped in auxiliary_calls() must still go through without raising.
+    adapter.activate(policy=RunPolicy(max_provider_calls=1), mode=Mode.ENFORCE)
+    agent = types.SimpleNamespace(model=_FakeModel())
+    adapter.adapter._shim_wrap_pydantic_agent(agent)
+
+    asyncio.run(agent.model.request("primary"))  # consumes the primary budget
+    with adapter.auxiliary_calls():
+        asyncio.run(agent.model.request("summary"))  # auxiliary: not gated
+        asyncio.run(agent.model.request("summary-2"))
+    # Classification restores to primary on scope exit, so the next primary
+    # request is over budget and denied.
+    with pytest.raises(GovernancePolicyError):
+        asyncio.run(agent.model.request("primary-2"))
+
+    rec = adapter.current_receipt()
+    assert rec["primary_provider_calls"] == 1
+    assert rec["auxiliary_provider_calls"] == 2
+    assert rec["provider_calls"] == 3
+
+
+class _FakeStreamCM:
+    def __init__(self, resp):
+        self._resp = resp
+        self.entered = False
+        self.exited = False
+
+    async def __aenter__(self):
+        self.entered = True
+        return self._resp
+
+    async def __aexit__(self, *exc):
+        self.exited = True
+        return False
+
+
+class _FakeStreamModel:
+    def __init__(self):
+        self.calls = 0
+        self.last_cm = None
+
+    def request_stream(self, *a, **k):
+        self.calls += 1
+        self.last_cm = _FakeStreamCM(_FakeResp())
+        return self.last_cm
+
+
+def test_stream_gate_denies_before_transmission_and_reconciles_on_clean_exit():
+    adapter.activate(policy=RunPolicy(max_provider_calls=1), mode=Mode.ENFORCE)
+    agent = types.SimpleNamespace(model=_FakeStreamModel())
+    adapter.adapter._shim_wrap_pydantic_agent(agent)
+
+    async def _drain():
+        async with agent.model.request_stream("m1") as resp:  # 1st allowed
+            assert isinstance(resp, _FakeResp)
+
+    asyncio.run(_drain())
+    assert agent.model.calls == 1
+
+    with pytest.raises(GovernancePolicyError):
+        agent.model.request_stream("m2")  # 2nd denied BEFORE the cm is built
+    assert agent.model.calls == 1  # never transmitted
+
+    rec = adapter.current_receipt()
+    assert rec["provider_calls"] == 1
+    # Authoritative stream usage is reconciled only on clean context exit.
+    assert any(r["stage"] == "model_request" for r in rec["reconciliation"])
+
+
+def test_stream_does_not_reconcile_usage_on_failure():
+    adapter.activate(mode=Mode.ENFORCE)
+    agent = types.SimpleNamespace(model=_FakeStreamModel())
+    adapter.adapter._shim_wrap_pydantic_agent(agent)
+
+    async def _boom():
+        async with agent.model.request_stream("m"):
+            raise RuntimeError("stream blew up")
+
+    with pytest.raises(RuntimeError):
+        asyncio.run(_boom())
+
+    rec = adapter.current_receipt()
+    # The request itself is counted, but no usage is invented on a failed stream.
+    assert rec["provider_calls"] == 1
+    assert not any(r["stage"] == "model_request" for r in rec["reconciliation"])
+
+
+def test_note_stream_observation_records_only_when_active():
+    # Inactive: pure no-op, no receipt at all.
+    adapter.note_stream_observation()
+    assert adapter.current_receipt() is None
+
+    adapter.activate(mode=Mode.OBSERVE)
+    adapter.note_stream_observation()
+    blocked = adapter.current_receipt()["blocked_actions"]
+    assert any(
+        b["boundary"] == "streaming" and b["subject"] == "output" for b in blocked
+    )
+
+
 # --- tool veto (never enters original tool after denial) -------------------
 def test_tool_veto_blocks_and_observe_passes():
     adapter.activate(policy=RunPolicy(per_tool_limits={"inv": 1}), mode=Mode.ENFORCE)
@@ -140,12 +241,16 @@ def test_transform_denies_unreducible_in_enforce():
 
 
 # --- final-result release gate --------------------------------------------
+# The gate is enforced inline in _runtime (see before_final_result_release),
+# NOT via an agent_run_result callback: that phase isolates callback exceptions
+# and would swallow the controlled GovernancePolicyError. These tests exercise
+# the public boundary function the inline call invokes.
 def test_final_release_blocks_unsupported_in_enforce():
     adapter.activate(mode=Mode.ENFORCE)
     engine = adapter.adapter._state.engine  # type: ignore[attr-defined]
     engine.require_evidence({"termux_presence_grounded"})
     with pytest.raises(GovernancePolicyError):
-        asyncio.run(adapter.adapter._shim_before_final_result_release("answer", "a", "m"))
+        adapter.before_final_result_release()
 
 
 def test_final_release_allows_supported_and_observe_never_raises():
@@ -153,13 +258,13 @@ def test_final_release_allows_supported_and_observe_never_raises():
     engine = adapter.adapter._state.engine  # type: ignore[attr-defined]
     engine.require_evidence({"e"})
     engine.before_claim("e", grounded=True)
-    asyncio.run(adapter.adapter._shim_before_final_result_release("answer", "a", "m"))  # no raise
+    adapter.before_final_result_release()  # no raise
     assert adapter.current_receipt()["released"] is True
 
     adapter.deactivate()
     adapter.activate(mode=Mode.OBSERVE)
     adapter.adapter._state.engine.require_evidence({"missing"})  # type: ignore[attr-defined]
-    asyncio.run(adapter.adapter._shim_before_final_result_release("answer", "a", "m"))  # observe: no raise
+    adapter.before_final_result_release()  # observe: no raise
 
 
 # --- HTTP transport: raise before send, ceiling, observe pass-through ------
