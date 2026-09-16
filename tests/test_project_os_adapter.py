@@ -17,7 +17,14 @@ import pytest
 from code_puppy import callbacks
 from code_puppy import project_os_adapter as adapter
 from code_puppy.project_os_adapter import Mode
-from project_os import GovernanceConfigurationError, GovernancePolicyError, RunPolicy
+
+# project_os_hooks is an optional standalone package; when it is absent (e.g.
+# CI without the editable install) skip this module cleanly instead of failing
+# collection for the whole suite.
+project_os = pytest.importorskip("project_os")
+GovernanceConfigurationError = project_os.GovernanceConfigurationError
+GovernancePolicyError = project_os.GovernancePolicyError
+RunPolicy = project_os.RunPolicy
 
 
 @pytest.fixture(autouse=True)
@@ -58,7 +65,9 @@ def test_observe_provider_budget_records_but_continues():
 def test_enforce_never_swallows_engine_error():
     adapter.activate(mode=Mode.ENFORCE)
     engine = adapter.adapter._state.engine  # type: ignore[attr-defined]
-    engine.before_model_request = lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom"))
+    engine.before_model_request = lambda *a, **k: (_ for _ in ()).throw(
+        RuntimeError("boom")
+    )
     with pytest.raises(GovernancePolicyError):
         adapter.before_provider_request()
 
@@ -66,7 +75,9 @@ def test_enforce_never_swallows_engine_error():
 def test_observe_swallows_engine_error_and_continues():
     adapter.activate(mode=Mode.OBSERVE)
     engine = adapter.adapter._state.engine  # type: ignore[attr-defined]
-    engine.before_model_request = lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom"))
+    engine.before_model_request = lambda *a, **k: (_ for _ in ()).throw(
+        RuntimeError("boom")
+    )
     out = adapter.before_provider_request()
     assert out.effective == adapter.ALLOW  # observe records error, never raises
 
@@ -102,7 +113,9 @@ def test_provider_gate_wraps_model_and_denies_before_transmission():
 
     rec = adapter.current_receipt()
     assert rec["provider_calls"] == 1
-    assert any(r["stage"] == "model_request" for r in rec["reconciliation"])  # usage reconciled
+    assert any(
+        r["stage"] == "model_request" for r in rec["reconciliation"]
+    )  # usage reconciled
 
 
 def test_auxiliary_calls_are_counted_not_gated():
@@ -216,7 +229,9 @@ def test_tool_veto_blocks_and_observe_passes():
     adapter.deactivate()
     adapter.activate(policy=RunPolicy(per_tool_limits={"inv": 1}), mode=Mode.OBSERVE)
     asyncio.run(adapter.adapter._shim_before_tool_call("inv", {}))
-    assert asyncio.run(adapter.adapter._shim_before_tool_call("inv", {})) is None  # observe never blocks
+    assert (
+        asyncio.run(adapter.adapter._shim_before_tool_call("inv", {})) is None
+    )  # observe never blocks
 
 
 # --- tool-result substitution ---------------------------------------------

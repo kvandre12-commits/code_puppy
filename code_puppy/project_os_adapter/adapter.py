@@ -51,6 +51,7 @@ def auxiliary_calls():
     finally:
         _call_kind.reset(token)
 
+
 ALLOW = "allow"
 DENY = "deny"
 LIMIT = "limit"
@@ -94,7 +95,9 @@ _CALLBACK_BINDINGS: list[tuple[str, str]] = [
 
 
 class _State:
-    def __init__(self, engine: Any, mode: Mode, error_cls: type, policy_error_cls: type) -> None:
+    def __init__(
+        self, engine: Any, mode: Mode, error_cls: type, policy_error_cls: type
+    ) -> None:
         self.engine = engine
         self.mode = mode
         self.GovernancePolicyError = policy_error_cls
@@ -154,14 +157,26 @@ class _LocalConfigError(Exception):
 # --------------------------------------------------------------------------
 # Activation lifecycle (explicit; never automatic)
 # --------------------------------------------------------------------------
-def activate(policy: Any = None, mode: Mode = Mode.OBSERVE, *, task_class: Any = None, **overrides: Any) -> None:
+def activate(
+    policy: Any = None,
+    mode: Mode = Mode.OBSERVE,
+    *,
+    task_class: Any = None,
+    **overrides: Any,
+) -> None:
     global _state
     if _state is not None:
         raise RuntimeError("project_os_adapter already active; deactivate() first")
 
-    PolicyEngine, RunPolicy, policy_for, GovernanceError, GovernancePolicyError = _import_and_check()
+    PolicyEngine, RunPolicy, policy_for, GovernanceError, GovernancePolicyError = (
+        _import_and_check()
+    )
     if policy is None:
-        policy = policy_for(task_class, **overrides) if task_class is not None else RunPolicy(**overrides)
+        policy = (
+            policy_for(task_class, **overrides)
+            if task_class is not None
+            else RunPolicy(**overrides)
+        )
     _state = _State(PolicyEngine(policy), mode, GovernanceError, GovernancePolicyError)
     _register_shims()
     log.info("project_os_adapter activated (mode=%s)", mode.value)
@@ -233,7 +248,9 @@ def _run(boundary: str, fn, *, raising: bool):
 # --------------------------------------------------------------------------
 def before_provider_request(kind: str = "primary") -> AdapterOutcome:
     """Gate a genuine outbound provider request (raises in enforce on budget denial)."""
-    return _run("before_provider_request", lambda e: e.before_model_request(kind), raising=True)
+    return _run(
+        "before_provider_request", lambda e: e.before_model_request(kind), raising=True
+    )
 
 
 def reconcile_usage(observed_requests: int, stage: str = "run") -> None:
@@ -248,7 +265,11 @@ def reconcile_usage(observed_requests: int, stage: str = "run") -> None:
 
 def before_tool_call(tool_name: str, tool_args: dict | None = None) -> AdapterOutcome:
     """Tool veto. Never raises (the shim maps DENY to a block-dict)."""
-    return _run("before_tool_call", lambda e: e.before_tool_call(tool_name, tool_args or {}), raising=False)
+    return _run(
+        "before_tool_call",
+        lambda e: e.before_tool_call(tool_name, tool_args or {}),
+        raising=False,
+    )
 
 
 def transform_tool_result(tool_name: str, result: Any) -> AdapterOutcome:
@@ -296,7 +317,11 @@ def before_final_result_release(required_evidence: Any = None) -> AdapterOutcome
 
 def note_http_attempt(*, is_retry: bool = False) -> AdapterOutcome:
     """Record an HTTP attempt/retry. Caller (transport) decides how to enforce."""
-    return _run("note_http_attempt", lambda e: e.register_http_attempt(is_retry=is_retry), raising=False)
+    return _run(
+        "note_http_attempt",
+        lambda e: e.register_http_attempt(is_retry=is_retry),
+        raising=False,
+    )
 
 
 def effective_retry_ceiling(native_max_retries: int) -> int:
@@ -353,7 +378,15 @@ async def _shim_before_tool_call(tool_name, tool_args, context=None):  # noqa: A
     return None
 
 
-async def _shim_run_complete(agent_name, model_name, session_id=None, success=True, error=None, response_text=None, metadata=None):  # noqa: ANN001
+async def _shim_run_complete(
+    agent_name,
+    model_name,
+    session_id=None,
+    success=True,
+    error=None,
+    response_text=None,
+    metadata=None,
+):  # noqa: ANN001
     run_complete()
     return None
 
@@ -395,6 +428,7 @@ def _wrap_model(model) -> None:  # noqa: ANN001
     orig_request = getattr(model, "request", None)
     orig_stream = getattr(model, "request_stream", None)
     if orig_request is not None:
+
         async def gated_request(*a, **k):
             before_provider_request(_call_kind.get())  # raises in enforce on denial
             resp = await orig_request(*a, **k)
@@ -403,6 +437,7 @@ def _wrap_model(model) -> None:  # noqa: ANN001
 
         model.request = gated_request  # type: ignore[assignment]
     if orig_stream is not None:
+
         def gated_stream(*a, **k):
             before_provider_request(_call_kind.get())
             return _GovernedStream(orig_stream(*a, **k))
@@ -426,7 +461,9 @@ def _register_shims() -> None:
     blocking = getattr(callbacks, "BLOCKING_PHASES", frozenset())
     for phase, shim_name in _CALLBACK_BINDINGS:
         func = globals()[shim_name]
-        callbacks.register_callback(phase, func, fail_closed=is_enforcing() and phase in blocking)
+        callbacks.register_callback(
+            phase, func, fail_closed=is_enforcing() and phase in blocking
+        )
 
 
 def _unregister_shims() -> None:
