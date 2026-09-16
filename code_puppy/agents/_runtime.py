@@ -553,6 +553,20 @@ def _extract_response_text(result: Any) -> str:
     return str(result)
 
 
+def _inject_runtime_prompt_additions(agent: Any, prompt: str) -> str:
+    """Prepend per-turn runtime prompt fragments to the current user turn."""
+    formatter = getattr(agent, "format_runtime_prompt_additions", None)
+    if not callable(formatter):
+        return prompt
+    try:
+        runtime_block = formatter()
+    except Exception:
+        return prompt
+    if not runtime_block:
+        return prompt
+    return f"{runtime_block}\n\n{prompt}"
+
+
 def _should_prepend_system_prompt(agent: Any, prompt: str) -> str:
     """Prepend system prompt to user prompt on the first turn (claude-code etc)."""
     from code_puppy.agents._builder import load_puppy_rules
@@ -714,6 +728,7 @@ async def _run_with_mcp_impl(
     if output_type is not None:
         pydantic_agent = build_pydantic_agent(agent, output_type=output_type)
 
+    prompt = _inject_runtime_prompt_additions(agent, prompt)
     prompt = _should_prepend_system_prompt(agent, prompt)
     prompt_payload = _build_prompt_payload(prompt, attachments, link_attachments)
 

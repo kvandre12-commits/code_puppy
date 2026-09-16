@@ -1,0 +1,1 @@
+"""Local Droid viewer plugin."""
