@@ -128,6 +128,18 @@ class RetryingAsyncClient(httpx.AsyncClient):
 
         for attempt in range(self.max_retries + 1):
             try:
+                # Project OS governance (disabled by default): record each HTTP
+                # attempt and retry as first-class metrics, kept separate from
+                # provider/tool calls. Enforcement only acts when explicitly on.
+                try:
+                    from code_puppy import project_os_adapter as _pos
+
+                    if _pos.is_active():
+                        _gov = _pos.note_http_attempt(is_retry=attempt > 0)
+                        if _gov.blocked and last_response is not None:
+                            return last_response
+                except Exception:
+                    pass  # governance must never break transport
                 response = await super().send(request, **kwargs)
                 last_response = response
 
