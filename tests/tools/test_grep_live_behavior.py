@@ -65,6 +65,7 @@ def test_grep_context_lines_do_not_evict_real_matches(tmp_path):
     # 50; real matches must now fill the whole budget.
     assert len(real) == 50
     assert all(m.line_content == "target" for m in real)
+    assert out.truncated is True
     # Context lines are still surfaced, just never counted as matches.
     assert context
 
@@ -112,3 +113,29 @@ def test_emit_grep_result_excludes_context_from_counts(monkeypatch):
     # ...but only the two real hits (in a.py and b.py) feed the counts.
     assert captured["msg"].total_matches == 2
     assert captured["msg"].files_searched == 2
+    assert captured["msg"].truncated is False
+
+
+def test_grep_exactly_at_limit_is_not_truncated(tmp_path):
+    (tmp_path / "exact.py").write_text("target\n" * 50)
+
+    out = _grep(None, "target", str(tmp_path))
+
+    assert len(out.matches) == 50
+    assert out.truncated is False
+
+
+def test_grep_can_continue_after_truncated_page(tmp_path):
+    (tmp_path / "many.py").write_text(
+        "".join(f"target-{line_number}\n" for line_number in range(75))
+    )
+
+    first = _grep(None, "target", str(tmp_path))
+    second = _grep(None, "target", str(tmp_path), offset=first.next_offset)
+
+    assert len(first.matches) == 50
+    assert first.truncated is True
+    assert first.next_offset == 50
+    assert [match.line_number for match in second.matches] == list(range(51, 76))
+    assert second.truncated is False
+    assert second.next_offset is None

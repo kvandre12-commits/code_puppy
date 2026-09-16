@@ -21,8 +21,8 @@ from code_puppy.messaging import (  # New structured messaging types
     GrepResultMessage,
     get_message_bus,
 )
-from code_puppy.tools.common import resolve_path
 from code_puppy.tools import fs_access
+from code_puppy.tools.common import resolve_path
 
 
 # Pydantic models for tool return types
@@ -57,7 +57,11 @@ class MatchInfo(BaseModel):
 class GrepOutput(BaseModel):
     matches: List[MatchInfo]
     error: str | None = None
+    truncated: bool = False
+    next_offset: int | None = None
 
+
+_MAX_GREP_MATCHES = 50
 
 # Upper bound on -A/-B/-C context rows returned alongside the (up to 50)
 # matches, so a wide context value can't grow the result without limit.
@@ -1073,6 +1077,9 @@ def _emit_grep_result(
     directory: str,
     matches: List["MatchInfo"],
     error_message: str | None,
+    *,
+    truncated: bool = False,
+    next_offset: int | None = None,
 ) -> "GrepOutput":
     """Emit the structured grep result to the UI and return the tool output.
 
@@ -1098,13 +1105,21 @@ def _emit_grep_result(
         matches=grep_matches,
         total_matches=len(real_matches),
         files_searched=unique_files,
+        truncated=truncated,
         verbose=get_grep_output_verbose(),
     )
     get_message_bus().emit(grep_result_msg)
-    return GrepOutput(matches=matches, error=error_message)
+    return GrepOutput(
+        matches=matches,
+        error=error_message,
+        truncated=truncated,
+        next_offset=next_offset,
+    )
 
 
-def _grep_via_backend(directory: str, search_string: str) -> "GrepOutput":
+def _grep_via_backend(
+    directory: str, search_string: str, offset: int = 0
+) -> "GrepOutput":
     """Search through the installed filesystem backend (no local ripgrep).
 
     Walks the backend's filesystem and matches each file's text, so grep sees
@@ -1135,6 +1150,7 @@ def _grep_via_backend(directory: str, search_string: str) -> "GrepOutput":
 
     max_filesize = 5 * 1024 * 1024  # mirror ripgrep --max-filesize 5M
     matches: List[MatchInfo] = []
+    seen_matches = 0
     for full, entry in fs_access.walk(
         directory, skip_dir=should_ignore_dir_path, skip_file=should_ignore_path
     ):
@@ -1153,6 +1169,18 @@ def _grep_via_backend(directory: str, search_string: str) -> "GrepOutput":
             continue
         for line_number, line in enumerate(text.splitlines(), start=1):
             if pattern.search(line):
+                if seen_matches < offset:
+                    seen_matches += 1
+                    continue
+                if len(matches) >= _MAX_GREP_MATCHES:
+                    return _emit_grep_result(
+                        search_string,
+                        directory,
+                        matches,
+                        None,
+                        truncated=True,
+                        next_offset=offset + len(matches),
+                    )
                 matches.append(
                     MatchInfo(
                         file_path=full,
@@ -1160,9 +1188,7 @@ def _grep_via_backend(directory: str, search_string: str) -> "GrepOutput":
                         line_content=_sanitize_string(line.strip()),
                     )
                 )
-                # Cap total matches to mirror the local path's 50-match limit.
-                if len(matches) >= 50:
-                    return _emit_grep_result(search_string, directory, matches, None)
+                seen_matches += 1
     return _emit_grep_result(search_string, directory, matches, None)
 
 
@@ -1176,7 +1202,12 @@ def _carries_type_filter(rg_args: list[str]) -> bool:
     )
 
 
-def _grep(context: RunContext, search_string: str, directory: str = ".") -> GrepOutput:
+def _grep(
+    context: RunContext,
+    search_string: str,
+    directory: str = ".",
+    offset: int = 0,
+) -> GrepOutput:
     import json
     import os
     import shutil
@@ -1187,22 +1218,26 @@ def _grep(context: RunContext, search_string: str, directory: str = ".") -> Grep
     search_string = _sanitize_string(search_string)
 
     directory = resolve_path(directory)
+    if offset < 0:
+        return GrepOutput(matches=[], error="grep offset must be non-negative")
 
     # When a filesystem backend is installed, search through it (walk + read)
     # so grep sees the same coherent filesystem as read_file / list_files.
     from code_puppy.tools.io_backends import get_filesystem_backend
 
     if get_filesystem_backend() is not None:
-        return _grep_via_backend(directory, search_string)
+        return _grep_via_backend(directory, search_string, offset)
 
-    matches: List[MatchInfo] = []
+    matches: list[MatchInfo] = []
     error_message: str | None = None
+    truncated = False
 
     # Create a temporary ignore file with our ignore patterns
     ignore_file = None
     try:
-        # ripgrep: absolute path, --json output, --max-count 50, --max-filesize 5M,
-        # --type=all, --ignore-file for our ignore list.
+        # Pagination requires deterministic ordering across calls. Ask ripgrep
+        # to sort by path and emit one hit beyond this page's end per file so
+        # exact and truncated result sets remain distinguishable.
 
         # Find ripgrep executable - first check system PATH, then virtual environment
         rg_path = shutil.which("rg")
@@ -1229,7 +1264,16 @@ def _grep(context: RunContext, search_string: str, directory: str = ".") -> Grep
         if args_error is not None:
             return GrepOutput(matches=[], error=args_error)
 
-        cmd = [rg_path, "--json", "--max-count", "50", "--max-filesize", "5M"]
+        cmd = [
+            rg_path,
+            "--json",
+            "--sort",
+            "path",
+            "--max-count",
+            str(offset + _MAX_GREP_MATCHES + 1),
+            "--max-filesize",
+            "5M",
+        ]
         # rg's type filters are additive, so the default all-types selection
         # must not dilute an explicit -t/--type from the search string.
         if not _carries_type_filter(rg_args):
@@ -1273,7 +1317,8 @@ def _grep(context: RunContext, search_string: str, directory: str = ".") -> Grep
             return GrepOutput(matches=[], error=error_message)
 
         # Parse the JSON output from ripgrep
-        real_match_count = 0
+        seen_match_count = 0
+        page_match_count = 0
         context_row_count = 0
         for line in result.stdout.strip().split("\n"):
             if not line:
@@ -1313,14 +1358,24 @@ def _grep(context: RunContext, search_string: str, directory: str = ".") -> Grep
                         # evicted: once the context budget is full we keep
                         # scanning for matches and just drop further context.
                         if is_context:
-                            if context_row_count >= _MAX_GREP_CONTEXT_ROWS:
+                            if (
+                                seen_match_count < offset
+                                or page_match_count >= _MAX_GREP_MATCHES
+                                or context_row_count >= _MAX_GREP_CONTEXT_ROWS
+                            ):
                                 continue
                             context_row_count += 1
+                            matches.append(match_info)
+                            continue
+                        if seen_match_count < offset:
+                            seen_match_count += 1
+                            continue
+                        if page_match_count >= _MAX_GREP_MATCHES:
+                            truncated = True
+                            break
                         matches.append(match_info)
-                        if not is_context:
-                            real_match_count += 1
-                            if real_match_count >= 50:
-                                break
+                        seen_match_count += 1
+                        page_match_count += 1
             except json.JSONDecodeError:
                 # Skip lines that aren't valid JSON
                 continue
@@ -1339,7 +1394,14 @@ def _grep(context: RunContext, search_string: str, directory: str = ".") -> Grep
             os.unlink(ignore_file)
 
     # Build structured GrepMatch objects for the UI
-    return _emit_grep_result(search_string, directory, matches, error_message)
+    return _emit_grep_result(
+        search_string,
+        directory,
+        matches,
+        error_message,
+        truncated=truncated if error_message is None else False,
+        next_offset=(offset + page_match_count) if truncated else None,
+    )
 
 
 def register_list_files(agent):
@@ -1421,7 +1483,10 @@ def register_grep(agent):
 
     @agent.tool
     def grep(
-        context: RunContext, search_string: str, directory: str = "."
+        context: RunContext,
+        search_string: str,
+        directory: str = ".",
+        offset: int = 0,
     ) -> GrepOutput:
         """Recursively search file contents for a regex pattern using ripgrep (rg).
 
@@ -1434,8 +1499,12 @@ def register_grep(agent):
         -i, -s, -w, -F, -e, -t/--type, -A, -B, -C, -g, -v, -S, -o, -U
         (long forms and clustered shorts like -iw or -C3 work too).
 
+        Returns at most 50 matches per page. When ``next_offset`` is not null,
+        call grep again with the same search and directory plus that offset.
+        Results are complete only after a page returns ``next_offset=null``.
+
         Output-format flags (-l, -c, --files, --count, --json, -q) are not
         supported and return an error. To search for a pattern that itself
         starts with '-', use: -e '-pattern'
         """
-        return _grep(context, search_string, directory)
+        return _grep(context, search_string, directory, offset)
