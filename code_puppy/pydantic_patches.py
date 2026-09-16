@@ -432,6 +432,19 @@ def patch_tool_call_callbacks() -> bool:
                         result = prefix + result
                     else:
                         result = prefix + str(result)
+                # Project OS governance (disabled by default): bound or deny an
+                # oversized tool result BEFORE it enters model history. Observe
+                # leaves the result unchanged; enforce substitutes a valid bounded
+                # value (LIMIT) or raises a controlled GovernancePolicyError for
+                # an unreducible oversize. The substituted value is what returns.
+                try:
+                    from code_puppy import project_os_adapter as _pos
+                except Exception:  # pragma: no cover
+                    _pos = None
+                if _pos is not None and _pos.is_active():
+                    _t = _pos.transform_tool_result(tool_name, result)
+                    if _t.limited:
+                        result = _t.limited_value
                 return result
             except Exception as exc:
                 error = exc

@@ -741,6 +741,19 @@ async def _run_with_mcp_impl(
         # if no text actually streamed.
         use_streaming = get_enable_streaming()
 
+        # Project OS governed streaming (disabled by default). In enforce mode no
+        # generated content may reach any sink before the final-result release
+        # gate (on_agent_run_result, below), so force the non-streaming path: the
+        # result is rendered only after the gate passes. Observe mode preserves
+        # normal streaming but records that enforcement would have buffered it.
+        from code_puppy import project_os_adapter as _pos
+
+        if _pos.is_active() and use_streaming:
+            if _pos.is_enforcing():
+                use_streaming = False
+            else:
+                _pos.note_stream_observation()
+
         async def _observed_event_stream_handler(ctx: Any, events: Any) -> Any:
             from code_puppy.observability import capture_agent_context
 
@@ -855,6 +868,17 @@ async def _run_with_mcp_impl(
             await asyncio.sleep(retry_delay)
             result = await _follow_up_run(retry_prompt)
             hook_retries_used += 1
+
+        # Project OS final-result release gate (disabled by default). Enforced
+        # INLINE here -- not through on_agent_run_result -- because that phase
+        # isolates callback exceptions (non-blocking) and would swallow the
+        # controlled GovernancePolicyError, reopening the ungoverned release
+        # path. Runs before any fallback render or return, so no result content
+        # reaches a sink until required evidence is satisfied. No-op when
+        # governance is inactive; observe mode only records.
+        from code_puppy import project_os_adapter as _pos
+
+        _pos.before_final_result_release()
 
         # Fallback render when streaming didn't surface any text to the user.
         if result is not None and should_render_fallback(

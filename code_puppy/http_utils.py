@@ -126,8 +126,28 @@ class RetryingAsyncClient(httpx.AsyncClient):
         last_response = None
         last_exception = None
 
-        for attempt in range(self.max_retries + 1):
+        # Project OS governance (disabled by default): the smaller of the policy
+        # retry ceiling and this transport's native ceiling wins.
+        effective_max_retries = self.max_retries
+        try:
+            from code_puppy import project_os_adapter as _pos
+        except Exception:  # pragma: no cover - adapter is a code_puppy module
+            _pos = None
+        if _pos is not None and _pos.is_active():
+            effective_max_retries = _pos.effective_retry_ceiling(self.max_retries)
+
+        for attempt in range(effective_max_retries + 1):
             try:
+                # Evaluate policy BEFORE every attempt. Attempt 0 is the initial
+                # request; attempts > 0 are retries. In enforce mode a denial
+                # raises a controlled GovernancePolicyError before any bytes are
+                # sent (first-attempt denial) or stops the retry loop; denial is
+                # never represented by returning a previous HTTP response. In
+                # observe mode the attempt is recorded and execution continues.
+                if _pos is not None and _pos.is_active():
+                    _gov = _pos.note_http_attempt(is_retry=attempt > 0)
+                    if _gov.blocked:
+                        _pos.raise_policy_error("http_attempt", _gov.reason)
                 response = await super().send(request, **kwargs)
                 last_response = response
 
@@ -164,20 +184,20 @@ class RetryingAsyncClient(httpx.AsyncClient):
                 # Cap wait time
                 wait_time = max(0.5, min(wait_time, 60.0))
 
-                if attempt < self.max_retries:
+                if attempt < effective_max_retries:
                     provider_note = (
                         " (ignoring header)" if self._ignore_retry_headers else ""
                     )
                     emit_info(
                         f"HTTP retry: {response.status_code} received{provider_note}. "
-                        f"Waiting {wait_time:.1f}s (attempt {attempt + 1}/{self.max_retries})"
+                        f"Waiting {wait_time:.1f}s (attempt {attempt + 1}/{effective_max_retries})"
                     )
                     await asyncio.sleep(wait_time)
 
             except (httpx.ConnectError, httpx.ReadTimeout, httpx.PoolTimeout) as e:
                 last_exception = e
                 wait_time = 1.0 * (2**attempt)
-                if attempt < self.max_retries:
+                if attempt < effective_max_retries:
                     emit_warning(
                         f"HTTP connection error: {e}. Retrying in {wait_time}s..."
                     )
