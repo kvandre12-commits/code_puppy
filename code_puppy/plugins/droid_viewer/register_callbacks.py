@@ -7,6 +7,7 @@ import subprocess
 from typing import Any
 
 from code_puppy.callbacks import register_callback
+from code_puppy.plugins.droid_viewer.observation_tools import register_tools_callback
 
 DEFAULT_PORT = 8765
 
@@ -147,3 +148,4 @@ register_callback("custom_command", _handle_droid_command)
 register_callback("custom_command_help", _custom_help)
 register_callback("load_prompt", _prompt_fragment)
 register_callback("shutdown", _shutdown)
+register_callback("register_tools", register_tools_callback)
