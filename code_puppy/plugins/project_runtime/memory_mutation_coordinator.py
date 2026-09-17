@@ -10,13 +10,11 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass
 
-from . import effect_specs, lease_store, lease_validation
+from . import effect_specs, execution_preflight
 
 MEMORY_PROMOTE_ACTION_SCOPE = effect_specs.MEMORY_PROMOTE.action_scope
 MEMORY_PROMOTE_CAPABILITY_SCOPE = effect_specs.MEMORY_PROMOTE.capability_scope
-MEMORY_MUTATION_REFUSAL_REASON = (
-    "atomicity unavailable for split governance/knowledge stores"
-)
+MEMORY_MUTATION_REFUSAL_REASON = effect_specs.MEMORY_PROMOTE.availability_blocker
 
 
 @dataclass(frozen=True, slots=True)
@@ -48,17 +46,6 @@ class MemoryMutationResult:
     mutates_kennel: bool
     consumes_lease: bool
     creates_audit_event: bool
-
-
-def _blank_evidence_blockers(request: MemoryMutationRequest) -> tuple[str, ...]:
-    blockers: list[str] = []
-    if not request.source_evidence.strip():
-        blockers.append("source evidence missing")
-    if not request.mutation_reason.strip():
-        blockers.append("mutation reason missing")
-    if not request.proposed_after_object.strip():
-        blockers.append("proposed after object missing")
-    return tuple(blockers)
 
 
 def _refused(
@@ -113,50 +100,34 @@ def coordinate_memory_promote(
         requesting_agent=requesting_agent.strip(),
     )
 
-    try:
-        lease = lease_store.get_lease(confirm_lease_id)
-    except KeyError:
-        return _refused(
-            lease_id=confirm_lease_id,
-            mutation_type=request.mutation_type,
-            reason="lease not found; no memory mutation executed",
-            blockers=("lease missing",),
-        )
-
-    record = lease_store.lease_to_dict(lease)
-    lease_blockers = lease_validation.blockers_for_effect_lease(
-        lease,
-        effect_specs.MEMORY_PROMOTE,
-        lease_validation.now_from_string(now_at),
+    preflight = execution_preflight.preflight_execution(
+        effect=effect_specs.MEMORY_PROMOTE.name,
+        confirm_lease_id=confirm_lease_id,
+        arguments={
+            "source_evidence": request.source_evidence,
+            "mutation_reason": request.mutation_reason,
+            "proposed_after_object": request.proposed_after_object,
+            "before_object": request.before_object,
+            "project_wing": request.project_wing,
+            "requesting_agent": request.requesting_agent,
+        },
+        now_at=now_at,
     )
-    if lease_blockers:
-        return _refused(
-            lease_id=lease.lease_id,
-            run_id=lease.run_id,
-            mutation_type=request.mutation_type,
-            reason="memory mutation blocked by lease validation",
-            record=record,
-            blockers=lease_blockers,
-        )
-
-    evidence_blockers = _blank_evidence_blockers(request)
-    if evidence_blockers:
-        return _refused(
-            lease_id=lease.lease_id,
-            run_id=lease.run_id,
-            mutation_type=request.mutation_type,
-            reason="memory mutation blocked by missing evidence",
-            record=record,
-            blockers=evidence_blockers,
-        )
-
+    if preflight.gate == "availability":
+        reason = MEMORY_MUTATION_REFUSAL_REASON
+    elif preflight.gate == "arguments":
+        reason = "memory mutation blocked by missing evidence"
+    elif preflight.blockers == ("lease missing",):
+        reason = "lease not found; no memory mutation executed"
+    else:
+        reason = "memory mutation blocked by lease validation"
     return _refused(
-        lease_id=lease.lease_id,
-        run_id=lease.run_id,
+        lease_id=preflight.lease_id,
+        run_id=preflight.run_id,
         mutation_type=request.mutation_type,
-        reason=MEMORY_MUTATION_REFUSAL_REASON,
-        record=record,
-        blockers=(MEMORY_MUTATION_REFUSAL_REASON,),
+        reason=reason,
+        record=preflight.record,
+        blockers=preflight.blockers,
     )
 
 

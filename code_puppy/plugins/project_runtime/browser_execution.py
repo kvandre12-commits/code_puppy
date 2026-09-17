@@ -5,14 +5,13 @@ from __future__ import annotations
 import webbrowser
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from datetime import datetime, timezone
 
-from . import authority_validator, lease_store, store
+from . import effect_arguments, effect_specs, execution_preflight, lease_store
 
-BROWSER_ACTION_SCOPE = "browser.open_url"
-BROWSER_CAPABILITY_SCOPE = "browser.url.example_com"
-BROWSER_EFFECT_EVENT_TYPE = "browser_effect_executed"
-ALLOWED_URL = "https://example.com/"
+BROWSER_ACTION_SCOPE = effect_specs.BROWSER.action_scope
+BROWSER_CAPABILITY_SCOPE = effect_specs.BROWSER.capability_scope
+BROWSER_EFFECT_EVENT_TYPE = effect_specs.BROWSER.audit_event_type
+ALLOWED_URL = effect_arguments.ALLOWED_BROWSER_URL
 
 BrowserOpener = Callable[[str], bool | None]
 
@@ -31,64 +30,6 @@ class BrowserExecutionResult:
     blockers: tuple[str, ...]
 
 
-def _now(value: str | None) -> datetime:
-    if value:
-        parsed = lease_store.parse_time(value)
-        if parsed:
-            return parsed
-    return datetime.now(timezone.utc)
-
-
-def _grant_active(grant: store.AuthorityGrant, now: datetime) -> bool:
-    if grant.revoked_at:
-        return False
-    expires_at = lease_store.parse_time(grant.expires_at)
-    return expires_at is None or expires_at > now
-
-
-def _matching_active_grant(lease: lease_store.LeaseRecord, now: datetime) -> bool:
-    return any(
-        grant.subject_identity == lease.subject_identity
-        and grant.allowed_action_scope == lease.action_scope
-        and grant.allowed_capability_scope == lease.capability_scope
-        and grant.run_id == lease.run_id
-        and _grant_active(grant, now)
-        for grant in store.list_authority_grants()
-    )
-
-
-def _lease_blockers(
-    lease: lease_store.LeaseRecord,
-    *,
-    url: str,
-    now: datetime,
-) -> tuple[str, ...]:
-    blockers: list[str] = []
-    if url != ALLOWED_URL:
-        blockers.append("browser URL scope mismatch")
-    if lease.consumed_at:
-        blockers.append("lease already consumed")
-    expires_at = lease_store.parse_time(lease.expires_at)
-    if expires_at is None or expires_at <= now:
-        blockers.append("lease expired")
-    if lease.action_scope != BROWSER_ACTION_SCOPE:
-        blockers.append("lease action scope mismatch")
-    if lease.capability_scope != BROWSER_CAPABILITY_SCOPE:
-        blockers.append("lease capability scope mismatch")
-    if not lease.issued_event_id:
-        blockers.append("lease issue audit event missing")
-    try:
-        store.get_run(lease.run_id)
-    except KeyError:
-        blockers.append("lease run boundary missing")
-    registry_report = authority_validator.validate_authority()
-    if not registry_report.passed:
-        blockers.append("authority registry validation failed")
-    elif not _matching_active_grant(lease, now):
-        blockers.append("matching active authority grant missing")
-    return tuple(blockers)
-
-
 def _open_browser(url: str, opener: BrowserOpener | None) -> bool:
     if opener is not None:
         return opener(url) is not False
@@ -104,33 +45,26 @@ def execute_browser(
 ) -> BrowserExecutionResult:
     """Execute exactly one browser URL effect under a valid one-shot lease."""
     normalized_url = url.strip()
-    try:
-        lease = lease_store.get_lease(confirm_lease_id)
-    except KeyError:
+    preflight = execution_preflight.preflight_execution(
+        effect=effect_specs.BROWSER.name,
+        confirm_lease_id=confirm_lease_id,
+        arguments={"url": normalized_url},
+        now_at=now_at,
+    )
+    if not preflight.ready:
         return BrowserExecutionResult(
             executed=False,
-            lease_id=confirm_lease_id,
-            run_id="",
+            lease_id=preflight.lease_id,
+            run_id=preflight.run_id,
             event_id="",
             url=normalized_url,
-            reason="lease not found; no browser effect executed",
-            record={},
-            blockers=("lease missing",),
+            reason="browser execution blocked by preflight",
+            record=preflight.record,
+            blockers=preflight.blockers,
         )
 
-    blockers = _lease_blockers(lease, url=normalized_url, now=_now(now_at))
-    if blockers:
-        return BrowserExecutionResult(
-            executed=False,
-            lease_id=lease.lease_id,
-            run_id=lease.run_id,
-            event_id="",
-            url=normalized_url,
-            reason="browser execution blocked by lease validation",
-            record=lease_store.lease_to_dict(lease),
-            blockers=blockers,
-        )
-
+    assert preflight.lease is not None
+    lease = preflight.lease
     if not _open_browser(normalized_url, opener):
         return BrowserExecutionResult(
             executed=False,

@@ -5,11 +5,11 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 
-from . import effect_specs, lease_store, lease_validation
+from . import effect_specs, execution_preflight, lease_store
 
 MEMORY_RECALL_ACTION_SCOPE = effect_specs.MEMORY_RECALL.action_scope
 MEMORY_RECALL_CAPABILITY_SCOPE = effect_specs.MEMORY_RECALL.capability_scope
-MEMORY_RECALL_EFFECT_EVENT_TYPE = "memory_recall_effect_executed"
+MEMORY_RECALL_EFFECT_EVENT_TYPE = effect_specs.MEMORY_RECALL.audit_event_type
 DEFAULT_LIMIT = 5
 MAX_LIMIT = 20
 
@@ -79,57 +79,33 @@ def execute_memory_recall(
     normalized_query = query.strip()
     normalized_wing = wing.strip()
     normalized_limit = _normalize_limit(limit)
-    if not normalized_query:
-        return MemoryRecallExecutionResult(
-            executed=False,
-            lease_id=confirm_lease_id,
-            run_id="",
-            event_id="",
-            query=normalized_query,
-            wing=normalized_wing,
-            limit=normalized_limit,
-            hits=(),
-            reason="memory recall requires a non-empty query",
-            record={},
-            blockers=("query missing",),
-        )
-
-    try:
-        lease = lease_store.get_lease(confirm_lease_id)
-    except KeyError:
-        return MemoryRecallExecutionResult(
-            executed=False,
-            lease_id=confirm_lease_id,
-            run_id="",
-            event_id="",
-            query=normalized_query,
-            wing=normalized_wing,
-            limit=normalized_limit,
-            hits=(),
-            reason="lease not found; no memory recall executed",
-            record={},
-            blockers=("lease missing",),
-        )
-
-    blockers = lease_validation.blockers_for_effect_lease(
-        lease,
-        effect_specs.MEMORY_RECALL,
-        lease_validation.now_from_string(now_at),
+    preflight = execution_preflight.preflight_execution(
+        effect=effect_specs.MEMORY_RECALL.name,
+        confirm_lease_id=confirm_lease_id,
+        arguments={
+            "query": normalized_query,
+            "wing": normalized_wing,
+            "limit": normalized_limit,
+        },
+        now_at=now_at,
     )
-    if blockers:
+    if not preflight.ready:
         return MemoryRecallExecutionResult(
             executed=False,
-            lease_id=lease.lease_id,
-            run_id=lease.run_id,
+            lease_id=preflight.lease_id,
+            run_id=preflight.run_id,
             event_id="",
             query=normalized_query,
             wing=normalized_wing,
             limit=normalized_limit,
             hits=(),
-            reason="memory recall blocked by lease validation",
-            record=lease_store.lease_to_dict(lease),
-            blockers=blockers,
+            reason="memory recall blocked by preflight",
+            record=preflight.record,
+            blockers=preflight.blockers,
         )
+
+    assert preflight.lease is not None
+    lease = preflight.lease
 
     try:
         hits = tuple(
@@ -139,7 +115,7 @@ def execute_memory_recall(
                 normalized_limit,
             )
         )
-    except Exception as exc:  # pragma: no cover - defensive adapter boundary
+    except Exception as exc:  # noqa: BLE001  # pragma: no cover - adapter boundary
         return MemoryRecallExecutionResult(
             executed=False,
             lease_id=lease.lease_id,

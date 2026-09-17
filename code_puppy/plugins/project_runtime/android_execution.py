@@ -5,14 +5,13 @@ from __future__ import annotations
 import subprocess
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from datetime import datetime, timezone
 
-from . import authority_validator, lease_store, store
+from . import effect_arguments, effect_specs, execution_preflight, lease_store
 
-ANDROID_ACTION_SCOPE = "android.launch_activity"
-ANDROID_CAPABILITY_SCOPE = "android.activity.settings"
-ANDROID_EFFECT_EVENT_TYPE = "android_effect_executed"
-APPROVED_COMPONENT = "com.android.settings/.Settings"
+ANDROID_ACTION_SCOPE = effect_specs.ANDROID.action_scope
+ANDROID_CAPABILITY_SCOPE = effect_specs.ANDROID.capability_scope
+ANDROID_EFFECT_EVENT_TYPE = effect_specs.ANDROID.audit_event_type
+APPROVED_COMPONENT = effect_arguments.APPROVED_ANDROID_COMPONENT
 
 AndroidLauncher = Callable[[str], bool | None]
 
@@ -29,64 +28,6 @@ class AndroidExecutionResult:
     reason: str
     record: Mapping[str, str]
     blockers: tuple[str, ...]
-
-
-def _now(value: str | None) -> datetime:
-    if value:
-        parsed = lease_store.parse_time(value)
-        if parsed:
-            return parsed
-    return datetime.now(timezone.utc)
-
-
-def _grant_active(grant: store.AuthorityGrant, now: datetime) -> bool:
-    if grant.revoked_at:
-        return False
-    expires_at = lease_store.parse_time(grant.expires_at)
-    return expires_at is None or expires_at > now
-
-
-def _matching_active_grant(lease: lease_store.LeaseRecord, now: datetime) -> bool:
-    return any(
-        grant.subject_identity == lease.subject_identity
-        and grant.allowed_action_scope == lease.action_scope
-        and grant.allowed_capability_scope == lease.capability_scope
-        and grant.run_id == lease.run_id
-        and _grant_active(grant, now)
-        for grant in store.list_authority_grants()
-    )
-
-
-def _lease_blockers(
-    lease: lease_store.LeaseRecord,
-    *,
-    component: str,
-    now: datetime,
-) -> tuple[str, ...]:
-    blockers: list[str] = []
-    if component != APPROVED_COMPONENT:
-        blockers.append("Android activity scope mismatch")
-    if lease.consumed_at:
-        blockers.append("lease already consumed")
-    expires_at = lease_store.parse_time(lease.expires_at)
-    if expires_at is None or expires_at <= now:
-        blockers.append("lease expired")
-    if lease.action_scope != ANDROID_ACTION_SCOPE:
-        blockers.append("lease action scope mismatch")
-    if lease.capability_scope != ANDROID_CAPABILITY_SCOPE:
-        blockers.append("lease capability scope mismatch")
-    if not lease.issued_event_id:
-        blockers.append("lease issue audit event missing")
-    try:
-        store.get_run(lease.run_id)
-    except KeyError:
-        blockers.append("lease run boundary missing")
-    registry_report = authority_validator.validate_authority()
-    if not registry_report.passed:
-        blockers.append("authority registry validation failed")
-    elif not _matching_active_grant(lease, now):
-        blockers.append("matching active authority grant missing")
-    return tuple(blockers)
 
 
 def _launch_activity(component: str, launcher: AndroidLauncher | None) -> bool:
@@ -114,37 +55,26 @@ def execute_android(
 ) -> AndroidExecutionResult:
     """Execute exactly one Android activity launch under a valid one-shot lease."""
     normalized_component = component.strip()
-    try:
-        lease = lease_store.get_lease(confirm_lease_id)
-    except KeyError:
-        return AndroidExecutionResult(
-            executed=False,
-            lease_id=confirm_lease_id,
-            run_id="",
-            event_id="",
-            component=normalized_component,
-            reason="lease not found; no Android effect executed",
-            record={},
-            blockers=("lease missing",),
-        )
-
-    blockers = _lease_blockers(
-        lease,
-        component=normalized_component,
-        now=_now(now_at),
+    preflight = execution_preflight.preflight_execution(
+        effect=effect_specs.ANDROID.name,
+        confirm_lease_id=confirm_lease_id,
+        arguments={"component": normalized_component},
+        now_at=now_at,
     )
-    if blockers:
+    if not preflight.ready:
         return AndroidExecutionResult(
             executed=False,
-            lease_id=lease.lease_id,
-            run_id=lease.run_id,
+            lease_id=preflight.lease_id,
+            run_id=preflight.run_id,
             event_id="",
             component=normalized_component,
-            reason="Android execution blocked by lease validation",
-            record=lease_store.lease_to_dict(lease),
-            blockers=blockers,
+            reason="Android execution blocked by preflight",
+            record=preflight.record,
+            blockers=preflight.blockers,
         )
 
+    assert preflight.lease is not None
+    lease = preflight.lease
     if not _launch_activity(normalized_component, launcher):
         return AndroidExecutionResult(
             executed=False,

@@ -192,21 +192,28 @@ Validator fail? stop.
 Need more scope? request authority and stop.
 ```
 
-## Read-only components to build first
+## Read-only runtime progression
 
-These can be implemented before mutable runtime behavior:
+The runtime now implements these read-only gates:
 
 ```text
 Runnable Candidate Projection (`/project run candidates`)
-Event Queue projection
-Selection Policy report
-Scheduler dispatch plan
-Lease draft report
-Execution preflight report
-Runtime blocked/remedy report
+Selection Policy report (`/project run selection`)
+Scheduler dispatch plan (`/project run dispatch-plan`)
+Lease draft report (`/project run lease-draft`)
+Execution preflight report (`/project run preflight`)
 ```
 
-These reports should answer what would happen, not make it happen.
+Execution preflight evaluates one concrete effect, lease, and argument set. It
+uses the same common lease and effect-argument validation as execution, reports
+the gate and exact blockers, and never consumes a lease, invokes an adapter, or
+writes an audit event. Parameterized parity tests bind every registered effect
+to that contract, including effects deliberately unavailable at their adapter
+boundary.
+
+Event Queue projection and a Runtime blocked/remedy report remain read-only
+components to build. These reports should answer what would happen, not make it
+happen.
 
 ## Components that must wait
 
@@ -216,7 +223,7 @@ These should remain impossible until read-only preflight is proven:
 mutable Event Queue
 automatic Selection Policy
 automatic Scheduler
-active Agent Lease allocation
+automatic Agent Lease allocation
 automatic run wake
 automatic run resume
 automatic state repair

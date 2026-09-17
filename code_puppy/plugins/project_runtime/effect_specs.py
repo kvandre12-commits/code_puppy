@@ -7,12 +7,16 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True, slots=True)
 class EffectSpec:
-    """Authority and capability scopes required for one effect adapter."""
+    """Governance and audit metadata for one effect adapter."""
 
     name: str
     action_scope: str
     capability_scope: str
     description: str
+    audit_event_type: str
+    mutates_external_state: bool
+    consumes_lease_on_success: bool = True
+    availability_blocker: str = ""
 
 
 NOOP = EffectSpec(
@@ -20,6 +24,8 @@ NOOP = EffectSpec(
     action_scope="project_run.execute_bounded_step",
     capability_scope="project_runtime.step",
     description="harmless no-op runtime proof",
+    audit_event_type="noop_executed",
+    mutates_external_state=False,
 )
 
 BROWSER = EffectSpec(
@@ -27,6 +33,8 @@ BROWSER = EffectSpec(
     action_scope="browser.open_url",
     capability_scope="browser.url.example_com",
     description="bounded browser URL open",
+    audit_event_type="browser_effect_executed",
+    mutates_external_state=True,
 )
 
 ANDROID = EffectSpec(
@@ -34,6 +42,8 @@ ANDROID = EffectSpec(
     action_scope="android.launch_activity",
     capability_scope="android.activity.settings",
     description="bounded Android settings activity launch",
+    audit_event_type="android_effect_executed",
+    mutates_external_state=True,
 )
 
 MEMORY_RECALL = EffectSpec(
@@ -41,6 +51,8 @@ MEMORY_RECALL = EffectSpec(
     action_scope="memory.recall",
     capability_scope="memory.read.project_context",
     description="bounded read-only kennel recall",
+    audit_event_type="memory_recall_effect_executed",
+    mutates_external_state=False,
 )
 
 MEMORY_PROMOTE = EffectSpec(
@@ -48,6 +60,12 @@ MEMORY_PROMOTE = EffectSpec(
     action_scope="memory.promote",
     capability_scope="memory.write.project_context",
     description="durable memory promotion request guarded by atomicity proof",
+    audit_event_type="memory_mutation_effect_executed",
+    mutates_external_state=True,
+    consumes_lease_on_success=False,
+    availability_blocker=(
+        "atomicity unavailable for split governance/knowledge stores"
+    ),
 )
 
 DEFAULT_EFFECT = NOOP.name

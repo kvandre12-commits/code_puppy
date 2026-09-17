@@ -4,18 +4,21 @@ from __future__ import annotations
 
 import shlex
 
+from code_puppy.i18n import t
+
 from . import (
+    android_execution,
     authority_check,
     authority_grant_create,
     authority_grant_create_plan,
     authority_grant_draft,
     authority_grants,
-    android_execution,
     authority_validator,
     browser_execution,
     command_formatters,
     dispatch_plan,
     effect_specs,
+    execution_preflight,
     lease_draft,
     lease_issue,
     memory_mutation_coordinator,
@@ -81,6 +84,10 @@ def help_text() -> str:
             f"  /project run lease-draft [--effect {effect_specs.choices_text()}]",
             f"  /project run authority-check [--effect {effect_specs.choices_text()}]",
             f"  /project run lease-issue [--effect {effect_specs.choices_text()}] --confirm <lease_id>",
+            t(
+                "project_runtime.preflight.help",
+                choices=effect_specs.choices_text(),
+            ),
             "  /project run execute-noop --confirm <lease_id>",
             "  /project run execute-browser --confirm <lease_id> --url <url>",
             "  /project run execute-android --confirm <lease_id> --component <component>",
@@ -237,6 +244,31 @@ def _handle_run_lease_issue(parts: list[str]) -> str:
         )
     result = lease_issue.issue_lease(confirm_lease_id=confirm, effect=effect)
     return lease_issue.format_result(result)
+
+
+def _handle_run_preflight(parts: list[str]) -> str:
+    effect = _pop_effect(parts)
+    confirm = _pop_flag(parts, "--confirm")
+    arguments = {
+        "url": _pop_flag(parts, "--url"),
+        "component": _pop_flag(parts, "--component"),
+        "query": _pop_flag(parts, "--query"),
+        "wing": _pop_flag(parts, "--wing"),
+        "limit": _parse_int(_pop_flag(parts, "--limit", "5"), name="--limit"),
+        "source_evidence": _pop_flag(parts, "--source-evidence"),
+        "mutation_reason": _pop_flag(parts, "--reason"),
+        "proposed_after_object": _pop_flag(parts, "--after"),
+        "before_object": _pop_flag(parts, "--before"),
+        "requesting_agent": _pop_flag(parts, "--agent"),
+    }
+    if parts or not confirm:
+        raise ValueError(t("project_runtime.preflight.usage_error"))
+    report = execution_preflight.preflight_execution(
+        effect=effect,
+        confirm_lease_id=confirm,
+        arguments=arguments,
+    )
+    return execution_preflight.format_report(report)
 
 
 def _handle_run_execute_noop(parts: list[str]) -> str:
@@ -428,6 +460,8 @@ def dispatch(parts: list[str]) -> str:
         return _handle_run_authority_check(rest)
     if action == "lease-issue":
         return _handle_run_lease_issue(rest)
+    if action == "preflight":
+        return _handle_run_preflight(rest)
     if action == "execute-noop":
         return _handle_run_execute_noop(rest)
     if action == "execute-browser":

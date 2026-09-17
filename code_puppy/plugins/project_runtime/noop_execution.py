@@ -4,9 +4,8 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
-from datetime import datetime, timezone
 
-from . import authority_validator, lease_draft, lease_store, store
+from . import effect_specs, execution_preflight, lease_store
 
 
 @dataclass(frozen=True, slots=True)
@@ -22,92 +21,30 @@ class NoopExecutionResult:
     blockers: tuple[str, ...]
 
 
-def _now(value: str | None) -> datetime:
-    if value:
-        parsed = lease_store.parse_time(value)
-        if parsed:
-            return parsed
-    return datetime.now(timezone.utc)
-
-
-def _grant_active(grant: store.AuthorityGrant, now: datetime) -> bool:
-    if grant.revoked_at:
-        return False
-    expires_at = lease_store.parse_time(grant.expires_at)
-    return expires_at is None or expires_at > now
-
-
-def _matching_active_grant(lease: lease_store.LeaseRecord, now: datetime) -> bool:
-    return any(
-        grant.subject_identity == lease.subject_identity
-        and grant.allowed_action_scope == lease.action_scope
-        and grant.allowed_capability_scope == lease.capability_scope
-        and grant.run_id == lease.run_id
-        and _grant_active(grant, now)
-        for grant in store.list_authority_grants()
-    )
-
-
-def _lease_blockers(
-    lease: lease_store.LeaseRecord,
-    now: datetime,
-) -> tuple[str, ...]:
-    blockers: list[str] = []
-    if lease.consumed_at:
-        blockers.append("lease already consumed")
-    expires_at = lease_store.parse_time(lease.expires_at)
-    if expires_at is None or expires_at <= now:
-        blockers.append("lease expired")
-    if lease.action_scope != lease_draft.REQUESTED_ACTION_SCOPE:
-        blockers.append("lease action scope mismatch")
-    if lease.capability_scope != lease_draft.REQUESTED_CAPABILITY_SCOPE:
-        blockers.append("lease capability scope mismatch")
-    if not lease.issued_event_id:
-        blockers.append("lease issue audit event missing")
-    try:
-        store.get_run(lease.run_id)
-    except KeyError:
-        blockers.append("lease run boundary missing")
-    registry_report = authority_validator.validate_authority()
-    if not registry_report.passed:
-        blockers.append("authority registry validation failed")
-    elif not _matching_active_grant(lease, now):
-        blockers.append("matching active authority grant missing")
-    return tuple(blockers)
-
-
 def execute_noop(
     *,
     confirm_lease_id: str,
     now_at: str | None = None,
 ) -> NoopExecutionResult:
     """Execute exactly one no-op effect under a valid one-shot lease."""
-    try:
-        lease = lease_store.get_lease(confirm_lease_id)
-    except KeyError:
+    preflight = execution_preflight.preflight_execution(
+        effect=effect_specs.NOOP.name,
+        confirm_lease_id=confirm_lease_id,
+        now_at=now_at,
+    )
+    if not preflight.ready:
         return NoopExecutionResult(
             executed=False,
-            lease_id=confirm_lease_id,
-            run_id="",
+            lease_id=preflight.lease_id,
+            run_id=preflight.run_id,
             event_id="",
-            reason="lease not found; no effect executed",
-            record={},
-            blockers=("lease missing",),
+            reason="no-op execution blocked by preflight",
+            record=preflight.record,
+            blockers=preflight.blockers,
         )
 
-    blockers = _lease_blockers(lease, _now(now_at))
-    if blockers:
-        return NoopExecutionResult(
-            executed=False,
-            lease_id=lease.lease_id,
-            run_id=lease.run_id,
-            event_id="",
-            reason="no-op execution blocked by lease validation",
-            record=lease_store.lease_to_dict(lease),
-            blockers=blockers,
-        )
-
-    result = lease_store.consume_lease_for_noop(lease)
+    assert preflight.lease is not None
+    result = lease_store.consume_lease_for_noop(preflight.lease)
     return NoopExecutionResult(
         executed=True,
         lease_id=result.lease.lease_id,
