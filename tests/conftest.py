@@ -251,6 +251,24 @@ def pytest_pyfunc_call(pyfuncitem: pytest.Item) -> bool | None:
     return None
 
 
+# --- Test-harness platform-state guard (separate from any product fix) --------
+# Some tests simulate Windows via ``monkeypatch.setattr(os, "name", "nt")``. If
+# such a test FAILS while ``os.name == "nt"``, pytest's own report builder
+# constructs a ``pathlib.Path`` -> ``WindowsPath`` and crashes with an
+# INTERNALERROR on non-Windows hosts (notably Android/Termux + CPython 3.14),
+# destroying the real assertion/traceback. Restore ``os.name`` after the test
+# body but BEFORE pytest formats the report. This only repairs the reporting
+# instrument; it never suppresses a genuine test failure.
+_BASELINE_OS_NAME = os.name
+
+
+@pytest.hookimpl(hookwrapper=True)
+def pytest_runtest_call(item):
+    yield
+    if os.name != _BASELINE_OS_NAME:
+        os.name = _BASELINE_OS_NAME
+
+
 @pytest.hookimpl(trylast=True)
 def pytest_sessionfinish(session, exitstatus):
     """Post-test hook: warn about stray .py files not tracked by git."""
