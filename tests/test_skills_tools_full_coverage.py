@@ -15,13 +15,41 @@ def _register_and_get(register_func):
     agent = MagicMock()
     captured = {}
 
-    def tool_decorator(func):
-        captured["fn"] = func
-        return func
+    def tool(func=None, *, metadata=None):
+        # Faithfully model the two supported ``agent.tool`` forms:
+        #   @agent.tool                    -> tool(func)
+        #   @agent.tool(metadata={...})    -> tool(metadata=...)(func)
+        # ``metadata`` is a real pydantic_ai Agent.tool parameter; unexpected
+        # keyword arguments still raise rather than being silently swallowed.
+        def register(fn):
+            captured["fn"] = fn
+            captured["metadata"] = metadata
+            return fn
 
-    agent.tool = tool_decorator
+        return register(func) if func is not None else register
+
+    agent.tool = tool
     register_func(agent)
     return captured["fn"]
+
+
+def test_skills_tools_register_speculatable_metadata():
+    """Both skills tools use @agent.tool(metadata={'speculatable': True}); prove
+    that metadata actually reaches the decorator (not dropped or mis-passed)."""
+    for register_func in (register_activate_skill, register_list_or_search_skills):
+        agent = MagicMock()
+        captured = {}
+
+        def tool(func=None, *, metadata=None, _sink=captured):
+            def register(fn):
+                _sink["metadata"] = metadata
+                return fn
+
+            return register(func) if func is not None else register
+
+        agent.tool = tool
+        register_func(agent)
+        assert captured["metadata"] == {"speculatable": True}
 
 
 @pytest.fixture

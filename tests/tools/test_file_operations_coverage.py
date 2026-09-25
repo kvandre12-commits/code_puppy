@@ -582,6 +582,26 @@ class TestFileSizeFormatting:
         assert "MB" in result.content
 
 
+def _make_tool_capture(func_registry, metadata_registry):
+    """Faithful stand-in for ``agent.tool`` supporting the two forms the
+    production code uses -- ``@agent.tool`` (bare) and
+    ``@agent.tool(metadata={...})`` -- recording the registered function and
+    its declared ``metadata`` by tool name. ``metadata`` is a real pydantic_ai
+    ``Agent.tool`` parameter; unexpected keyword arguments still raise rather
+    than being silently swallowed, so incorrect decorator usage is not hidden.
+    """
+
+    def tool(func=None, *, metadata=None):
+        def register(fn):
+            func_registry[fn.__name__] = fn
+            metadata_registry[fn.__name__] = metadata
+            return fn
+
+        return register(func) if func is not None else register
+
+    return tool
+
+
 class TestRegisterFunctions:
     """Test the register_* functions and their inner tool logic."""
 
@@ -589,20 +609,16 @@ class TestRegisterFunctions:
         """Test that list_files truncates very large results."""
         from code_puppy.tools.file_operations import register_list_files
 
-        # Create a mock agent
         mock_agent = MagicMock()
         registered_tools = {}
+        tool_metadata = {}
+        mock_agent.tool = _make_tool_capture(registered_tools, tool_metadata)
 
-        def capture_tool(func):
-            registered_tools[func.__name__] = func
-            return func
-
-        mock_agent.tool = capture_tool
-
-        # Register the tool
         register_list_files(mock_agent)
 
         assert "list_files" in registered_tools
+        # list_files is declared speculatable via @agent.tool(metadata=...)
+        assert tool_metadata["list_files"] == {"speculatable": True}
 
     def test_register_read_file(self):
         """Test that read_file tool is registered correctly."""
@@ -610,16 +626,13 @@ class TestRegisterFunctions:
 
         mock_agent = MagicMock()
         registered_tools = {}
-
-        def capture_tool(func):
-            registered_tools[func.__name__] = func
-            return func
-
-        mock_agent.tool = capture_tool
+        tool_metadata = {}
+        mock_agent.tool = _make_tool_capture(registered_tools, tool_metadata)
 
         register_read_file(mock_agent)
 
         assert "read_file" in registered_tools
+        assert tool_metadata["read_file"] == {"speculatable": True}
 
     def test_register_grep(self):
         """Test that grep tool is registered correctly."""
@@ -627,16 +640,13 @@ class TestRegisterFunctions:
 
         mock_agent = MagicMock()
         registered_tools = {}
-
-        def capture_tool(func):
-            registered_tools[func.__name__] = func
-            return func
-
-        mock_agent.tool = capture_tool
+        tool_metadata = {}
+        mock_agent.tool = _make_tool_capture(registered_tools, tool_metadata)
 
         register_grep(mock_agent)
 
         assert "grep" in registered_tools
+        assert tool_metadata["grep"] == {"speculatable": True}
 
     def test_list_files_recursion_disabled_by_config(self, tmp_path):
         """Test that recursion is disabled when config says so."""
@@ -644,12 +654,8 @@ class TestRegisterFunctions:
 
         mock_agent = MagicMock()
         registered_tools = {}
-
-        def capture_tool(func):
-            registered_tools[func.__name__] = func
-            return func
-
-        mock_agent.tool = capture_tool
+        tool_metadata = {}
+        mock_agent.tool = _make_tool_capture(registered_tools, tool_metadata)
 
         # Mock get_allow_recursion at the config module level before registration
         with patch("code_puppy.config.get_allow_recursion", return_value=False):
