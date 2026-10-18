@@ -1,8 +1,9 @@
 name: PyPI Download Stats
 
 on:
-  schedule:
-    - cron: "30 0 * * *"
+  # schedule disabled on this fork (no DISCORD_WEBHOOK_URL secret set) — re-enable by uncommenting below
+  # schedule:
+  #   - cron: "30 0 * * *"
   workflow_dispatch:
 
 jobs:
